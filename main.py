@@ -6,7 +6,8 @@ import os
 # ----------------------------------------------------
 # 1. إعدادات البوت والتوكن والبادئة والصلاحيات
 # ----------------------------------------------------
-TOKEN = "MTU1MzgzMTYwMDIwNTA3MDUzNw.GIfBSZ.2m8WcrtXshLJfu0epQiLTaJs-UE_YQ64Eor4yY"
+TOKEN = os.getenv("DISCORD_TOKEN")
+
 PREFIX = "."  # البادئة الخاصة بالأوامر
 
 # ID الرتبة المسموح لها استخدام البوت
