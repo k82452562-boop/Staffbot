@@ -24,7 +24,8 @@ def keep_alive():
 # ----------------------------------------------------
 # 1. إعدادات البوت والتوكن والبادئة والصلاحيات
 # ----------------------------------------------------
-TOKEN = os.getenv("DISCORD_TOKEN") or "MTU1MzgzMTYwMDIwNTA3MDUzNw.Gfm0qE.YCVAjxWZSMCNMgNWWuvVkXWVsoix7Os6HkMteI"
+# قراءة التتوكن حصرياً من متغير البيئة السري في Render
+TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."  # البادئة الخاصة بالأوامر
 
 # الأيدي المسموح لها استخدام البوت (الرتبة المحددة + رتب الإدارة)
@@ -154,16 +155,17 @@ async def give_role(ctx, member: discord.Member, role: discord.Role):
 async def close(ctx):
     channel_name = ctx.channel.name.lower()
     
-    # التحقق من وجود كلمات تدل على التكت أو الدعم الفني في اسم القناة أو القسم
     is_support_channel = (
         "ticket" in channel_name or 
         "تكت" in channel_name or 
         "الدعم" in channel_name or 
+        "الدعم الفني" in channel_name or
         "support" in channel_name or
         (ctx.channel.category and (
             "ticket" in ctx.channel.category.name.lower() or 
             "تكت" in ctx.channel.category.name.lower() or 
-            "الدعم" in ctx.channel.category.name.lower() or
+            "الدعم" in ctx.channel.category.name.lower() or 
+            "الدعم الفني" in ctx.channel.category.name.lower() or
             "support" in ctx.channel.category.name.lower()
         ))
     )
@@ -214,4 +216,7 @@ async def addpoints(ctx, member: discord.Member, amount: int):
 # تشغيل سيرفر الحفاظ على النشاط ثم تشغيل البوت
 if __name__ == "__main__":
     keep_alive()
-    bot.run(TOKEN)
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("❌ خطأ: لم يتم العثور على توكن البوت في متغيرات البيئة (DISCORD_TOKEN).")
