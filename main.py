@@ -41,6 +41,9 @@ POINTS_CONFIG = {
     "ban": 10       # باند / حظر (10 نقاط)
 }
 
+# قاعدة بيانات بسيطة لحفظ نقاط الإداريين في الذاكرة
+staff_points = {}
+
 # ---------------------------------------------------------
 # إعدادات ديسكورد وبدء التشغيل
 # ---------------------------------------------------------
@@ -54,54 +57,112 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
-    print("Staffbot is ready and running with full Arabic system!")
+    print("Staffbot is ready with full points and staff system!")
 
 # ---------------------------------------------------------
-# أوامر البوت الإدارية والنقاط (بالعربي)
+# الأوامر الإدارية ونظام النقاط والعقوبات
 # ---------------------------------------------------------
 
 @bot.command(name="نقاطي", help="لعرض نقاطك الإدارية الحالية")
 async def my_points(ctx):
+    user_id = str(ctx.author.id)
+    points = staff_points.get(user_id, 0)
+    
     embed = discord.Embed(
-        title="📊 نظام نقاط الإدارة",
-        description=f"مرحباً بك {ctx.author.mention}\nإليك تفاصيل نقاط الإجراءات والعقوبات المسجلة:",
+        title="📊 رصيد نقاطك الإدارية",
+        description=f"المستهدف: {ctx.author.mention}\nرصيدك الحالي هو: **{points}** نقطة.",
         color=discord.Color.green()
     )
     embed.add_field(
-        name="قيمة النقاط لكل إجراء:",
-        value=f"🎫 إغلاق تكت: `{POINTS_CONFIG['ticket']}` نقاط\n⚠️ تحذير: `{POINTS_CONFIG['warn']}` نقاط\n🔇 تايم أوت: `{POINTS_CONFIG['timeout']}` نقاط\n🔨 باند: `{POINTS_CONFIG['ban']}` نقاط",
+        name="توزيع النقاط للأعضاء:",
+        value=f"🎫 إغلاق تكت: `{POINTS_CONFIG['ticket']}`\n⚠️ تحذير: `{POINTS_CONFIG['warn']}`\n🔇 ميوت/تايم أوت: `{POINTS_CONFIG['timeout']}`\n🔨 باند: `{POINTS_CONFIG['ban']}`",
         inline=False
     )
     await ctx.send(embed=embed)
 
-
-@bot.command(name="إعطاء_نقاط", help="إضافة نقاط لإداري معين")
+@bot.command(name="نقاط", help="لعرض نقاط إداري معين")
 @commands.has_role(ALLOWED_ROLE_ID)
-async def add_points(ctx, member: discord.Member, amount: int, *, reason=None):
+async def check_points(ctx, member: discord.Member):
+    user_id = str(member.id)
+    points = staff_points.get(user_id, 0)
+    await ctx.send(f"📊 الإداري {member.mention} لديه **{points}** نقطة في سجله الإداري.")
+
+@bot.command(name="تحذير", help="تحذير عضو وإضافة نقاط للإداري")
+@commands.has_role(ALLOWED_ROLE_ID)
+async def warn_member(ctx, member: discord.Member, *, reason="بدون سبب"):
+    # إضافة النقاط للإداري الذي قام بالإجراء
+    admin_id = str(ctx.author.id)
+    staff_points[admin_id] = staff_points.get(admin_id, 0) + POINTS_CONFIG["warn"]
+    
     embed = discord.Embed(
-        title="✅ تم إضافة النقاط بنجاح",
-        description=f"تمت إضافة {amount} نقطة إلى الإداري {member.mention}",
-        color=discord.Color.blue()
+        title="⚠️ تسجيل تحذير",
+        description=f"تم تحذير العضو {member.mention} بواسطة {ctx.author.mention}",
+        color=discord.Color.orange()
     )
-    if reason:
-        embed.add_field(name="السبب:", value=reason, inline=False)
+    embed.add_field(name="السبب:", value=reason, inline=False)
+    embed.add_field(name="نقاط الإداري المضافة:", value=f"+{POINTS_CONFIG['warn']} نقاط", inline=False)
+    
+    await ctx.send(embed=embed)
+    
+    # إرسال إشعار لروم الإشعارات
+    channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
+    if channel:
+        await channel.send(embed=embed)
+
+@bot.command(name="ميوت", help="اعطاء تايم أوتلعضو وإضافة نقاط للإداري")
+@commands.has_role(ALLOWED_ROLE_ID)
+async def timeout_member(ctx, member: discord.Member, *, reason="بدون سبب"):
+    admin_id = str(ctx.author.id)
+    staff_points[admin_id] = staff_points.get(admin_id, 0) + POINTS_CONFIG["timeout"]
+    
+    embed = discord.Embed(
+        title="🔇 تسجيل ميوت (تايم أوت)",
+        description=f"تم عمل تايم أوت للعضو {member.mention} بواسطة {ctx.author.mention}",
+        color=discord.Color.yellow()
+    )
+    embed.add_field(name="السبب:", value=reason, inline=False)
+    embed.add_field(name="نقاط الإداري المضافة:", value=f"+{POINTS_CONFIG['timeout']} نقاط", inline=False)
+    
+    await ctx.send(embed=embed)
     
     channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
     if channel:
         await channel.send(embed=embed)
+
+@bot.command(name="باند", help="حظر عضو من السيرفر وإضافة نقاط للإداري")
+@commands.has_role(ALLOWED_ROLE_ID)
+async def ban_member(ctx, member: discord.Member, *, reason="بدون سبب"):
+    admin_id = str(ctx.author.id)
+    staff_points[admin_id] = staff_points.get(admin_id, 0) + POINTS_CONFIG["ban"]
+    
+    embed = discord.Embed(
+        title="🔨 تسجيل حظر (باند)",
+        description=f"تم حظر العضو {member.mention} بواسطة {ctx.author.mention}",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="السبب:", value=reason, inline=False)
+    embed.add_field(name="نقاط الإداري المضافة:", value=f"+{POINTS_CONFIG['ban']} نقاط", inline=False)
     
     await ctx.send(embed=embed)
+    
+    channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
+    if channel:
+        await channel.send(embed=embed)
 
-
-@bot.command(name="رتبة", help="منح رتبة إدارية أو إزالة رتبة")
+@bot.command(name="تكت", help="تسجيل إغلاق تكت وإضافة نقاط للإداري")
 @commands.has_role(ALLOWED_ROLE_ID)
-async def manage_role(ctx, member: discord.Member, role: discord.Role):
-    if role in member.roles:
-        await member.remove_roles(role)
-        await ctx.send(f"❌ تم إزالة الرتبة {role.name} من {member.mention}")
-    else:
-        await member.add_roles(role)
-        await ctx.send(f"✅ تم إعطاء الرتبة {role.name} إلى {member.mention}")
+async def close_ticket(ctx):
+    admin_id = str(ctx.author.id)
+    staff_points[admin_id] = staff_points.get(admin_id, 0) + POINTS_CONFIG["ticket"]
+    
+    embed = discord.Embed(
+        title="🎫 إغلاق تكت",
+        description=f"تم تسجيل إغلاق التكت بواسطة الإداري {ctx.author.mention}",
+        color=discord.Color.blue()
+    )
+    embed.add_field(name="نقاط الإداري المضافة:", value=f"+{POINTS_CONFIG['ticket']} نقاط", inline=False)
+    
+    await ctx.send(embed=embed)
 
 # ---------------------------------------------------------
 # تشغيل السيرفر المحلي ثم البوت
