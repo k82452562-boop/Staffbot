@@ -5,7 +5,7 @@ import os
 from flask import Flask
 from threading import Thread
 
-# --- سيرفر HTTP بسيط لإبقاء Render حياً وترضية Port Scanning ---
+# --- سيرفر HTTP بسيط لإبقاء Render حياً ---
 app = Flask('')
 
 @app.route('/')
@@ -80,13 +80,12 @@ async def my_points(ctx):
 async def add_points(ctx, member: discord.Member, amount: int, *, reason=None):
     embed = discord.Embed(
         title="✅ تم إضافة النقاط بنجاح",
-        description=ف"تمت إضافة `{amount}` نقطة إلى الإداري {member.mention}",
+        description=f"تمت إضافة {amount} نقطة إلى الإداري {member.mention}",
         color=discord.Color.blue()
     )
     if reason:
         embed.add_field(name="السبب:", value=reason, inline=False)
     
-    # إرسال إشعار لروم الإشعارات إن وجد
     channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
     if channel:
         await channel.send(embed=embed)
@@ -105,7 +104,7 @@ async def manage_role(ctx, member: discord.Member, role: discord.Role):
         await ctx.send(f"✅ تم إعطاء الرتبة {role.name} إلى {member.mention}")
 
 # ---------------------------------------------------------
-# تشغيل السيرفر المحلي (لأجل Render) ثم البوت
+# تشغيل السيرفر المحلي ثم البوت
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
