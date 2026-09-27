@@ -24,29 +24,25 @@ def keep_alive():
 # ----------------------------------------------------
 # 1. إعدادات البوت والتوكن والبادئة والصلاحيات
 # ----------------------------------------------------
-# قراءة التتوكن حصرياً من متغير البيئة السري في Render
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."  # البادئة الخاصة بالأوامر
 
-# الأيدي المسموح لها استخدام البوت (الرتبة المحددة + رتب الإدارة)
+# الأيدي المسموح لها استخدام البوت
 ALLOWED_ROLE_IDS = [
     1545520633939624006,  # الرتبة الأساسية المحددة
     1545520950064316516,  # رتبة الإدارة الصغرى / العليا
     1540838084151877714   # رتبة الإدارة الوسطى
 ]
 
-# ID روم الإشعارات الخاص بالتنبيهات عند الترقية
 NOTIFICATION_CHANNEL_ID = 1553848524205072474
 
-# توزيع النقاط حسب نظام الإنجازات
 POINTS_CONFIG = {
-    "ticket": 10,   # إغلاق تكت (10 نقاط)
-    "warn": 10,     # تحذير (10 نقاط)
-    "timeout": 10,  # تايم أوت / ميوت (10 نقاط)
-    "ban": 10       # باند / حظر (10 نقاط)
+    "ticket": 10,
+    "warn": 10,
+    "timeout": 10,
+    "ban": 10
 }
 
-# أهداف نقاط الترقية المحددة ورتبها
 PROMOTION_MILESTONES = {
     400: {"title": "الإدارة الصغرى", "role_id": 1545520950064316516},
     700: {"title": "الإدارة الوسطى", "role_id": 1540838084151877714},
@@ -64,24 +60,26 @@ intents.guilds = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 DATA_FILE = "points.json"
 
-# فحص صلاحيات استخدام البوت (أدمن أو يملك إحدى الرتب المسموحة)
+# فحص الصلاحيات المبسط والواضح
 @bot.check
 async def check_permissions(ctx):
-    is_admin = ctx.author.guild_permissions.administrator
-    has_allowed_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
-    
-    if is_admin or has_allowed_role:
+    if ctx.author.guild_permissions.administrator:
+        return True
+    has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
+    if has_role:
         return True
     
-    await ctx.send("❌ **عذرًا:** استخدام أوامر هذا البوت مخصص فقط للأدمن أو الإداريين المصرّح لهم!")
+    await ctx.send("❌ **عذرًا:** ليس لديك الصلاحية لاستخدام هذا الأمر!")
     return False
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.CheckFailure):
-        pass
-    else:
-        print(f"حدث خطأ: {error}")
+    # طباعة الخطأ بالكامل في شاشة البوت لنعرف سبب أي مشكلة فوراً
+    print(f"خطأ في الأمر {ctx.command}: {error}")
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("⚠️ **خطأ:** يرجى كتابة الأمر بشكل صحيح وتعبئة جميع المطلوبة!")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("⚠️ **خطأ:** البيانات المدخلة غير صحيحة (تأكد من اختيار عضو صحيح أو رتبة صحيحة).")
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -128,8 +126,6 @@ async def add_points(ctx, staff: discord.Member, points_amount: int, action_name
             
             if notif_channel:
                 await notif_channel.send(msg)
-            else:
-                await ctx.send(f"⚠️ لم يتم العثور على روم الإشعارات المحدد، هذا هو الإشعار:\n{msg}")
 
 # ----------------------------------------------------
 # 3. الأوامر الإدارية ونظام الحماية
@@ -139,67 +135,47 @@ async def add_points(ctx, staff: discord.Member, points_amount: int, action_name
 async def on_ready():
     print(f"تم تشغيل البوت بنجاح باسم: {bot.user} بالبادئة ({PREFIX})")
 
-# أمر إعطاء رتبة لعضو
-@bot.command(name="رتبة", aliases=["اعطاء_رتبة", "إعطاء_رتبة", "giverole", "role"])
+@bot.command(name="رتبة", aliases=["giverole", "role"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
     try:
         await member.add_roles(role)
         await ctx.send(f"✅ تم إعطاء رتبة {role.mention} لـ {member.mention} بنجاح.")
     except discord.Forbidden:
-        await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية لإعطاء هذه الرتبة.")
+        await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية لإعطاء هذه الرتبة (تأكد أن رتبة البوت أعلى من الرتبة المطلوبة).")
     except Exception as e:
-        await ctx.send(f"❌ حدث خطأ أثناء إعطاء الرتبة: {e}")
+        await ctx.send(f"❌ حدث خطأ: {e}")
 
-# أمر إغلاق التكت أو الدعم الفني المحمي
 @bot.command(name="إغلاق", aliases=["اغلاق", "close"])
 async def close(ctx):
     channel_name = ctx.channel.name.lower()
-    
-    is_support_channel = (
-        "ticket" in channel_name or 
-        "تكت" in channel_name or 
-        "الدعم" in channel_name or 
-        "الدعم الفني" in channel_name or
-        "support" in channel_name or
-        (ctx.channel.category and (
-            "ticket" in ctx.channel.category.name.lower() or 
-            "تكت" in ctx.channel.category.name.lower() or 
-            "الدعم" in ctx.channel.category.name.lower() or 
-            "الدعم الفني" in ctx.channel.category.name.lower() or
-            "support" in ctx.channel.category.name.lower()
-        ))
-    )
+    is_support_channel = "ticket" in channel_name or "تكت" in channel_name or "الدعم" in channel_name or "support" in channel_name
     
     if not is_support_channel:
-        await ctx.send("⚠️ **تنبيه حماية الرومات:** لا يمكن إغلاق أو حذف هذا الروم لأنه ليس خاصاً بالتكت أو الدعم الفني!")
+        await ctx.send("⚠️ **تنبيه حماية:** لا يمكن إغلاق هذا الروم لأنه ليس تكت أو دعم فني!")
         return
 
-    await ctx.send("🔒 جاري إغلاق التكت / الدعم الفني وحفظ النقاط...")
-    await add_points(ctx, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت / دعم فني")
+    await ctx.send("🔒 جاري إغلاق التكت...")
+    await add_points(ctx, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت")
     await ctx.channel.delete()
 
-# أمر تحذير (10 نقاط)
 @bot.command(name="تحذير", aliases=["warn"])
 async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     await ctx.send(f"⚠️ تم إعطاء تحذير لـ {member.mention} | السبب: {reason}")
     await add_points(ctx, ctx.author, POINTS_CONFIG["warn"], "إعطاء تحذير")
 
-# أمر تايم أوت / ميوت (10 نقاط)
-@bot.command(name="ميوت", aliases=["تايم_أوت", "تايم_اوت", "timeout"])
+@bot.command(name="ميوت", aliases=["timeout"])
 async def timeout(ctx, member: discord.Member, minutes: int, *, reason="بدون سبب"):
     duration = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
     await member.timeout(duration, reason=reason)
     await ctx.send(f"🔇 تم إعطاء تايم أوت لـ {member.mention} لمدة {minutes} دقيقة.")
     await add_points(ctx, ctx.author, POINTS_CONFIG["timeout"], "إعطاء تايم أوت")
 
-# أمر باند / حظر (10 نقاط)
 @bot.command(name="باند", aliases=["حظر", "ban"])
 async def ban(ctx, member: discord.Member, *, reason="بدون سبب"):
     await member.ban(reason=reason)
     await ctx.send(f"🔨 تم إعطاء باند لـ {member.mention}.")
     await add_points(ctx, ctx.author, POINTS_CONFIG["ban"], "إعطاء باند")
 
-# أمر عرض النقاط
 @bot.command(name="نقاط", aliases=["points"])
 async def points(ctx, member: discord.Member = None):
     target = member or ctx.author
@@ -208,15 +184,13 @@ async def points(ctx, member: discord.Member = None):
     pts = user_info["points"] if isinstance(user_info, dict) else user_info
     await ctx.send(f"📊 نقاط {target.mention} الإدارية هي: **{pts}** نقطة.")
 
-# أمر إضافة نقاط يدويًا
-@bot.command(name="إضافة_نقاط", aliases=["اضافة_نقاط", "addpoints"])
+@bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
     await add_points(ctx, member, amount, "إضافة يدوية من الإدارة")
 
-# تشغيل سيرفر الحفاظ على النشاط ثم تشغيل البوت
 if __name__ == "__main__":
     keep_alive()
     if TOKEN:
         bot.run(TOKEN)
     else:
-        print("❌ خطأ: لم يتم العثور على توكن البوت في متغيرات البيئة (DISCORD_TOKEN).")
+        print("❌ خطأ: التوكن غير موجود في متغيرات البيئة!")
