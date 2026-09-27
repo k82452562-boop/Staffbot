@@ -6,7 +6,7 @@ import os
 # ----------------------------------------------------
 # 1. إعدادات البوت والتوكن والبادئة والصلاحيات
 # ----------------------------------------------------
-TOKEN ="MTU1MzgzMTYwMDIwNTA3MDUzNw.GGih6N.sdQzp6uv75u0kk0iIL3oGbLjIBnspVwiG_NSGk"
+TOKEN = "MTU1MzgzMTYwMDIwNTA3MDUzNw.GIfBSZ.2m8WcrtXshLJfu0epQiLTaJs-UE_YQ64Eor4yY"
 PREFIX = "."  # البادئة الخاصة بالأوامر
 
 # ID الرتبة المسموح لها استخدام البوت
