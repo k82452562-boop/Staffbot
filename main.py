@@ -29,9 +29,9 @@ PREFIX = "."  # البادئة الخاصة بالأوامر
 
 # الأيدي المسموح لها استخدام الأوامر العامة للإدارة
 ALLOWED_ROLE_IDS = [
-    1545520633939624006,  # الرتبة الأساسية المحددة
-    1545520950064316516,  # رتبة الإدارة الصغرى / العليا
-    1540838084151877714   # رتبة الإدارة الوسطى
+    1545520633939624006,  
+    1545520950064316516,  
+    1540838084151877714   
 ]
 
 NOTIFICATION_CHANNEL_ID = 1553848524205072474
@@ -41,7 +41,8 @@ POINTS_CONFIG = {
     "ticket": 10,
     "warn": 10,
     "timeout": 10,
-    "ban": 10
+    "ban": 10,
+    "role_command": 20  # نقاط أمر رول الجديد
 }
 
 PROMOTION_MILESTONES = {
@@ -90,13 +91,11 @@ def load_data():
     return {}
 
 def save_data(data):
-    # حفظ فوري للبيانات لضمان عدم ضياعها عند إعادة التشغيل
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
         f.flush()
         os.fsync(f.fileno())
 
-# دالة إرسال رسائل اللوق لجميع عمليات النقاط
 async def send_log(ctx, title, description, color):
     guild = ctx.guild
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
@@ -122,7 +121,6 @@ async def add_points(ctx, staff: discord.Member, points_amount: int, action_name
 
     await ctx.send(f"✅ تم إضافة **{points_amount}** نقاط لـ {staff.mention} مقابل ({action_name}). مجموع النقاط الآن: **{current_pts}**")
 
-    # إرسال لوق الإضافة
     await send_log(
         ctx,
         title="📥 | سجل إضافة نقاط",
@@ -150,10 +148,14 @@ async def add_points(ctx, staff: discord.Member, points_amount: int, action_name
             if notif_channel:
                 await notif_channel.send(msg)
 
-# دالة مساعدة للبحث عن الرتبة بالاسم أو الآيدي
 def find_role(guild, role_identifier):
     if role_identifier.isdigit():
         return guild.get_role(int(role_identifier))
+    
+    # تنظيف المنشن إذا تم إدخاله بالخطأ كمنشن كامل مثل <@&ID>
+    cleaned_id = role_identifier.replace("<&", "").replace(">", "").replace("@", "")
+    if cleaned_id.isdigit():
+        return guild.get_role(int(cleaned_id))
     
     for role in guild.roles:
         if role_identifier.lower() in role.name.lower():
@@ -168,7 +170,7 @@ def find_role(guild, role_identifier):
 async def on_ready():
     print(f"تم تشغيل البوت بنجاح باسم: {bot.user} بالبادئة ({PREFIX})")
 
-# أمر إضافة رتبة
+# أمر إعطاء رتبة بالشكل المطلوب (.رتبة @العضو الرتبة)
 @bot.command(name="رتبة", aliases=["إعطاء_رتبة", "giverole", "role"])
 async def give_role(ctx, member: discord.Member, *, role_identifier: str):
     role = find_role(ctx.guild, role_identifier)
@@ -178,7 +180,12 @@ async def give_role(ctx, member: discord.Member, *, role_identifier: str):
     
     try:
         await member.add_roles(role)
-        await ctx.send(f"✅ تم إعطاء رتبة {role.mention} لـ {member.mention} بنجاح.")
+        embed = discord.Embed(
+            title="✅ | تم إعطاء الرتبة بنجاح",
+            description=f"تم إعطاء رتبة {role.mention} للعضو {member.mention}",
+            color=discord.Color.green()
+        )
+        await ctx.send(embed=embed)
     except discord.Forbidden:
         await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية لإعطاء هذه الرتبة (تأكد أن رتبة البوت أعلى).")
     except Exception as e:
@@ -194,11 +201,39 @@ async def remove_role(ctx, member: discord.Member, *, role_identifier: str):
     
     try:
         await member.remove_roles(role)
-        await ctx.send(f"✅ تم سحب رتبة {role.mention} من {member.mention} بنجاح.")
+        embed = discord.Embed(
+            title="🔄 | تم سحب الرتبة بنجاح",
+            description=f"تم سحب رتبة {role.mention} من العضو {member.mention}",
+            color=discord.Color.orange()
+        )
+        await ctx.send(embed=embed)
     except discord.Forbidden:
         await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية لسحب هذه الرتبة.")
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ: {e}")
+
+# أمر رول الجديد (يرسل رسالة الرول المخصصة ويعطي 20 نقطة)
+@bot.command(name="رول")
+async def role_play_message(ctx):
+    host_mention = ctx.author.mention
+    game_role_mention = "<@&1553782083933966353>"
+    
+    message_content = (
+        f"**تم فتح رول بلاي**\n"
+        f"الـهـوسـت : {host_mention}\n"
+        f"نـرجـو مـنـكـم قـرائـة الـقـوانـيـن\n\n"
+        f"https://discord.com/channels/1517046511714963466/1543074260606648451\n\n"
+        f"انـتـظـر رسـالـة إضـافـة الـهـوسـت ثـم تـوجـه\n\n"
+        f"https://discord.com/channels/1517046511714963466/1543081098051846184\n\n"
+        f"ونـرجـو عـدم ازعـاج الـهـوسـت .\n\n"
+        f"|| {game_role_mention} ||"
+    )
+    
+    await ctx.message.delete()  # مسح رسالة الأمر لتبقى الرسالة نظيفة
+    await ctx.send(message_content)
+    
+    # إضافة 20 نقطة للإداري تلقائياً وتسجيلها
+    await add_points(ctx, ctx.author, POINTS_CONFIG["role_command"], "فتح رول بلاي (أمر رول)")
 
 # أمر إغلاق التكت
 @bot.command(name="إغلاق", aliases=["اغلاق", "close"])
@@ -216,20 +251,23 @@ async def close(ctx):
 
 @bot.command(name="تحذير", aliases=["warn"])
 async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
-    await ctx.send(f"⚠️ تم إعطاء تحذير لـ {member.mention} | السبب: {reason}")
+    embed = discord.Embed(title="⚠️ | تنبيه تحذير", description=f"تم إعطاء تحذير لـ {member.mention}\n**السبب:** {reason}", color=discord.Color.red())
+    await ctx.send(embed=embed)
     await add_points(ctx, ctx.author, POINTS_CONFIG["warn"], "إعطاء تحذير")
 
 @bot.command(name="ميوت", aliases=["timeout"])
 async def timeout(ctx, member: discord.Member, minutes: int, *, reason="بدون سبب"):
     duration = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
     await member.timeout(duration, reason=reason)
-    await ctx.send(f"🔇 تم إعطاء تايم أوت لـ {member.mention} لمدة {minutes} دقيقة.")
+    embed = discord.Embed(title="🔇 | عقوبة تايم أوت", description=f"تم إسكات {member.mention} لمدة `{minutes}` دقيقة.\n**السبب:** {reason}", color=discord.Color.dark_orange())
+    await ctx.send(embed=embed)
     await add_points(ctx, ctx.author, POINTS_CONFIG["timeout"], "إعطاء تايم أوت")
 
 @bot.command(name="باند", aliases=["حظر", "ban"])
 async def ban(ctx, member: discord.Member, *, reason="بدون سبب"):
     await member.ban(reason=reason)
-    await ctx.send(f"🔨 تم إعطاء باند لـ {member.mention}.")
+    embed = discord.Embed(title="🔨 | عقوبة الحظر (باند)", description=f"تم حظر {member.mention} نهائياً.\n**السبب:** {reason}", color=discord.Color.dark_red())
+    await ctx.send(embed=embed)
     await add_points(ctx, ctx.author, POINTS_CONFIG["ban"], "إعطاء باند")
 
 @bot.command(name="نقاط", aliases=["points"])
@@ -238,9 +276,10 @@ async def points(ctx, member: discord.Member = None):
     data = load_data()
     user_info = data.get(str(target.id), 0)
     pts = user_info["points"] if isinstance(user_info, dict) else user_info
-    await ctx.send(f"📊 نقاط {target.mention} الإدارية هي: **{pts}** نقطة.")
+    
+    embed = discord.Embed(title="📊 | نظام النقاط الإدارية", description=f"نقاط الإداري {target.mention} هي: **{pts}** نقطة.", color=discord.Color.blue())
+    await ctx.send(embed=embed)
 
-# (مخصص للأدمن فقط): أمر إضافة نقاط يدوية
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
     if not ctx.author.guild_permissions.administrator:
@@ -248,7 +287,6 @@ async def addpoints(ctx, member: discord.Member, amount: int):
         return
     await add_points(ctx, member, amount, "إضافة يدوية من الأدمن")
 
-# (مخصص للأدمن فقط): أمر تصفير نقاط شخص معين
 @bot.command(name="تصفير_نقاط", aliases=["resetpoints"])
 async def resetpoints(ctx, member: discord.Member):
     if not ctx.author.guild_permissions.administrator:
@@ -277,7 +315,6 @@ async def resetpoints(ctx, member: discord.Member):
     else:
         await ctx.send(f"⚠️ العضو {member.mention} ليس لديه أي نقاط مسجلة مسبقاً.")
 
-# (مخصص للأدمن فقط): أمر تصفير جميع نقاط السيرفر بالكامل
 @bot.command(name="تصفير_الكل", aliases=["resetall"])
 async def resetall(ctx):
     if not ctx.author.guild_permissions.administrator:
@@ -294,7 +331,6 @@ async def resetall(ctx):
         color=discord.Color.red()
     )
 
-# أمر لوحة الصدارة (توب النقاط / Leaderboard)
 @bot.command(name="توب", aliases=["leaderboard", "top"])
 async def leaderboard(ctx):
     data = load_data()
@@ -310,7 +346,7 @@ async def leaderboard(ctx):
     sorted_users.sort(key=lambda x: x[1], reverse=True)
 
     embed = discord.Embed(
-        title="🏆 لوحة صدارة الإداريين (توب النقاط)",
+        title="🏆 | لوحة صدارة الإداريين",
         color=discord.Color.gold()
     )
     
