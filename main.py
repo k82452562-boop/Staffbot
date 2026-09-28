@@ -146,14 +146,23 @@ async def check_and_promote(ctx, member: discord.Member, current_pts: int):
         if target_role and target_role not in member.roles:
             try:
                 await member.add_roles(target_role)
+                
+                # تصفير/إعادة تعيين النقاط بعد الترقية مباشرة بناءً على طلبك
+                data = load_data()
+                user_id = str(member.id)
+                if user_id in data and isinstance(data[user_id], dict):
+                    data[user_id]["points"] = 0  # يتم تصفير النقاط لتستعد للرتبة التالية
+                    save_data(data)
+
                 if notif_channel:
                     msg = (
-                        f"🎉 **ترقية إدارية تلقائية:**\n"
-                        f"وصل الإداري {member.mention} إلى **{current_pts}** نقطة وتمت ترقيته تلقائياً إلى رتبة {target_role.mention} ضمن **{role_category_name}**!"
+                        f"🎉 **ترقية إدارية وتصفير نقاط:**\n"
+                        f"وصل الإداري {member.mention} وتتم ترقيته إلى رتبة {target_role.mention} ضمن **{role_category_name}**!\n"
+                        f"🔄 **ملاحظة:** تم تصفير نقاطه بنجاح ليبدأ رحلة المنافسة للرتبة القادمة."
                     )
                     await notif_channel.send(msg)
             except Exception as e:
-                print(f"خطأ أثناء منح الترقية التلقائية: {e}")
+                print(f"خطأ أثناء منح الترقية والتصفير: {e}")
 
 async def add_points(ctx, staff: discord.Member, points_amount: int, action_name: str):
     data = load_data()
@@ -213,7 +222,7 @@ def find_role(guild, role_identifier):
 
 @bot.event
 async def on_ready():
-    print(f"🚀 [ULTIMATE OP BOT WITH STATS] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT WITH AUTO-RESET ON PROMOTE] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="رتبة", aliases=["إعطاء_رتبة", "giverole", "role"])
 async def give_role(ctx, member: discord.Member, *, role_identifier: str):
@@ -311,12 +320,12 @@ async def profile(ctx, member: discord.Member = None):
 
     embed = discord.Embed(title=f"🛡️ | إحصائيات وبروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="📊 النقاط الإدارية", value=f"`{pts}` نقطة", inline=True)
+    embed.add_field(name="📊 النقاط الإدارية الحالية", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات المغلقة", value=f"`{tickets}` تكت", inline=True)
     embed.add_field(name="⚠️ التحذيرات المسجلة", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 العقوبات (ميوت)", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 عقوبات الباند", value=f"`{bans}` باند", inline=True)
-    embed.set_footer(text="نظام الإدارة الفاخر • إحصائيات دقيقة ومحدثة 24/7")
+    embed.set_footer(text="نظام الإدارة الفاخر • تصفير تلقائي عند الترقية")
     
     await ctx.send(embed=embed)
 
