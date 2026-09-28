@@ -12,7 +12,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is running 24/7!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -51,7 +51,7 @@ PROMOTION_MILESTONES = {
 }
 
 # ----------------------------------------------------
-# 2. تهيئة البوت وقاعدة البيانات
+# 2. تهيئة البوت وقاعدة البيانات مع الحفظ الفوري
 # ----------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
@@ -82,13 +82,19 @@ async def on_command_error(ctx, error):
 
 def load_data():
     if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
     return {}
 
 def save_data(data):
+    # حفظ فوري للبيانات لضمان عدم ضياعها عند إعادة التشغيل
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+        f.flush()
+        os.fsync(f.fileno())
 
 # دالة إرسال رسائل اللوق لجميع عمليات النقاط
 async def send_log(ctx, title, description, color):
@@ -288,7 +294,7 @@ async def resetall(ctx):
         color=discord.Color.red()
     )
 
-# أمر لوحة الصدارة (توب النقاط / Leaderboard) - متاح للجميع
+# أمر لوحة الصدارة (توب النقاط / Leaderboard)
 @bot.command(name="توب", aliases=["leaderboard", "top"])
 async def leaderboard(ctx):
     data = load_data()
