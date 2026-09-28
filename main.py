@@ -44,24 +44,24 @@ POINTS_CONFIG = {
     "role_command": 20
 }
 
-# رتب الإدارة الصغرى (تبدأ من 400 نقطة وتتدرج)
+# رتب الإدارة الصغرى (مرتبة تصاعدياً من الأولى إلى الأخيرة)
 JUNIOR_ROLES = [
-    1548407040014155806,
-    1548407479396991047,
-    1548407580131336283,
-    1548407675048689715,
-    1548407794426707978,
-    1548407869320466583,
-    1548407949356048534
+    1548407040014155806, # 1
+    1548407479396991047, # 2
+    1548407580131336283, # 3
+    1548407675048689715, # 4
+    1548407794426707978, # 5
+    1548407869320466583, # 6
+    1548407949356048534  # 7
 ]
 
-# رتب الإدارة الوسطى (تبدأ من 700 نقطة وتتدرج لتفصل عن الصغرى)
+# رتب الإدارة الوسطى (مرتبة تصاعدياً من الأولى إلى الأخيرة)
 MIDDLE_ROLES = [
-    1548408037272715465,
-    1548408124531154974,
-    1548408197176361191,
-    1548408266239910020,
-    1548408357457756200
+    1548408037272715465, # 1
+    1548408124531154974, # 2
+    1548408197176361191, # 3
+    1548408266239910020, # 4
+    1548408357457756200  # 5
 ]
 
 intents = discord.Intents.default()
@@ -128,37 +128,60 @@ async def check_and_promote(ctx, member: discord.Member, current_pts: int):
     target_role_id = None
     role_category_name = ""
 
-    # نظام التفرقة الذكي والترقية التلقائية
-    if 400 <= current_pts < 700:
-        tier_index = min((current_pts // 50) - 8, len(JUNIOR_ROLES) - 1)
-        if tier_index < 0: tier_index = 0
-        target_role_id = JUNIOR_ROLES[tier_index]
-        role_category_name = "الإدارة الصغرى"
+    # تحديد الفئة بناءً على النقاط ورتب العضو الحالية
+    if current_pts >= 700:
+        # نبحث إذا كان يملك رتبة حالية في الوسطى
+        current_middle_index = -1
+        for idx, r_id in enumerate(MIDDLE_ROLES):
+            if guild.get_role(r_id) in member.roles:
+                current_middle_index = idx
+                break
         
-    elif current_pts >= 700:
-        tier_index = min((current_pts // 100) - 7, len(MIDDLE_ROLES) - 1)
-        if tier_index < 0: tier_index = 0
-        target_role_id = MIDDLE_ROLES[tier_index]
+        if current_middle_index == -1:
+            # إذا لم يكن يملك أي رتبة وسطى، نعطيه الرتبة الأولى في الوسطى
+            target_role_id = MIDDLE_ROLES[0]
+        elif current_middle_index < len(MIDDLE_ROLES) - 1:
+            # إذا كان يملك رتبة، نعطيه الرتبة التي تليها مباشرة
+            target_role_id = MIDDLE_ROLES[current_middle_index + 1]
+        
         role_category_name = "الإدارة الوسطى"
+
+    elif 400 <= current_pts < 700:
+        # نبحث إذا كان يملك رتبة حالية في الصغرى
+        current_junior_index = -1
+        for idx, r_id in enumerate(JUNIOR_ROLES):
+            if guild.get_role(r_id) in member.roles:
+                current_junior_index = idx
+                break
+        
+        if current_junior_index == -1:
+            # إذا لم يكن يملك أي رتبة صغرى، نعطيه الأولى
+            target_role_id = JUNIOR_ROLES[0]
+        elif current_junior_index < len(JUNIOR_ROLES) - 1:
+            # نعطيه الرتبة التي تليها مباشرة
+            target_role_id = JUNIOR_ROLES[current_junior_index + 1]
+            
+        role_category_name = "الإدارة الصغرى"
 
     if target_role_id:
         target_role = guild.get_role(target_role_id)
         if target_role and target_role not in member.roles:
             try:
+                # إزالة الرتب القديمة التابعة لنفس الفئة إن وجدت لتنظيم الرتب (اختياري) أو إبقائها
                 await member.add_roles(target_role)
                 
-                # تصفير/إعادة تعيين النقاط بعد الترقية مباشرة بناءً على طلبك
+                # تصفير النقاط بعد الترقية مباشرة
                 data = load_data()
                 user_id = str(member.id)
                 if user_id in data and isinstance(data[user_id], dict):
-                    data[user_id]["points"] = 0  # يتم تصفير النقاط لتستعد للرتبة التالية
+                    data[user_id]["points"] = 0
                     save_data(data)
 
                 if notif_channel:
                     msg = (
                         f"🎉 **ترقية إدارية وتصفير نقاط:**\n"
-                        f"وصل الإداري {member.mention} وتتم ترقيته إلى رتبة {target_role.mention} ضمن **{role_category_name}**!\n"
-                        f"🔄 **ملاحظة:** تم تصفير نقاطه بنجاح ليبدأ رحلة المنافسة للرتبة القادمة."
+                        f"وصل الإداري {member.mention} وتمت ترقيته إلى الرتبة التالية `{target_role.name}` ضمن **{role_category_name}**!\n"
+                        f"🔄 **ملاحظة:** تم تصفير نقاطه بنجاح ليبدأ رحلة المنافسة للرتبة التي تليها."
                     )
                     await notif_channel.send(msg)
             except Exception as e:
@@ -176,7 +199,6 @@ async def add_points(ctx, staff: discord.Member, points_amount: int, action_name
     user_data["points"] = user_data.get("points", 0) + points_amount
     current_pts = user_data["points"]
 
-    # إحصائيات دقيقة مفصلة
     if "تكت" in action_name:
         user_data["tickets"] = user_data.get("tickets", 0) + 1
     elif "تحذير" in action_name:
@@ -222,7 +244,7 @@ def find_role(guild, role_identifier):
 
 @bot.event
 async def on_ready():
-    print(f"🚀 [ULTIMATE OP BOT WITH AUTO-RESET ON PROMOTE] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT WITH SMART NEXT-ROLE PROMOTION] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="رتبة", aliases=["إعطاء_رتبة", "giverole", "role"])
 async def give_role(ctx, member: discord.Member, *, role_identifier: str):
@@ -302,7 +324,6 @@ async def ban(ctx, member: discord.Member, *, reason="بدون سبب"):
     await ctx.send(embed=embed)
     await add_points(ctx, ctx.author, POINTS_CONFIG["ban"], "إعطاء باند")
 
-# 📊 نظام إحصائيات الإداريين الشامل والفاخر
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
     target = member or ctx.author
@@ -325,7 +346,7 @@ async def profile(ctx, member: discord.Member = None):
     embed.add_field(name="⚠️ التحذيرات المسجلة", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 العقوبات (ميوت)", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 عقوبات الباند", value=f"`{bans}` باند", inline=True)
-    embed.set_footer(text="نظام الإدارة الفاخر • تصفير تلقائي عند الترقية")
+    embed.set_footer(text="نظام الإدارة الفاخر • تصفير تلقائي وترقية للرتبة التالية")
     
     await ctx.send(embed=embed)
 
@@ -340,7 +361,6 @@ async def points(ctx, member: discord.Member = None):
     embed.set_thumbnail(url=target.display_avatar.url)
     await ctx.send(embed=embed)
 
-# ⚡ نظام التحكم السريع (أدوات الأدمن السريعة)
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
     if not ctx.author.guild_permissions.administrator:
