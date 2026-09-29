@@ -12,7 +12,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Persistent Apply Panel & Admin Ping is Active!"
+    return "Staffbot Ultimate OP 24/7 with Custom Ban & Timeout Templates is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -36,18 +36,15 @@ ALLOWED_ROLE_IDS = [
 NOTIFICATION_CHANNEL_ID = 1553848524205072474
 LOG_CHANNEL_ID = 1553913719128588389
 
-# الأيدي المحددة
-APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   # روم تقديم الهوية
-APPLY_REVIEW_CHANNEL_ID = 1543073109496692737   # روم قبول الهوية للإدارة
-WARN_CHANNEL_ID = 1543647851953791179           # روم إرسال رسائل التحذيرات
-ADMIN_ROLE_PENG_ID = 1545520633939624006        # أيدي رتبة الطاقم الإداري للمنشن
+APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
+APPLY_REVIEW_CHANNEL_ID = 1543073109496692737   
+WARN_CHANNEL_ID = 1543647851953791179           
+ADMIN_ROLE_PENG_ID = 1545520633939624006        
 
-# رتب التقديم والتفعيل
-UNVERIFIED_ROLE_ID = 1545695261446250516      # أيدي غير مفعل
-VERIFIED_ROLE_ID = 1545516954754875523        # أيدي مفعل
-BAN_ROLE_ID = 1543325398761345175             # أيدي حرمان رول
+UNVERIFIED_ROLE_ID = 1545695261446250516      
+VERIFIED_ROLE_ID = 1545516954754875523        
+BAN_ROLE_ID = 1543325398761345175             
 
-# رتب التحذيرات المتدرجة
 WARN_1_ID = 1543278808583372901
 WARN_2_ID = 1543278965857198271
 WARN_3_ID = 1543279133164048576
@@ -60,7 +57,6 @@ POINTS_CONFIG = {
     "apply_accept": 10 
 }
 
-# رتب الإدارة الصغرى
 JUNIOR_ROLES = [
     1548407040014155806,
     1548407479396991047,
@@ -71,7 +67,6 @@ JUNIOR_ROLES = [
     1548407949356048534
 ]
 
-# رتب الإدارة الوسطى
 MIDDLE_ROLES = [
     1548408037272715465,
     1548408124531154974,
@@ -221,7 +216,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v4")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v6")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -246,7 +241,7 @@ class ApplyReviewView(discord.ui.View):
 
         embed = discord.Embed(
             title="✅ | تم قبول التقديم بنجاح",
-            description=f"تم قبول العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n✨ **تم سحب (غير مفعل) ومنحه رتبة (مفعل)**، وإضافة نقاط للإداري!",
+            description=f"تم قبول العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n✨ **تم سحب (غير مفعل) ومنحه رتبة (مفعل)**، وإضافة 10 نقاط للإداري!",
             color=discord.Color.green()
         )
         await interaction.channel.send(embed=embed)
@@ -256,7 +251,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v4")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v6")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -281,7 +276,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_btn_v2")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_btn_v4")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         
@@ -312,7 +307,6 @@ class ApplyButtonView(discord.ui.View):
                 await interaction.user.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى الضغط على زر التقديم من جديد في السيرفر.")
                 return
 
-        # إرسال التقديم لروم مراجعة الإدارة مع منشن رتبة الطاقم الإداري
         review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
         if review_channel:
             embed = discord.Embed(
@@ -335,7 +329,6 @@ class ApplyButtonView(discord.ui.View):
         
         await interaction.user.send("✅ **تم استلام إجاباتك وإرسالها للإدارة بنجاح!** سيتم إبلاغك فور مراجعتها.")
 
-# أمر إرسال لوحة التقديم الثابتة في روم تقديم الهوية
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
 async def panel_apply(ctx):
     if not ctx.author.guild_permissions.administrator:
@@ -359,19 +352,29 @@ async def panel_apply(ctx):
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    print(f"🚀 [ULTIMATE OP BOT - PANEL APPLY & PING READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - CUSTOM BAN & TIMEOUT] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
+    if not ctx.author.guild_permissions.administrator:
+        if ctx.author.top_role <= role:
+            await ctx.send("❌ **خطأ أمني:** لا يمكنك منح رتبة تساوي أو أعلى من أعلى رتبة تمتلكها!", delete_after=6)
+            return
+
     try:
         await member.add_roles(role)
         embed = discord.Embed(title="✅ | إدارة الرتب الفاخرة", description=f"تم بنجاح منح رتبة {role.mention} للعضو {member.mention}", color=discord.Color.green())
         await ctx.send(embed=embed)
     except discord.Forbidden:
-        await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية كافية.")
+        await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية كافية لتعديل رتب هذا الشخص.")
 
 @bot.command(name="سحب_رتبة", aliases=["removerole"])
 async def remove_role(ctx, member: discord.Member, role: discord.Role):
+    if not ctx.author.guild_permissions.administrator:
+        if ctx.author.top_role <= role:
+            await ctx.send("❌ **خطأ أمني:** لا يمكنك سحب رتبة تساوي أو أعلى من أعلى رتبة تمتلكها!", delete_after=6)
+            return
+
     try:
         await member.remove_roles(role)
         embed = discord.Embed(title="🔄 | إدارة الرتب الفاخرة", description=f"تم بنجاح سحب رتبة {role.mention} من العضو {member.mention}", color=discord.Color.orange())
@@ -380,12 +383,15 @@ async def remove_role(ctx, member: discord.Member, role: discord.Role):
         await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية كافية.")
 
 @bot.command(name="حرمان")
-async def ban_role_cmd(ctx, member: discord.Member):
+async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: str):
     guild = ctx.guild
     ban_role = guild.get_role(BAN_ROLE_ID)
     if not ban_role:
         await ctx.send("❌ **خطأ:** لم يتم العثور على رتبة الحرمان في السيرفر.")
         return
+
+    # استخراج الدليل (الصورة أو الرابط إن وجد مع الرسالة)
+    proof = ctx.message.attachments[0].url if ctx.message.attachments else "لا يوجد"
 
     try:
         roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
@@ -393,15 +399,68 @@ async def ban_role_cmd(ctx, member: discord.Member):
             await member.remove_roles(*roles_to_remove, reason=f"عقوبة حرمان بواسطة {ctx.author.name}")
         await member.add_roles(ban_role, reason=f"تطبيق عقوبة الحرمان بواسطة {ctx.author.name}")
 
-        embed = discord.Embed(
-            title="🚫 | تنفيذ عقوبة الحرمان",
-            description=f"تم سحب جميع الرتب من العضو {member.mention}\n🔒 **وتم تطبيق رتبة الحرمان بنجاح.**",
-            color=discord.Color.dark_red()
+        # إرسال النموذج المطلوب بالصيغة بالحرف الواحد
+        ban_model_msg = (
+            f"__**\n"
+            f"`نموذج حـرمـان  الـرول `\n\n"
+            f"- اســم الإداريـ : {ctx.author.mention}\n\n"
+            f"- اسـم الـشـخـص  : {member.mention}\n\n"
+            f"- ســبـب الـحـرمـان : {reason}\n\n"
+            f"- الـمـده : {duration}\n\n"
+            f"- دلـيـل : {proof}\n"
+            f"**__"
         )
-        await ctx.send(embed=embed)
-        await send_log(ctx, title="🚫 | سجل الحرمان", description=f"**العضو:** {member.mention}\n**بواسطة:** {ctx.author.mention}", color=discord.Color.dark_red())
+        await ctx.send(ban_model_msg)
+        await send_log(ctx, title="🚫 | سجل الحرمان", description=f"**العضو:** {member.mention}\n**بواسطة:** {ctx.author.mention}\n**المدة:** {duration}\n**السبب:** {reason}", color=discord.Color.dark_red())
+
+        # إضافة النقاط للإداري
+        data = load_data()
+        user_id = str(ctx.author.id)
+        if user_id not in data or not isinstance(data[user_id], dict):
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id]["points"] += POINTS_CONFIG["ban"]
+        data[user_id]["bans"] += 1
+        save_data(data)
+        await check_and_promote(ctx, ctx.author, data[user_id]["points"])
+
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الحرمان: {e}")
+
+@bot.command(name="ميوت", aliases=["timeout"])
+async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
+    duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
+    
+    # استخراج الدليل (الصورة أو الرابط إن وجد)
+    proof = ctx.message.attachments[0].url if ctx.message.attachments else "لا يوجد"
+
+    try:
+        await member.timeout(duration_delta, reason=reason)
+
+        # إرسال نموذج سجل تايم المطلوب بالصيغة بالحرف الواحد
+        timeout_model_msg = (
+            f"**\n"
+            f"`نموذج سـجـل تـايـم `\n\n"
+            f" اسـم الـاداري : {ctx.author.mention}\n\n"
+            f" اسـم الشـخـص : {member.mention}\n\n"
+            f"الـمـده : {minutes} دقيقة\n\n"
+            f"الـسـبـب: {reason}\n\n"
+            f"دلـيـل : {proof}\n"
+            f"**"
+        )
+        await ctx.send(timeout_model_msg)
+
+        # إضافة النقاط للإداري
+        data = load_data()
+        user_id = str(ctx.author.id)
+        if user_id not in data or not isinstance(data[user_id], dict):
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id]["points"] += POINTS_CONFIG["timeout"]
+        data[user_id]["timeouts"] += 1
+        save_data(data)
+        await check_and_promote(ctx, ctx.author, data[user_id]["points"])
+
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الميوت: {e}")
 
 @bot.command(name="تحذير", aliases=["warn"])
 async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
@@ -495,35 +554,6 @@ async def close(ctx):
     save_data(data)
     await check_and_promote(ctx, ctx.author, data[user_id]["points"])
     await ctx.channel.delete()
-
-@bot.command(name="ميوت", aliases=["timeout"])
-async def timeout(ctx, member: discord.Member, minutes: int, *, reason="بدون سبب"):
-    duration = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
-    await member.timeout(duration, reason=reason)
-    embed = discord.Embed(title="🔇 | عقوبة إسكات", description=f"تم إسكات {member.mention} لمدة `{minutes}` دقيقة.\n📝 **السبب:** {reason}", color=discord.Color.dark_orange())
-    await ctx.send(embed=embed)
-    data = load_data()
-    user_id = str(ctx.author.id)
-    if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-    data[user_id]["points"] += POINTS_CONFIG["timeout"]
-    data[user_id]["timeouts"] += 1
-    save_data(data)
-    await check_and_promote(ctx, ctx.author, data[user_id]["points"])
-
-@bot.command(name="باند", aliases=["حظر", "ban"])
-async def ban(ctx, member: discord.Member, *, reason="بدون سبب"):
-    await member.ban(reason=reason)
-    embed = discord.Embed(title="🔨 | عقوبة الحظر النهائي", description=f"تم حظر العضو {member.mention} من السيرفر.\n📝 **السبب:** {reason}", color=discord.Color.dark_red())
-    await ctx.send(embed=embed)
-    data = load_data()
-    user_id = str(ctx.author.id)
-    if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-    data[user_id]["points"] += POINTS_CONFIG["ban"]
-    data[user_id]["bans"] += 1
-    save_data(data)
-    await check_and_promote(ctx, ctx.author, data[user_id]["points"])
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
