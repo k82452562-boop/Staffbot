@@ -12,7 +12,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with DM Apply & Warning System is Active!"
+    return "Staffbot Ultimate OP 24/7 with Persistent Apply Panel & Admin Ping is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -22,7 +22,7 @@ def keep_alive():
     t.start()
 
 # ----------------------------------------------------
-# 1. الثوابت والأيدي (IDs) المطلوبة للسيرفر (حسب طلبك الأخير)
+# 1. الثوابت والأيدي (IDs) المطلوبة للسيرفر
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
@@ -36,10 +36,11 @@ ALLOWED_ROLE_IDS = [
 NOTIFICATION_CHANNEL_ID = 1553848524205072474
 LOG_CHANNEL_ID = 1553913719128588389
 
-# الأيدي الجديدة المحددة بدقة
-APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   # روم تقديم الهوية العضو
+# الأيدي المحددة
+APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   # روم تقديم الهوية
 APPLY_REVIEW_CHANNEL_ID = 1543073109496692737   # روم قبول الهوية للإدارة
 WARN_CHANNEL_ID = 1543647851953791179           # روم إرسال رسائل التحذيرات
+ADMIN_ROLE_PENG_ID = 1545520633939624006        # أيدي رتبة الطاقم الإداري للمنشن
 
 # رتب التقديم والتفعيل
 UNVERIFIED_ROLE_ID = 1545695261446250516      # أيدي غير مفعل
@@ -56,7 +57,7 @@ POINTS_CONFIG = {
     "warn": 10,
     "timeout": 10,
     "ban": 10,
-    "apply_accept": 15 
+    "apply_accept": 10 
 }
 
 # رتب الإدارة الصغرى
@@ -212,7 +213,7 @@ async def add_points_direct(guild, staff: discord.Member, points_amount: int, ac
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم في الخاص (سؤال بسؤال)
+# 2. نظام التقديم بالزر (يفتح في الخاص سؤال بسؤال)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -220,7 +221,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v2")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v4")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -255,7 +256,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v2")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v4")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -276,76 +277,89 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-@bot.command(name="تقديم", aliases=["apply"])
-async def apply_cmd(ctx):
-    if ctx.guild is None:
-        return
-    
-    # حصر أمر التقديم في الروم المخصص فقط
-    if ctx.channel.id != APPLY_SUBMIT_CHANNEL_ID:
-        correct_channel = ctx.guild.get_channel(APPLY_SUBMIT_CHANNEL_ID)
-        channel_mention = correct_channel.mention if correct_channel else "الروم المخصص"
-        await ctx.message.delete()
-        await ctx.send(f"⚠️ {ctx.author.mention} يرجى استخدام أمر التقديم في الروم المخصص حصراً: {channel_mention}", delete_after=7)
-        return
+class ApplyButtonView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    await ctx.message.delete()
-    try:
-        await ctx.author.send("✨ **أهلاً بك في نظام التقديم الرسمي!** يرجى الإجابة على الأسئلة التالية بدقة (سؤال بسؤال).")
-    except discord.Forbidden:
-        await ctx.send(f"❌ {ctx.author.mention} yيرجى فتح الخاص (Direct Messages) لتتمكن من التقديم!", delete_after=10)
-        return
-
-    questions = [
-        "**1. اسمك ؟**",
-        "**2. عمرك ؟**",
-        "**3. اسم حسابك المستعار في روبلوكس ؟**",
-        "**4. اسم حسابك الاساسي في روبلوكس ؟**",
-        "**5. الحلف - اقسم بالله العظيم انا فلان الفلان لاخرب رولات منتدى النظيم ولا اضرهم باي شكل من الاشكال ولا ادمر سمعته (اكتب: أقسم بالله)**"
-    ]
-
-    answers = []
-    def check(m):
-        return m.author.id == ctx.author.id and isinstance(m.channel, discord.DMChannel)
-
-    for q in questions:
-        await ctx.author.send(q)
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_btn_v2")
+    async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        
         try:
-            msg = await bot.wait_for('message', timeout=120.0, check=check)
-            answers.append(msg.content)
-        except Exception:
-            await ctx.author.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى إعادة كتابة أمر `.تقديم` من جديد في السيرفر.")
+            await interaction.user.send("✨ **أهلاً بك في نظام التقديم الرسمي!** يرجى الإجابة على الأسئلة التالية بدقة (سؤال بسؤال).")
+        except discord.Forbidden:
+            await interaction.followup.send("❌ **يرجى فتح الخاص (Direct Messages)** لتتمكن من استقبال أسئلة التقديم!", ephemeral=True)
             return
 
-    # إرسال التقديم لروم مراجعة الإدارة المحدد
-    review_channel = ctx.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
-    if review_channel:
-        embed = discord.Embed(
-            title="📥 | تقديم هوية جديد في الخاص",
-            color=discord.Color.gold(),
-            timestamp=discord.utils.utcnow()
-        )
-        embed.set_thumbnail(url=ctx.author.display_avatar.url)
-        embed.add_field(name="👤 المتقدم", value=ctx.author.mention, inline=False)
-        embed.add_field(name="1. الاسم", value=answers[0], inline=False)
-        embed.add_field(name="2. العمر", value=answers[1], inline=False)
-        embed.add_field(name="3. الحساب المستعار (روبلوكس)", value=answers[2], inline=False)
-        embed.add_field(name="4. الحساب الأساسي (روبلوكس)", value=answers[3], inline=False)
-        embed.add_field(name="5. حلف اليمين", value=answers[4], inline=False)
-        embed.set_footer(text=f"معرف العضو: {ctx.author.id}")
+        questions = [
+            "**1. اسمك ؟**",
+            "**2. عمرك ؟**",
+            "**3. اسم حسابك المستعار في روبلوكس ؟**",
+            "**4. اسم حسابك الاساسي في روبلوكس ؟**",
+            "**5. الحلف - اقسم بالله العظيم انا فلان الفلان لاخرب رولات منتدى النظيم ولا اضرهم باي شكل من الاشكال ولا ادمر سمعته (اكتب: أقسم بالله)**"
+        ]
 
-        view = ApplyReviewView(applicant=ctx.author, guild=ctx.guild)
-        await review_channel.send(embed=embed, view=view)
+        answers = []
+        def check(m):
+            return m.author.id == interaction.user.id and isinstance(m.channel, discord.DMChannel)
+
+        for q in questions:
+            await interaction.user.send(q)
+            try:
+                msg = await bot.wait_for('message', timeout=120.0, check=check)
+                answers.append(msg.content)
+            except Exception:
+                await interaction.user.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى الضغط على زر التقديم من جديد في السيرفر.")
+                return
+
+        # إرسال التقديم لروم مراجعة الإدارة مع منشن رتبة الطاقم الإداري
+        review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
+        if review_channel:
+            embed = discord.Embed(
+                title="📥 | تقديم هوية جديد (عبر زر الخاص)",
+                color=discord.Color.gold(),
+                timestamp=discord.utils.utcnow()
+            )
+            embed.set_thumbnail(url=interaction.user.display_avatar.url)
+            embed.add_field(name="👤 المتقدم", value=interaction.user.mention, inline=False)
+            embed.add_field(name="1. الاسم", value=answers[0], inline=False)
+            embed.add_field(name="2. العمر", value=answers[1], inline=False)
+            embed.add_field(name="3. الحساب المستعار (روبلوكس)", value=answers[2], inline=False)
+            embed.add_field(name="4. الحساب الأساسي (روبلوكس)", value=answers[3], inline=False)
+            embed.add_field(name="5. حلف اليمين", value=answers[4], inline=False)
+            embed.set_footer(text=f"معرف العضو: {interaction.user.id}")
+
+            admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
+            view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
+            await review_channel.send(content=f"🔔 {admin_role_mention} يوجد تقديم هوية جديد بانتظار المراجعة!", embed=embed, view=view)
+        
+        await interaction.user.send("✅ **تم استلام إجاباتك وإرسالها للإدارة بنجاح!** سيتم إبلاغك فور مراجعتها.")
+
+# أمر إرسال لوحة التقديم الثابتة في روم تقديم الهوية
+@bot.command(name="بانل_تقديم", aliases=["panel_apply"])
+async def panel_apply(ctx):
+    if not ctx.author.guild_permissions.administrator:
+        return
     
-    await ctx.author.send("✅ **تم استلام إجاباتك وإرسالها للإدارة بنجاح!** سيتم إبلاغك فور مراجعتها.")
+    await ctx.message.delete()
+    embed = discord.Embed(
+        title="📋 | نظام تقديم الهوية الرسمي",
+        description="لتقديم طلب الحصول على الهوية وتفعيل حسابك في السيرفر، يرجى الضغط على الزر أدناه وسيتم التواصل معك مباشرة في الخاصة (DM) للإجابة على الأسئلة.",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="منتدى النظيم | قسم الإدارة")
+    
+    view = ApplyButtonView()
+    await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 3. الأوامر الأساسية والإدارية (مع نموذج التحذيرات المتدرج المخصص)
+# 3. الأوامر الأساسية والإدارية
 # ----------------------------------------------------
 
 @bot.event
 async def on_ready():
-    print(f"🚀 [ULTIMATE OP BOT - FINAL EXACT CHANNELS] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    bot.add_view(ApplyButtonView())
+    print(f"🚀 [ULTIMATE OP BOT - PANEL APPLY & PING READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
@@ -389,7 +403,6 @@ async def ban_role_cmd(ctx, member: discord.Member):
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الحرمان: {e}")
 
-# ⚠️ أمر التحذير المتدرج وإرساله بالروم المطلوب مع النموذج المخصص
 @bot.command(name="تحذير", aliases=["warn"])
 async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     guild = ctx.guild
@@ -417,7 +430,6 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     except Exception as e:
         print(f"خطأ في تبديل رتب التحذيرات: {e}")
 
-    # إرسال رسالة التأكيد في روم الأوامر الحالي
     embed = discord.Embed(
         title="⚠️ | تنبيه وتحذير إداري",
         description=f"تم تحذير العضو {member.mention}\n📌 **الرتبة المطبقة:** `{assigned_warn_name}`\n📝 **السبب:** {reason}",
@@ -425,7 +437,6 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     )
     await ctx.send(embed=embed)
 
-    # إرسال نموذج التحذير بالروم المخصص `1543647851953791179`
     warn_channel = guild.get_channel(WARN_CHANNEL_ID)
     if warn_channel:
         warning_msg = (
@@ -441,7 +452,6 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
         )
         await warn_channel.send(warning_msg)
 
-    # احتساب النقاط للإداري
     data = load_data()
     user_id = str(ctx.author.id)
     if user_id not in data or not isinstance(data[user_id], dict):
