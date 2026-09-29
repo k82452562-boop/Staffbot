@@ -12,7 +12,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Custom Ban & Timeout Templates is Active!"
+    return "Staffbot Ultimate OP 24/7 with Custom Ban & Timeout Channels is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -35,6 +35,10 @@ ALLOWED_ROLE_IDS = [
 
 NOTIFICATION_CHANNEL_ID = 1553848524205072474
 LOG_CHANNEL_ID = 1553913719128588389
+
+# رومات النماذج الجديدة
+BAN_MODEL_CHANNEL_ID = 1543648161807999077
+TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
 
 APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
 APPLY_REVIEW_CHANNEL_ID = 1543073109496692737   
@@ -105,7 +109,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
 def load_data():
@@ -216,7 +220,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v6")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v7")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -251,7 +255,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v6")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v7")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -276,7 +280,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_btn_v4")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_btn_v5")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         
@@ -352,7 +356,7 @@ async def panel_apply(ctx):
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    print(f"🚀 [ULTIMATE OP BOT - CUSTOM BAN & TIMEOUT] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - CHANNELS BAN & TIMEOUT] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
@@ -399,7 +403,9 @@ async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: st
             await member.remove_roles(*roles_to_remove, reason=f"عقوبة حرمان بواسطة {ctx.author.name}")
         await member.add_roles(ban_role, reason=f"تطبيق عقوبة الحرمان بواسطة {ctx.author.name}")
 
-        # إرسال النموذج المطلوب بالصيغة بالحرف الواحد
+        # تحديد روم نموذج الحرمان المحدد
+        ban_model_channel = guild.get_channel(BAN_MODEL_CHANNEL_ID)
+        
         ban_model_msg = (
             f"__**\n"
             f"`نموذج حـرمـان  الـرول `\n\n"
@@ -410,7 +416,13 @@ async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: st
             f"- دلـيـل : {proof}\n"
             f"**__"
         )
-        await ctx.send(ban_model_msg)
+
+        if ban_model_channel:
+            await ban_model_channel.send(ban_model_msg)
+            await ctx.send(f"✅ تم تنفيذ الحرمان وإرسال النموذج إلى روم **{ban_model_channel.name}** بنجاح!", delete_after=5)
+        else:
+            await ctx.send(ban_model_msg)
+
         await send_log(ctx, title="🚫 | سجل الحرمان", description=f"**العضو:** {member.mention}\n**بواسطة:** {ctx.author.mention}\n**المدة:** {duration}\n**السبب:** {reason}", color=discord.Color.dark_red())
 
         # إضافة النقاط للإداري
@@ -428,6 +440,7 @@ async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: st
 
 @bot.command(name="ميوت", aliases=["timeout"])
 async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
+    guild = ctx.guild
     duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
     
     # استخراج الدليل (الصورة أو الرابط إن وجد)
@@ -436,7 +449,9 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
     try:
         await member.timeout(duration_delta, reason=reason)
 
-        # إرسال نموذج سجل تايم المطلوب بالصيغة بالحرف الواحد
+        # تحديد روم نموذج التايم المحدد
+        timeout_model_channel = guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
+
         timeout_model_msg = (
             f"**\n"
             f"`نموذج سـجـل تـايـم `\n\n"
@@ -447,7 +462,12 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
             f"دلـيـل : {proof}\n"
             f"**"
         )
-        await ctx.send(timeout_model_msg)
+
+        if timeout_model_channel:
+            await timeout_model_channel.send(timeout_model_msg)
+            await ctx.send(f"✅ تم تنفيذ الميوت وإرسال النموذج إلى روم **{timeout_model_channel.name}** بنجاح!", delete_after=5)
+        else:
+            await ctx.send(timeout_model_msg)
 
         # إضافة النقاط للإداري
         data = load_data()
@@ -573,7 +593,7 @@ async def profile(ctx, member: discord.Member = None):
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
-    embed.add_field(name="⚠️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
+    embed.add_field(name="⚠️️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"`{bans}` باند", inline=True)
     await ctx.send(embed=embed)
