@@ -62,7 +62,9 @@ POINTS_CONFIG = {
     "warn": 10,
     "timeout": 10,
     "ban": 20,          
-    "apply_accept": 10 
+    "apply_accept": 10,
+    "ticket_claim": 5,
+    "ticket_close": 5   # نقاط إغلاق التكت للإداري
 }
 
 JUNIOR_ROLES = [
@@ -83,7 +85,6 @@ MIDDLE_ROLES = [
     1548408357457756200
 ]
 
-# إعدادات الانتنتس والصلاحيات
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -274,7 +275,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# نظام النقاط اليدوي
+# أوامر النقاط والشرف
 # ----------------------------------------------------
 @bot.command(name="إعطاء_نقاط", aliases=["givepoints"])
 async def give_points(ctx, member: discord.Member, points: int):
@@ -315,8 +316,149 @@ async def remove_points(ctx, member: discord.Member, points: int):
     await ctx.send(f"✅ تم سحب `{points}` نقطة من الإداري {member.mention}. المجموع: `{new_pts}`")
     await send_unified_log(ctx.guild, "➖ | تعديل نقاط يدوي (خصم)", f"قام {ctx.author.mention} بخصم `{points}` نقطة من {member.mention}\n📈 المجموع الجديد: `{new_pts}`", discord.Color.red())
 
+@bot.command(name="نقاط", aliases=["points"])
+async def points(ctx, member: discord.Member = None):
+    target = member or ctx.author
+    data = load_data()
+    user_info = data.get(str(target.id), 0)
+    pts = user_info["points"] if isinstance(user_info, dict) else user_info
+    embed = discord.Embed(title="📊 | استعلام النقاط", description=f"نقاط الإداري {target.mention} الحالية هي: **{pts}** نقطة.", color=discord.Color.blue())
+    await ctx.send(embed=embed)
+
+@bot.command(name="توب", aliases=["top"])
+async def top_staff(ctx):
+    data = load_data()
+    if not data:
+        await ctx.send("📭 لا توجد بيانات نقاط مسجلة حتى الآن.")
+        return
+
+    sorted_staff = sorted(
+        data.items(), 
+        key=lambda x: x[1]["points"] if isinstance(x[1], dict) else x[1], 
+        reverse=True
+    )
+
+    embed = discord.Embed(title="🏆 | لوحة الشرف - أعلى الإداريين نقاطاً", color=discord.Color.gold())
+    desc = ""
+    for idx, (uid, info) in enumerate(sorted_staff[:10], 1):
+        member = ctx.guild.get_member(int(uid))
+        name = member.mention if member else f"مستخدم (`{uid}`)"
+        pts = info["points"] if isinstance(info, dict) else info
+        medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"`#{idx}`"
+        desc += f"{medal} {name} — **{pts}** نقطة\n"
+
+    embed.description = desc if desc else "لا توجد بيانات."
+    await ctx.send(embed=embed)
+
+@bot.command(name="تصفير_الكل", aliases=["resetall"])
+async def reset_all(ctx):
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ هذا الأمر خاص بمسؤولي السيرفر فقط.", delete_after=5)
+        return
+    
+    save_data({}, ctx.guild)
+    await ctx.send("🗑️ تم تصفير نقاط جميع الإداريين بنجاح!")
+    await send_unified_log(ctx.guild, "🗑️ | تصفير النقاط", f"قام المسؤول {ctx.author.mention} بتصفير نقاط جميع الإداريين.", discord.Color.red())
+
 # ----------------------------------------------------
-# نظام التقديم بالزر والخاص (دائم وخارق)
+# نظام إغلاق وفتح الروم العادي (Lock / Unlock)
+# ----------------------------------------------------
+@bot.command(name="قفل", aliases=["lock"])
+async def lock_channel(ctx):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لإغلاق الروم.", delete_after=5)
+        return
+
+    try:
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        overwrite.send_message = False
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        
+        embed = discord.Embed(title="🔒 | تم إغلاق الروم", description=f"تم إغلاق الروم بواسطة {ctx.author.mention}.", color=discord.Color.red())
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ: {e}")
+
+@bot.command(name="فتح", aliases=["unlock"])
+async def unlock_channel(ctx):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لفتح الروم.", delete_after=5)
+        return
+
+    try:
+        overwrite = ctx.channel.overwrites_for(ctx.guild.default_role)
+        overwrite.send_message = True
+        await ctx.channel.set_permissions(ctx.guild.default_role, overwrite=overwrite)
+        
+        embed = discord.Embed(title="🔓 | تم فتح الروم", description=f"تم فتح الروم بواسطة {ctx.author.mention}.", color=discord.Color.green())
+        await ctx.send(embed=embed)
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ: {e}")
+
+# ----------------------------------------------------
+# نظام إغلاق التكت مع زر التأكيد وإعطاء النقاط (.اغلاق / .close)
+# ----------------------------------------------------
+class ConfirmCloseTicketView(discord.ui.View):
+    def __init__(self, staff: discord.Member):
+        super().__init__(timeout=60)
+        self.staff = staff
+
+    @discord.ui.button(label="نعم، متأكد", style=discord.ButtonStyle.red, emoji="✅")
+    async def confirm_close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.staff.id and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ ليس لديك صلاحية لتأكيد هذا الإجراء.", ephemeral=True)
+            return
+
+        for child in self.children:
+            child.disabled = True
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
+
+        await interaction.response.send_message("🔒 **تم تأكيد الإغلاق. جاري حذف التكت وإضافة النقاط...**")
+        
+        # إضافة النقاط للإداري الذي أغلق التكت
+        await add_points_direct(interaction.guild, self.staff, POINTS_CONFIG["ticket_close"], f"إغلاق تكت: {interaction.channel.name}")
+        await send_unified_log(interaction.guild, "🔒 | إغلاق تكت", f"قام الإداري {self.staff.mention} بإغلاق التكت `{interaction.channel.name}` بنجاح.", discord.Color.red())
+
+        import asyncio
+        await asyncio.sleep(3)
+        try:
+            await interaction.channel.delete(reason=f"Closed by {self.staff}")
+        except Exception:
+            pass
+
+    @discord.ui.button(label="إلغاء", style=discord.ButtonStyle.grey, emoji="✖️")
+    async def cancel_close(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.staff.id and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ ليس لديك صلاحية للإلغاء.", ephemeral=True)
+            return
+        
+        for child in self.children:
+            child.disabled = True
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
+        await interaction.response.send_message("❌ تم إلغاء عملية إغلاق التكت.", ephemeral=True)
+
+@bot.command(name="اغلاق", aliases=["close"])
+async def close_ticket_command(ctx):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
+        return
+
+    embed = discord.Embed(
+        title="⚠️ | تأكيد إغلاق التكت",
+        description=f"هل أنت متأكد من رغبتك في إغلاق التكت الحالي يا {ctx.author.mention}؟\n(سيتم حذف الروم واحتساب النقاط تلقائياً فور التأكيد).",
+        color=discord.Color.gold()
+    )
+    view = ConfirmCloseTicketView(staff=ctx.author)
+    await ctx.send(embed=embed, view=view)
+
+# ----------------------------------------------------
+# نظام التقديم بالزر والخاص
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -594,7 +736,7 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [ULTIMATE BOT READY 100%] تم تشغيل البوت بنجاح وبدون تكتات: {bot.user}")
+    print(f"🚀 [ULTIMATE BOT READY 100%] تم تشغيل البوت بنجاح وإلغاء نظام التكتات: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
@@ -610,15 +752,6 @@ async def profile(ctx, member: discord.Member = None):
     embed.add_field(name="⚠ التحذيرات", value=f"{user_info.get('warns', 0)} تحذير", inline=True)
     embed.add_field(name="🔇 التايم آوت", value=f"{user_info.get('timeouts', 0)} إجراء", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"{user_info.get('bans', 0)} بان", inline=True)
-    await ctx.send(embed=embed)
-
-@bot.command(name="نقاط", aliases=["points"])
-async def points(ctx, member: discord.Member = None):
-    target = member or ctx.author
-    data = load_data()
-    user_info = data.get(str(target.id), 0)
-    pts = user_info["points"] if isinstance(user_info, dict) else user_info
-    embed = discord.Embed(title="📊 | استعلام النقاط", description=f"نقاط الإداري {target.mention} الحالية هي: **{pts}** نقطة.", color=discord.Color.blue())
     await ctx.send(embed=embed)
 
 if __name__ == "__main__":
