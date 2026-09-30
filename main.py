@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 - Discord Cloud Backup & Points Reset on Promotion is Active!"
+    return "Staffbot Ultimate Full Production 24/7 - Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # ----------------------------------------------------
-# 1. الثوابت والأيدي (IDs) المطلوبة للسيرفر
+# الثوابت وأيدي الرولات والقنوات (كاملة)
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
@@ -61,8 +61,7 @@ WARN_1_ID = 1543278808583372901
 WARN_2_ID = 1543278965857198271
 WARN_3_ID = 1543279133164048576
 
-# روم سري في ديسكورد لحفظ ملف النقاط سحابياً (ضع آيدي روم إداري خاص بك هنا)
-BACKUP_CHANNEL_ID = 1553913719128588389  # يمكنك استبداله بروم خاص بالأدمن إن أردت
+BACKUP_CHANNEL_ID = 1553913719128588389  
 
 POINTS_CONFIG = {
     "ticket": 10,
@@ -101,22 +100,6 @@ COOLDOWN_FILE = "cooldowns.json"
 
 double_points_end_time = 0
 
-@bot.check
-async def check_permissions(ctx):
-    if ctx.author.guild_permissions.administrator:
-        return True
-    has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
-    if has_role:
-        return True
-    
-    embed = discord.Embed(
-        title="⛔ | صلاحيات غير صالحة",
-        description="عذرًا، أنت لا تملك الصلاحية الكافية لاستخدام هذا الأمر الإداري.",
-        color=discord.Color.red()
-    )
-    await ctx.send(embed=embed, delete_after=5)
-    return False
-
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -127,7 +110,7 @@ async def on_command_error(ctx, error):
         await ctx.send(embed=embed, delete_after=5)
 
 # ----------------------------------------------------
-# نظام الحفظ السحابي عبر رسائل ديسكورد لتجنب مسح ريندر
+# نظام الحفظ السحابي التلقائي عبر ديسكورد
 # ----------------------------------------------------
 async def fetch_points_from_discord():
     try:
@@ -151,7 +134,6 @@ async def save_points_to_discord(guild):
         if not channel:
             return
         if os.path.exists(DATA_FILE):
-            # حذف الرسائل القديمة للبوت لمنع تكرار الملفات الضخمة
             async for message in channel.history(limit=10):
                 if message.author == bot.user and message.attachments:
                     for att in message.attachments:
@@ -160,7 +142,6 @@ async def save_points_to_discord(guild):
                                 await message.delete()
                             except:
                                 pass
-            
             file = discord.File(DATA_FILE, filename="points_backup.json")
             await channel.send("💾 **[Cloud Backup] النسخة الاحتياطية التلقائية لنقاط الإداريين:**", file=file)
     except Exception as e:
@@ -250,7 +231,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                     await member.remove_roles(*roles_to_remove, reason="ترقية إدارية: سحب الرتبة القديمة")
                 await member.add_roles(target_role, reason="ترقية إدارية جديدة")
                 
-                # 🔄 تصفير النقاط عند الوصول للترقية بنجاح
                 data = load_data()
                 user_id = str(member.id)
                 if user_id in data and isinstance(data[user_id], dict):
@@ -269,11 +249,10 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 if log_channel:
                     await log_channel.send(msg)
             except Exception as e:
-                print(f"خطأ أثناء منح الترقية وسحب القديمة وتصفير النقاط: {e}")
+                print(f"خطأ أثناء الترقية والتصفير: {e}")
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str):
     global double_points_end_time
-    
     is_double_active = time.time() < double_points_end_time
     actual_points = (base_points * 2) if is_double_active else base_points
     
@@ -300,11 +279,52 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
         f"تم إضافة `{actual_points}` نقطة للإداري {staff.mention}{double_text}\n📌 **السبب / الإنجاز:** {action_name}\n📈 **المجموع الحالي:** `{current_pts}` نقطة",
         discord.Color.green() if not is_double_active else discord.Color.gold()
     )
-    
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التكتات والتحكم (Support Tickets System)
+# 1. نظام إعطاء وسحب النقاط اليدوي الكامل
+# ----------------------------------------------------
+@bot.command(name="إعطاء_نقاط", aliases=["givepoints"])
+async def give_points(ctx, member: discord.Member, points: int):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
+        return
+
+    data = load_data()
+    user_id = str(member.id)
+    if user_id not in data or not isinstance(data[user_id], dict):
+        old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
+        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+
+    data[user_id]["points"] += points
+    new_pts = data[user_id]["points"]
+    save_data(data, ctx.guild)
+
+    await ctx.send(f"✅ تم إضافة `{points}` نقطة بنجاح إلى الإداري {member.mention}. المجموع: `{new_pts}`")
+    await send_unified_log(ctx.guild, "➕ | تعديل نقاط يدوي (إضافة)", f"قام {ctx.author.mention} بإضافة `{points}` نقطة لـ {member.mention}\n📈 المجموع الجديد: `{new_pts}`")
+    await check_and_promote(ctx, member, new_pts)
+
+@bot.command(name="سحب_نقاط", aliases=["removepoints"])
+async def remove_points(ctx, member: discord.Member, points: int):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
+        return
+
+    data = load_data()
+    user_id = str(member.id)
+    if user_id not in data or not isinstance(data[user_id], dict):
+        old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
+        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+
+    data[user_id]["points"] = max(0, data[user_id]["points"] - points)
+    new_pts = data[user_id]["points"]
+    save_data(data, ctx.guild)
+
+    await ctx.send(f"✅ تم سحب `{points}` نقطة من الإداري {member.mention}. المجموع: `{new_pts}`")
+    await send_unified_log(ctx.guild, "➖ | تعديل نقاط يدوي (خصم)", f"قام {ctx.author.mention} بخصم `{points}` نقطة من {member.mention}\n📈 المجموع الجديد: `{new_pts}`", discord.Color.red())
+
+# ----------------------------------------------------
+# 2. نظام التكتات والتحكم الدائم المتكامل
 # ----------------------------------------------------
 class TicketControlView(discord.ui.View):
     def __init__(self, ticket_owner: discord.Member):
@@ -312,30 +332,20 @@ class TicketControlView(discord.ui.View):
         self.ticket_owner = ticket_owner
         self.claimed_by = None
 
-    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v3")
+    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v5")
     async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
-            return
         await interaction.response.send_message(f"👤 {self.ticket_owner.mention}, الإداري {interaction.user.mention} يستدعي أطراف التكت هنا.")
 
-    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v3")
+    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v5")
     async def call_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
-            return
         staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
         owner_role = interaction.guild.get_role(OWNER_ROLE_ID)
         staff_ping = staff_role.mention if staff_role else ""
         owner_ping = owner_role.mention if owner_role else ""
         await interaction.response.send_message(f"🔔 {staff_ping} {owner_ping} — تم طلب حضور الإدارة بواسطة {interaction.user.mention} في هذا التكت.")
 
-    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v3")
+    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v5")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
-            return
-        
         self.claimed_by = interaction.user
         button.disabled = True
         button.label = f"استلمها: {interaction.user.name}"
@@ -348,21 +358,16 @@ class TicketControlView(discord.ui.View):
             await interaction.channel.set_permissions(guild.default_role, send_messages=False)
             if staff_role:
                 await interaction.channel.set_permissions(staff_role, read_messages=True, send_messages=False)
-            
             await interaction.channel.set_permissions(self.ticket_owner, read_messages=True, send_messages=True)
             await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
         except Exception as e:
-            print(f"خطأ في تعديل صلاحيات التكت: {e}")
+            print(f"خطأ في تعديل الصلاحيات: {e}")
 
-        await interaction.response.send_message(f"🛡️ **تم استلام التكت بنجاح بواسطة الإداري:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة في الروم وأصبح مرئياً لباقي الإدارة للقراءة فقط.**")
+        await interaction.response.send_message(f"🛡️️ **تم استلام التكت بواسطة:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة وأصبح الروم مرئياً للإدارة للقراءة فقط.**")
 
-    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v3")
+    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v5")
     async def add_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
-            return
-        
-        await interaction.response.send_message("✍️ يرجى عمل منشن (Mention) للعضو الذي ترغب في إضافته للتكت في رسالة جديدة خلال 30 ثانية.", ephemeral=True)
+        await interaction.response.send_message("✍️ يرجى عمل منشن (Mention) للعضو الذي ترغب في إضافته للتكت خلال 30 ثانية.", ephemeral=True)
         def check(m):
             return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.mentions) > 0
 
@@ -371,17 +376,13 @@ class TicketControlView(discord.ui.View):
             target_member = msg.mentions[0]
             await interaction.channel.set_permissions(target_member, read_messages=True, send_messages=True)
             await msg.delete()
-            await interaction.followup.send(f"✅ تمت إضافة العضو {target_member.mention} إلى التكت بنجاح بواسطة {interaction.user.mention}.")
+            await interaction.followup.send(f"✅ تمت إضافة العضو {target_member.mention} للتكت بنجاح.")
         except Exception:
             await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
 
-    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v3")
+    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v5")
     async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
-            return
-
-        await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
+        await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت...")
         await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر الأزرار وإنجاز")
         await interaction.channel.delete()
 
@@ -389,7 +390,7 @@ class TicketPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v3")
+    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v5")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
 
@@ -426,11 +427,9 @@ class TicketPanelView(discord.ui.View):
 
         embed = discord.Embed(
             title="🎫 | الدعم الفني - منتدى النظيم",
-            description=f"أهلاً بك {interaction.user.mention}\nيرجى شرح مشكلتك أو طلبك بالتفصيل وسيتم خدمتك في أقرب وقت ممكن من قبل الإدارة.\n\nاستخدم الأزرار أدناه للتحكم بالتكت.",
+            description=f"أهلاً بك {interaction.user.mention}\nيرجى شرح مشكلتك بالتفصيل وستتم خدمتك قريباً.",
             color=discord.Color.blue()
         )
-        embed.set_footer(text="منتدى النظيم | قسم الدعم الفني")
-
         view = TicketControlView(ticket_owner=interaction.user)
         await ticket_channel.send(content=f"🔔 {interaction.user.mention} | <@&{STAFF_ROLE_ID}>", embed=embed, view=view)
         await interaction.followup.send(f"✅ تم فتح تكت الدعم الفني الخاص بك بنجاح: {ticket_channel.mention}", ephemeral=True)
@@ -439,7 +438,6 @@ class TicketPanelView(discord.ui.View):
 async def ticket_panel(ctx):
     if not ctx.author.guild_permissions.administrator:
         return
-    
     try:
         await ctx.message.delete()
     except Exception:
@@ -447,16 +445,14 @@ async def ticket_panel(ctx):
 
     embed = discord.Embed(
         title="🎫 | نظام تكتات الدعم الفني",
-        description="إذا كنت تواجه مشكلة أو تحتاج إلى مساعدة أو استفسار، يرجى الضغط على الزر أدناه لفتح تكت خاص وسيتم التواصل معك مباشرة.",
+        description="إذا كنت تواجه مشكلة أو تحتاج إلى مساعدة، اضغط على الزر أدناه لفتح تكت خاص.",
         color=discord.Color.blue()
     )
-    embed.set_footer(text="منتدى النظيم | قسم الدعم الفني")
-    
     view = TicketPanelView()
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 3. نظام التقديم بالزر
+# 3. نظام التقديم بالزر والخاص الكامل
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -464,12 +460,8 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v7")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v9")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
-            return
-
         for child in self.children:
             child.disabled = True
         try:
@@ -482,32 +474,21 @@ class ApplyReviewView(discord.ui.View):
 
         try:
             if unverified_role and unverified_role in self.applicant.roles:
-                await self.applicant.remove_roles(unverified_role, reason=f"قبول التقديم بواسطة {interaction.user.name}")
+                await self.applicant.remove_roles(unverified_role)
             if verified_role and verified_role not in self.applicant.roles:
-                await self.applicant.add_roles(verified_role, reason=f"قبول التقديم بواسطة {interaction.user.name}")
+                await self.applicant.add_roles(verified_role)
         except Exception as e:
-            print(f"خطأ في تعديل رتب التقديم: {e}")
+            print(f"خطأ في الرتب: {e}")
 
         await add_points_direct(self.guild, interaction.user, POINTS_CONFIG["apply_accept"], "قبول تقديم هوية عضو")
-
-        embed = discord.Embed(
-            title="✅ | تم قبول التقديم بنجاح",
-            description=f"تم قبول العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n✨ **تم سحب (غير مفعل) ومنحه رتبة (مفعل)**!",
-            color=discord.Color.green()
-        )
-        await interaction.channel.send(embed=embed)
-        
+        await interaction.channel.send(f"✅ تم قبول التقديم للعضو {self.applicant.mention} بواسطة {interaction.user.mention}")
         try:
-            await self.applicant.send(f"🎉 مبارك! تم قبول تقديمك في سيرفر **{self.guild.name}** ومنحك رتبة التفعيل.")
+            await self.applicant.send(f"🎉 مبارك! تم قبول تقديمك في سيرفر **{self.guild.name}**.")
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v7")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v9")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
-            return
-
         for child in self.children:
             child.disabled = True
         try:
@@ -519,14 +500,9 @@ class ApplyReviewView(discord.ui.View):
         cooldowns[str(self.applicant.id)] = time.time()
         save_cooldowns(cooldowns)
         
-        embed = discord.Embed(
-            title="❌ | تم رفض التقديم",
-            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n⏳ **تم تطبيق وقت انتظار 10 دقائق قبل إمكانية التقديم مجدداً.**",
-            color=discord.Color.red()
-        )
-        await interaction.channel.send(embed=embed)
+        await interaction.channel.send(f"❌ تم رفض تقديم العضو {self.applicant.mention} بواسطة {interaction.user.mention}")
         try:
-            await self.applicant.send(f"❌ نعتذر لك، تم رفض تقديمك في سيرفر **{self.guild.name}**. يمكنك إعادة التقديم بعد مرور 10 دقائق.")
+            await self.applicant.send(f"❌ نعتذر لك، تم رفض تقديمك في سيرفر **{self.guild.name}**.")
         except:
             pass
 
@@ -534,7 +510,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v7")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v9")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -545,15 +521,14 @@ class ApplyButtonView(discord.ui.View):
                 remaining = int(600 - elapsed)
                 mins = remaining // 60
                 secs = remaining % 60
-                await interaction.response.send_message(f"⏳ **عذرًا!** تم رفض تقديمك السابق، يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` قبل التقديم مرة أخرى.", ephemeral=True)
+                await interaction.response.send_message(f"⏳ يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` قبل التقديم مجدداً.", ephemeral=True)
                 return
 
         await interaction.response.defer(ephemeral=True)
-        
         try:
-            await interaction.user.send("✨ **أهلاً بك في نظام التقديم الرسمي!** يرجى الإجابة على الأسئلة التالية بدقة (سؤال بسؤال).")
+            await interaction.user.send("✨ **أهلاً بك في نظام التقديم الرسمي!** أجب على الأسئلة التالية:")
         except discord.Forbidden:
-            await interaction.followup.send("❌ **يرجى فتح الخاص (Direct Messages)** لتتمكن من استقبال أسئلة التقديم!", ephemeral=True)
+            await interaction.followup.send("❌ **يرجى فتح الخاص (Direct Messages)** لاستقبال أسئلة التقديم!", ephemeral=True)
             return
 
         questions = [
@@ -561,7 +536,7 @@ class ApplyButtonView(discord.ui.View):
             "**2. عمرك ؟**",
             "**3. اسم حسابك المستعار في روبلوكس ؟**",
             "**4. اسم حسابك الاساسي في روبلوكس ؟**",
-            "**5. الحلف - اقسم بالله العظيم انا فلان الفلان لاخرب رولات منتدى النظيم ولا اضرهم باي شكل من الاشكال ولا ادمر سمعته (اكتب: أقسم بالله)**"
+            "**5. الحلف (اكتب: أقسم بالله)**"
         ]
 
         answers = []
@@ -574,58 +549,151 @@ class ApplyButtonView(discord.ui.View):
                 msg = await bot.wait_for('message', timeout=120.0, check=check)
                 answers.append(msg.content)
             except Exception:
-                await interaction.user.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى الضغط على زر التقديم من جديد في السيرفر.")
+                await interaction.user.send("⌛ انتهى الوقت. يرجى إعادة المحاولة من السيرفر.")
                 return
 
         review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
         if review_channel:
-            embed = discord.Embed(
-                title="📥 | تقديم هوية جديد (عبر زر الخاص)",
-                color=discord.Color.gold(),
-                timestamp=discord.utils.utcnow()
-            )
+            embed = discord.Embed(title="📥 | تقديم هوية جديد", color=discord.Color.gold())
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
             embed.add_field(name="👤 المتقدم", value=interaction.user.mention, inline=False)
             embed.add_field(name="1. الاسم", value=answers[0], inline=False)
             embed.add_field(name="2. العمر", value=answers[1], inline=False)
-            embed.add_field(name="3. الحساب المستعار (روبلوكس)", value=answers[2], inline=False)
-            embed.add_field(name="4. الحساب الأساسي (روبلوكس)", value=answers[3], inline=False)
-            embed.add_field(name="5. حلف اليمين", value=answers[4], inline=False)
-            embed.set_footer(text=f"معرف العضو: {interaction.user.id}")
+            embed.add_field(name="3. المستعار", value=answers[2], inline=False)
+            embed.add_field(name="4. الأساسي", value=answers[3], inline=False)
+            embed.add_field(name="5. الحلف", value=answers[4], inline=False)
 
-            admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
             view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
-            await review_channel.send(content=f"🔔 {admin_role_mention} يوجد تقديم هوية جديد بانتظار المراجعة!", embed=embed, view=view)
+            await review_channel.send(content=f"🔔 <@&{ADMIN_ROLE_PENG_ID}> تقديم جديد بانتظار المراجعة!", embed=embed, view=view)
         
-        await interaction.user.send("✅ **تم استلام إجاباتك وإرسالها للإدارة بنجاح!** سيتم إبلاغك فور مراجعتها.")
+        await interaction.user.send("✅ **تم إرسال إجاباتك للإدارة بنجاح!**")
 
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
 async def panel_apply(ctx):
     if not ctx.author.guild_permissions.administrator:
         return
-    
     try:
         await ctx.message.delete()
     except Exception:
         pass
 
-    embed = discord.Embed(
-        title="📋 | نظام تقديم الهوية الرسمي",
-        description="لتقديم طلب الحصول على الهوية وتفعيل حسابك في السيرفر، يرجى الضغط على الزر أدناه وسيتم التواصل معك مباشرة في الخاصة (DM) للإجابة على الأسئلة.",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text="منتدى النظيم | قسم الإدارة")
-    
+    embed = discord.Embed(title="📋 | نظام تقديم الهوية الرسمي", description="اضغط على الزر أدناه لبدء التقديم في الخاصة.", color=discord.Color.blue())
     view = ApplyButtonView()
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 4. نظام تغيير الاسم التلقائي في روم "اسم حسابك"
+# 4. نظام العقوبات والتحذيرات والبان والتايم آوت الكامل
+# ----------------------------------------------------
+@bot.command(name="بان", aliases=["ban"])
+async def staff_ban(ctx, member: discord.Member, *, reason=None):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        return
+    try:
+        await member.ban(reason=reason)
+    except Exception as e:
+        await ctx.send(f"❌ تعذر حظر العضو: {e}")
+        return
+
+    data = load_data()
+    user_id = str(ctx.author.id)
+    if user_id not in data or not isinstance(data[user_id], dict):
+        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+    data[user_id]["bans"] = data[user_id].get("bans", 0) + 1
+    save_data(data, ctx.guild)
+
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ban"], f"حظر عضو: {member.name}")
+    await ctx.send(f"🔨 تم حظر العضو {member.mention} بنجاح.")
+
+    ban_model_ch = ctx.guild.get_channel(BAN_MODEL_CHANNEL_ID)
+    if ban_model_ch:
+        embed = discord.Embed(title="🔨 | تسجيل عقوبة حظر (Ban)", color=discord.Color.red())
+        embed.add_field(name="المشرف", value=ctx.author.mention, inline=True)
+        embed.add_field(name="العضو المحظور", value=f"{member} (`{member.id}`)", inline=True)
+        embed.add_field(name="السبب", value=reason or "بدون سبب محدد", inline=False)
+        await ban_model_ch.send(embed=embed)
+
+@bot.command(name="تايم_آوت", aliases=["timeout", "mute"])
+async def staff_timeout(ctx, member: discord.Member, minutes: int, *, reason=None):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        return
+    
+    duration = discord.utils.utcnow() + discord.timedelta(minutes=minutes)
+    try:
+        await member.timeout(duration, reason=reason)
+    except Exception as e:
+        await ctx.send(f"❌ تعذر إسكات العضو: {e}")
+        return
+
+    data = load_data()
+    user_id = str(ctx.author.id)
+    if user_id not in data or not isinstance(data[user_id], dict):
+        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+    data[user_id]["timeouts"] = data[user_id].get("timeouts", 0) + 1
+    save_data(data, ctx.guild)
+
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["timeout"], f"إسكات (Timeout) لعضو لمدة {minutes} دقيقة")
+    await ctx.send(f"🔇 تم إعطاء تايم آوت للعضو {member.mention} لمدة `{minutes}` دقيقة.")
+
+    to_model_ch = ctx.guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
+    if to_model_ch:
+        embed = discord.Embed(title="🔇 | تسجيل عقوبة إسكات (Timeout)", color=discord.Color.gold())
+        embed.add_field(name="المشرف", value=ctx.author.mention, inline=True)
+        embed.add_field(name="العضو", value=f"{member} (`{member.id}`)", inline=True)
+        embed.add_field(name="المدة", value=f"{minutes} دقيقة", inline=True)
+        embed.add_field(name="السبب", value=reason or "بدون سبب", inline=False)
+        await to_model_ch.send(embed=embed)
+
+@bot.command(name="تحذير", aliases=["warn"])
+async def staff_warn(ctx, member: discord.Member, *, reason=None):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        return
+
+    w1 = ctx.guild.get_role(WARN_1_ID)
+    w2 = ctx.guild.get_role(WARN_2_ID)
+    w3 = ctx.guild.get_role(WARN_3_ID)
+
+    action_text = "تم إعطاء تحذير"
+    try:
+        if w1 and w1 not in member.roles:
+            await member.add_roles(w1)
+            action_text = "تحذير أول (Warn 1)"
+        elif w2 and w2 not in member.roles:
+            if w1 in member.roles:
+                await member.remove_roles(w1)
+            await member.add_roles(w2)
+            action_text = "تحذير ثاني (Warn 2)"
+        elif w3 and w3 not in member.roles:
+            if w2 in member.roles:
+                await member.remove_roles(w2)
+            await member.add_roles(w3)
+            action_text = "تحذير ثالث (Warn 3 - خطر)"
+    except Exception as e:
+        print(f"خطأ في إعطاء رتب التحذير: {e}")
+
+    data = load_data()
+    user_id = str(ctx.author.id)
+    if user_id not in data or not isinstance(data[user_id], dict):
+        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+    data[user_id]["warns"] = data[user_id].get("warns", 0) + 1
+    save_data(data, ctx.guild)
+
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["warn"], f"تحذير عضو: {member.name}")
+    await ctx.send(f"⚠️ تم تسجيل {action_text} للعضو {member.mention}.")
+
+    warn_ch = ctx.guild.get_channel(WARN_CHANNEL_ID)
+    if warn_ch:
+        embed = discord.Embed(title=f"⚠️ | تسجيل {action_text}", color=discord.Color.orange())
+        embed.add_field(name="المشرف", value=ctx.author.mention, inline=True)
+        embed.add_field(name="العضو المحذر", value=f"{member} (`{member.id}`)", inline=True)
+        embed.add_field(name="السبب", value=reason or "بدون سبب محدد", inline=False)
+        await warn_ch.send(embed=embed)
+
+# ----------------------------------------------------
+# 5. نظام تغيير الاسم التلقائي الكامل
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
     await bot.process_commands(message)
-
     if message.author.bot:
         return
 
@@ -638,7 +706,6 @@ async def on_message(message):
         guild = message.guild
         member = message.author
         raw_name = message.content.strip()
-
         if not raw_name:
             return
 
@@ -647,275 +714,25 @@ async def on_message(message):
             new_nickname = new_nickname[:32]
 
         try:
-            await member.edit(nick=new_nickname, reason="تغيير الاسم التلقائي عبر روم اسم حسابك")
-            
+            await member.edit(nick=new_nickname, reason="تغيير الاسم التلقائي")
             role_to_add = guild.get_role(NICKNAME_ROLE_ID)
             if role_to_add and role_to_add not in member.roles:
-                await member.add_roles(role_to_add, reason="منح رتبة اسم حسابك تلقائياً")
-
-            try:
-                await member.send(f"✅ **تم تغيير اسمك بنجاح في سيرفر {guild.name} إلى:** `{new_nickname}` ومنحك الرتبة الخاصة.")
-            except Exception:
-                pass
-
+                await member.add_roles(role_to_add)
         except Exception as e:
-            print(f"خطأ في تغيير اسم العضو أو إعطائه الرتبة: {e}")
+            print(f"خطأ في تعديل الاسم: {e}")
 
 # ----------------------------------------------------
-# 5. الأوامر الأساسية والإدارية
+# 6. الأحداث والبروفايل والأوامر العامة
 # ----------------------------------------------------
-
 @bot.event
 async def on_ready():
-    # استرجاع النقاط سحابياً من ديسكورد فور تشغيل البوت
+    bot.add_view(ApplyButtonView())
+    bot.add_view(TicketPanelView())
+
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-
-    bot.add_view(ApplyButtonView())
-    bot.add_view(TicketPanelView())
-    print(f"🚀 [ULTIMATE OP BOT - DISCORD CLOUD BACKUP READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
-
-@bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
-async def double_points(ctx):
-    global double_points_end_time
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("❌ هذا الأمر مخصص حصرياً لأصحاب صلاحية الأدمنستريتور (Administrator) فقط.", delete_after=5)
-        return
-
-    double_points_end_time = time.time() + 3600
-
-    embed = discord.Embed(
-        title="🔥 | تم تفعيل دبل النقاط (Double Points)!",
-        description=f"بواسطة الأدمن: {ctx.author.mention}\n⏳ **تم تفعيل مضاعفة النقاط (x2) لجميع الإداريين لمدة ساعة كاملة (60 دقيقة)!**",
-        color=discord.Color.gold()
-    )
-    await ctx.send(embed=embed)
-    await send_unified_log(ctx.guild, "🔥 | تفعيل دبل النقاط", f"قام الأدمن {ctx.author.mention} بتفعيل دبل النقاط لمدة ساعة كاملة.", discord.Color.gold())
-
-@bot.command(name="رتبة", aliases=["giverole"])
-async def give_role(ctx, member: discord.Member, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator:
-        if ctx.author.top_role <= role:
-            await ctx.send("❌ **خطأ أمني:** لا يمكنك منح رتبة تساوي أو أعلى من أعلى رتبة تمتلكها!", delete_after=6)
-            return
-
-    try:
-        await member.add_roles(role)
-        embed = discord.Embed(title="✅ | إدارة الرتب الفاخرة", description=f"تم بنجاح منح رتبة {role.mention} للعضو {member.mention}", color=discord.Color.green())
-        await ctx.send(embed=embed)
-        await send_unified_log(ctx.guild, "🛡️ | تعديل الرتب", f"الإداري {ctx.author.mention} قام بمنح رتبة {role.mention} للعضو {member.mention}")
-    except discord.Forbidden:
-        await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية كافية لتعديل رتب هذا الشخص.")
-
-@bot.command(name="سحب_رتبة", aliases=["removerole"])
-async def remove_role(ctx, member: discord.Member, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator:
-        if ctx.author.top_role <= role:
-            await ctx.send("❌ **خطأ أمني:** لا يمكنك سحب رتبة تساوي أو أعلى من أعلى رتبة تمتلكها!", delete_after=6)
-            return
-
-    try:
-        await member.remove_roles(role)
-        embed = discord.Embed(title="🔄 | إدارة الرتب الفاخرة", description=f"تم بنجاح سحب رتبة {role.mention} من العضو {member.mention}", color=discord.Color.orange())
-        await ctx.send(embed=embed)
-        await send_unified_log(ctx.guild, "🛡️ | تعديل الرتب", f"الإداري {ctx.author.mention} قام بسحب رتبة {role.mention} من العضو {member.mention}")
-    except discord.Forbidden:
-        await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية كافية.")
-
-@bot.command(name="حرمان")
-async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: str):
-    guild = ctx.guild
-    ban_role = guild.get_role(BAN_ROLE_ID)
-    if not ban_role:
-        await ctx.send("❌ **خطأ:** لم يتم العثور على رتبة الحرمان في السيرفر.")
-        return
-
-    proof = ctx.message.attachments[0].url if ctx.message.attachments else (guild.banner.url if guild.banner else guild.icon.url if guild.icon else "لا يوجد")
-
-    try:
-        roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
-        if roles_to_remove:
-            await member.remove_roles(*roles_to_remove, reason=f"عقوبة حرمان بواسطة {ctx.author.name}")
-        await member.add_roles(ban_role, reason=f"تطبيق عقوبة الحرمان بواسطة {ctx.author.name}")
-
-        ban_model_channel = guild.get_channel(BAN_MODEL_CHANNEL_ID)
-        
-        ban_model_msg = (
-            f"__**\n"
-            f"`نموذج حـرمـان  الـرول `\n\n"
-            f"- اســم الإداريـ : {ctx.author.mention}\n\n"
-            f"- اسـم الـشـخـص  : {member.mention}\n\n"
-            f"- ســبـب الـحـرمـان : {reason}\n\n"
-            f"- الـمـده : {duration}\n\n"
-            f"- دلـيـل : {proof}\n"
-            f"**__"
-        )
-
-        if ban_model_channel:
-            await ban_model_channel.send(ban_model_msg)
-            await ctx.send(f"✅ تم تنفيذ الحرمان وإرسال النموذج إلى روم **{ban_model_channel.name}** بنجاح!", delete_after=5)
-        else:
-            await ctx.send(ban_model_msg)
-
-        await send_unified_log(
-            guild, "🚫 | عقوبة حرمان رول", 
-            f"**الإداري:** {ctx.author.mention}\n**العضو:** {member.mention}\n**المدة:** {duration}\n**السبب:** {reason}", 
-            discord.Color.dark_red()
-        )
-
-        data = load_data()
-        user_id = str(ctx.author.id)
-        if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-        data[user_id]["bans"] += 1
-        save_data(data, guild)
-
-        await add_points_direct(guild, ctx.author, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
-
-    except Exception as e:
-        await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الحرمان: {e}")
-
-@bot.command(name="ميوت", aliases=["timeout"])
-async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
-    guild = ctx.guild
-    duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
-    
-    proof = ctx.message.attachments[0].url if ctx.message.attachments else (guild.banner.url if guild.banner else guild.icon.url if guild.icon else "لا يوجد")
-
-    try:
-        await member.timeout(duration_delta, reason=reason)
-
-        timeout_model_channel = guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
-
-        timeout_model_msg = (
-            f"**\n"
-            f"`نموذج سـجـل تـايـم `\n\n"
-            f" اسـم الـاداري : {ctx.author.mention}\n\n"
-            f" اسـم الشـخـص : {member.mention}\n\n"
-            f"الـمـده : {minutes} دقيقة\n\n"
-            f"الـسـبـب: {reason}\n\n"
-            f"دلـيـل : {proof}\n"
-            f"**"
-        )
-
-        if timeout_model_channel:
-            await timeout_model_channel.send(timeout_model_msg)
-            await ctx.send(f"✅ تم تنفيذ الميوت وإرسال النموذج إلى روم **{timeout_model_channel.name}** بنجاح!", delete_after=5)
-        else:
-            await ctx.send(timeout_model_msg)
-
-        await send_unified_log(
-            guild, "🔇 | عقوبة إسكات (تايم)", 
-            f"**الإداري:** {ctx.author.mention}\n**العضو:** {member.mention}\n**المدة:** {minutes} دقيقة\n**السبب:** {reason}", 
-            discord.Color.dark_orange()
-        )
-
-        data = load_data()
-        user_id = str(ctx.author.id)
-        if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-        data[user_id]["timeouts"] += 1
-        save_data(data, guild)
-
-        await add_points_direct(guild, ctx.author, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
-
-    except Exception as e:
-        await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الميوت: {e}")
-
-@bot.command(name="تحذير", aliases=["warn"])
-async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
-    guild = ctx.guild
-    r_warn1 = guild.get_role(WARN_1_ID)
-    r_warn2 = guild.get_role(WARN_2_ID)
-    r_warn3 = guild.get_role(WARN_3_ID)
-
-    assigned_warn_name = "تحذير أول"
-    duration_text = "ثلاث ايام"
-    try:
-        if r_warn2 in member.roles:
-            if r_warn2: await member.remove_roles(r_warn2)
-            if r_warn3: await member.add_roles(r_warn3)
-            assigned_warn_name = "تحذير ثالث"
-            duration_text = "٧ ايام"
-        elif r_warn1 in member.roles:
-            if r_warn1: await member.remove_roles(r_warn1)
-            if r_warn2: await member.add_roles(r_warn2)
-            assigned_warn_name = "تحذير ثاني"
-            duration_text = "خمس ايام"
-        else:
-            if r_warn1: await member.add_roles(r_warn1)
-            assigned_warn_name = "تحذير أول"
-            duration_text = "ثلاث ايام"
-    except Exception as e:
-        print(f"خطأ في تبديل رتب التحذيرات: {e}")
-
-    proof = ctx.message.attachments[0].url if ctx.message.attachments else (guild.banner.url if guild.banner else guild.icon.url if guild.icon else ctx.author.display_avatar.url)
-
-    embed = discord.Embed(
-        title="⚠️ | تنبيه وتحذير إداري",
-        description=f"تم تحذير العضو {member.mention}\n📌 **الرتبة المطبقة:** `{assigned_warn_name}`\n📝 **السبب:** {reason}",
-        color=discord.Color.red()
-    )
-    await ctx.send(embed=embed)
-
-    warn_channel = guild.get_channel(WARN_CHANNEL_ID)
-    if warn_channel:
-        warning_msg = (
-            f"__**\n"
-            f"`نموذج التحذيرات`\n\n"
-            f"- اسـم الـاداري : {ctx.author.mention}\n\n"
-            f"- اســم الـشـخـص : {member.mention}\n\n"
-            f"- الـتـحـذيـر رقـم كـم : {assigned_warn_name}\n\n"
-            f"- الـمـده : {duration_text}\n\n"
-            f"- الـسبب: {reason}\n\n"
-            f"- دلـيـل : {proof}\n"
-            f"**__"
-        )
-        await warn_channel.send(warning_msg)
-
-    await send_unified_log(
-        guild, "⚠️ | تحذير إداري جديد", 
-        f"**الإداري:** {ctx.author.mention}\n**العضو:** {member.mention}\n**النوع:** {assigned_warn_name}\n**السبب:** {reason}", 
-        discord.Color.red()
-    )
-
-    data = load_data()
-    user_id = str(ctx.author.id)
-    if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-    data[user_id]["warns"] += 1
-    save_data(data, guild)
-
-    await add_points_direct(guild, ctx.author, POINTS_CONFIG["warn"], "إعطاء تحذير إداري")
-
-@bot.command(name="رول")
-async def role_play_message(ctx):
-    host_mention = ctx.author.mention
-    game_role_mention = "<@&1553782083933966353>"
-    message_content = (
-        f"**✨ ┋ تم فتح رول بلاي رسمي**\n\n"
-        f"👤 **الـهـوسـت :** {host_mention}\n"
-        f"📌 **نـرجـو مـنـكـم قـرائـة الـقـوانـيـن بعناية:**\n"
-        f"🔗 https://discord.com/channels/1517046511714963466/1543074260606648451\n\n"
-        f"⏳ **انـتـظـر رسـالـة إضـافـة الـهـوسـت ثـم تـوجـه إلى:**\n"
-        f"🔗 https://discord.com/channels/1517046511714963466/1543081098051846184\n\n"
-        f"⚠️ **رجاءً، نـرجـو عـدم ازعـاج الـهـوسـت.**\n\n"
-        f"|| {game_role_mention} ||"
-    )
-    await ctx.message.delete()
-    await ctx.send(message_content)
-
-@bot.command(name="إغلاق", aliases=["اغلاق", "close"])
-async def close(ctx):
-    channel_name = ctx.channel.name.lower()
-    if not any(k in channel_name for k in ["ticket", "تكت", "الدعم", "support"]):
-        await ctx.send("⚠️ **حماية:** لا يمكن استخدام أمر الإغلاق هنا!")
-        return
-
-    await ctx.send("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
-    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت وإنجاز")
-    await ctx.channel.delete()
+    print(f"🚀 [BOT READY & PERSISTENT VIEWS LOADED] تم تشغيل البوت بنجاح: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
@@ -925,19 +742,13 @@ async def profile(ctx, member: discord.Member = None):
     if isinstance(user_info, int):
         user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
 
-    pts = user_info.get("points", 0)
-    tickets = user_info.get("tickets", 0)
-    warns = user_info.get("warns", 0)
-    timeouts = user_info.get("timeouts", 0)
-    bans = user_info.get("bans", 0)
-
     embed = discord.Embed(title=f"🛡️ | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
-    embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
-    embed.add_field(name="⚠ التحذيرات", value=f"`{warns}` تحذير", inline=True)
-    embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
-    embed.add_field(name="🔨 الباندات", value=f"`{bans}` باند", inline=True)
+    embed.add_field(name="📊 النقاط", value=f"`{user_info.get('points', 0)}` نقطة", inline=True)
+    embed.add_field(name="🎫 التكتات", value=f"`{user_info.get('tickets', 0)}` إنجاز", inline=True)
+    embed.add_field(name="⚠ التحذيرات", value=f"`{user_info.get('warns', 0)}` تحذير", inline=True)
+    embed.add_field(name="🔇 التايم آوت", value=f"`{user_info.get('timeouts', 0)}` إجراء", inline=True)
+    embed.add_field(name="🔨 الباندات", value=f"`{user_info.get('bans', 0)}` بان", inline=True)
     await ctx.send(embed=embed)
 
 @bot.command(name="نقاط", aliases=["points"])
@@ -947,84 +758,6 @@ async def points(ctx, member: discord.Member = None):
     user_info = data.get(str(target.id), 0)
     pts = user_info["points"] if isinstance(user_info, dict) else user_info
     embed = discord.Embed(title="📊 | استعلام النقاط", description=f"نقاط الإداري {target.mention} الحالية هي: **{pts}** نقطة.", color=discord.Color.blue())
-    embed.set_thumbnail(url=target.display_avatar.url)
-    await ctx.send(embed=embed)
-
-@bot.command(name="إضافة_نقاط", aliases=["addpoints"])
-async def addpoints(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
-        return
-    data = load_data()
-    user_id = str(member.id)
-    if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-    data[user_id]["points"] += amount
-    save_data(data, ctx.guild)
-    await ctx.send(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention}")
-    
-    await send_unified_log(
-        ctx.guild, "✨ | إضافة نقاط إدارية", 
-        f"بواسطة الإداري {ctx.author.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}",
-        discord.Color.green()
-    )
-    
-    await check_and_promote(ctx, member, data[user_id]["points"])
-
-@bot.command(name="خصم_نقاط", aliases=["removepoints"])
-async def removepoints(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
-        return
-    data = load_data()
-    user_id = str(member.id)
-    if user_id in data and isinstance(data[user_id], dict):
-        data[user_id]["points"] = max(0, data[user_id]["points"] - amount)
-        save_data(data, ctx.guild)
-        await ctx.send(f"📉 تم خصم `{amount}` نقطة من {member.mention}.")
-        
-        await send_unified_log(
-            ctx.guild, "📉 | خصم نقاط إدارية", 
-            f"بواسطة الإداري {ctx.author.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}",
-            discord.Color.orange()
-        )
-    else:
-        await ctx.send("❌ هذا العضو ليس لديه نقاط مسجلة.")
-
-@bot.command(name="تصفير_نقاط", aliases=["resetpoints"])
-async def resetpoints(ctx, member: discord.Member):
-    if not ctx.author.guild_permissions.administrator:
-        return
-    data = load_data()
-    user_id = str(member.id)
-    if user_id in data:
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-        save_data(data, ctx.guild)
-        await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention}.")
-        
-        await send_unified_log(
-            ctx.guild, "🔄 | تصفير نقاط إداري", 
-            f"بواسطة الإداري {ctx.author.mention} تم تصفير نقاط الإداري {member.mention}",
-            discord.Color.red()
-        )
-
-@bot.command(name="توب", aliases=["leaderboard", "top"])
-async def leaderboard(ctx):
-    data = load_data()
-    if not data:
-        await ctx.send("📊 لا توجد بيانات كافية.")
-        return
-
-    sorted_users = []
-    for user_id, info in data.items():
-        pts = info["points"] if isinstance(info, dict) else info
-        sorted_users.append((int(user_id), pts))
-    sorted_users.sort(key=lambda x: x[1], reverse=True)
-
-    embed = discord.Embed(title="🏆 | لوحة الشرف وصدارة الإداريين", color=discord.Color.gold())
-    description = ""
-    for index, (uid, pts) in enumerate(sorted_users[:10], start=1):
-        medal = "🥇" if index == 1 else "🥈" if index == 2 else "🥉" if index == 3 else f"`#{index}`"
-        description += f"{medal} <@{uid}> — **{pts}** نقطة\n"
-    embed.description = description
     await ctx.send(embed=embed)
 
 if __name__ == "__main__":
