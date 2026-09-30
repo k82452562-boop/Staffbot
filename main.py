@@ -741,13 +741,13 @@ async def profile(ctx, member: discord.Member = None):
     if isinstance(user_info, int):
         user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
 
-    embed = discord.Embed(title=f"🛡️️ | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
+    embed = discord.Embed(title=f"🛡 | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="📊 النقاط", value=`{user_info.get('points', 0)}` نقطة", inline=True)
-    embed.add_field(name="🎫 التكتات", value=`{user_info.get('tickets', 0)}` إنجاز", inline=True)
-    embed.add_field(name="⚠ التحذيرات", value=`{user_info.get('warns', 0)}` تحذير", inline=True)
-    embed.add_field(name="🔇 التايم آوت", value=`{user_info.get('timeouts', 0)}` إجراء", inline=True)
-    embed.add_field(name="🔨 الباندات", value=`{user_info.get('bans', 0)}` بان", inline=True)
+    embed.add_field(name="📊 النقاط", value=f"{user_info.get('points', 0)} نقطة", inline=True)
+    embed.add_field(name="🎫 التكتات", value=f"{user_info.get('tickets', 0)} إنجاز", inline=True)
+    embed.add_field(name="⚠ التحذيرات", value=f"{user_info.get('warns', 0)} تحذير", inline=True)
+    embed.add_field(name="🔇 التايم آوت", value=f"{user_info.get('timeouts', 0)} إجراء", inline=True)
+    embed.add_field(name="🔨 الباندات", value=f"{user_info.get('bans', 0)} بان", inline=True)
     await ctx.send(embed=embed)
 
 @bot.command(name="نقاط", aliases=["points"])
