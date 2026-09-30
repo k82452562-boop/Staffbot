@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Fixed Ban Command is Active!"
+    return "Staffbot Ultimate OP 24/7 with Auto Nickname System is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -34,11 +34,10 @@ ALLOWED_ROLE_IDS = [
     1540838084151877714   
 ]
 
-# روم اللوق الموحد الشامل لجميع النقاط والعقوبات
+# الرومات والأيدي الجديدة
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   # أيدي رتبة إشعار الترقية
 
-# رومات النماذج المحددة
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
 
@@ -50,6 +49,10 @@ ADMIN_ROLE_PENG_ID = 1545520633939624006
 UNVERIFIED_ROLE_ID = 1545695261446250516      
 VERIFIED_ROLE_ID = 1545516954754875523        
 BAN_ROLE_ID = 1543325398761345175             
+
+# أيدي روم تغيير الاسم ورتبة الأسماء الجديدة
+NICKNAME_CHANNEL_ID = 1552311822747443351
+NICKNAME_ROLE_ID = 1543071855920029778
 
 WARN_1_ID = 1543278808583372901
 WARN_2_ID = 1543278965857198271
@@ -111,7 +114,7 @@ async def check_permissions(ctx):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة (مثال: .حرمان @عضو 3days السبب).", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
         embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
@@ -255,7 +258,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_fixed_v2")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_fixed_v3")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -293,7 +296,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_fixed_v2")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_fixed_v3")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -325,7 +328,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_fixed_v2")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_fixed_v3")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -411,13 +414,62 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 3. الأوامر الأساسية والإدارية
+# 3. نظام تغيير الاسم التلقائي في روم "اسم حسابك"
+# ----------------------------------------------------
+@bot.event
+async def on_message(message):
+    # السماح للبوت بمعالجة الأوامر العادية الأخرى
+    await bot.process_commands(message)
+
+    if message.author.bot:
+        return
+
+    # التحقق هل الرسالة في روم "اسم حسابك" المخصص
+    if message.channel.id == NICKNAME_CHANNEL_ID:
+        # حذف رسالة العضو تلقائياً فوراً
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        guild = message.guild
+        member = message.author
+        raw_name = message.content.strip()
+
+        if not raw_name:
+            return
+
+        # تنسيق الاسم الجديد مع بادئة NZM | (مع التأكد من الحد الأقصى لديسكورد 32 حرفاً)
+        new_nickname = f"NZM | {raw_name}"
+        if len(new_nickname) > 32:
+            new_nickname = new_nickname[:32]
+
+        try:
+            # تعديل اسم العضو في السيرفر
+            await member.edit(nick=new_nickname, reason="تغيير الاسم التلقائي عبر روم اسم حسابك")
+            
+            # منح رتبة الأسماء المحددة
+            role_to_add = guild.get_role(NICKNAME_ROLE_ID)
+            if role_to_add and role_to_add not in member.roles:
+                await member.add_roles(role_to_add, reason="منح رتبة اسم حسابك تلقائياً")
+
+            # إرسال رسالة توجيهية تختفي تلقائياً بالخاص أو بالروم (اختياري تم إرسال تنبيه بالخاص)
+            try:
+                await member.send(f"✅ **تم تغيير اسمك بنجاح في سيرفر {guild.name} إلى:** `{new_nickname}` ومنحك الرتبة الخاصة.")
+            except Exception:
+                pass
+
+        except Exception as e:
+            print(f"خطأ في تغيير اسم العضو أو إعطائه الرتبة: {e}")
+
+# ----------------------------------------------------
+# 4. الأوامر الأساسية والإدارية
 # ----------------------------------------------------
 
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    print(f"🚀 [ULTIMATE OP BOT - BAN COMMAND FIXED] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - AUTO NICKNAME READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -596,7 +648,7 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     proof = ctx.message.attachments[0].url if ctx.message.attachments else (guild.banner.url if guild.banner else guild.icon.url if guild.icon else ctx.author.display_avatar.url)
 
     embed = discord.Embed(
-        title="⚠️️ | تنبيه وتحذير إداري",
+        title="⚠️ | تنبيه وتحذير إداري",
         description=f"تم تحذير العضو {member.mention}\n📌 **الرتبة المطبقة:** `{assigned_warn_name}`\n📝 **السبب:** {reason}",
         color=discord.Color.red()
     )
