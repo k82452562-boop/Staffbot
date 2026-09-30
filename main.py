@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # ----------------------------------------------------
-# الثوابت وأيدي الرولات والقنوات (كاملة)
+# الثوابت وأيدي الرولات والقنوات (كاملة بدون نقصان)
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
@@ -97,7 +97,6 @@ intents.guilds = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
-
 double_points_end_time = 0
 
 @bot.event
@@ -332,11 +331,11 @@ class TicketControlView(discord.ui.View):
         self.ticket_owner = ticket_owner
         self.claimed_by = None
 
-    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v5")
+    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v99")
     async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(f"👤 {self.ticket_owner.mention}, الإداري {interaction.user.mention} يستدعي أطراف التكت هنا.")
 
-    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v5")
+    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v99")
     async def call_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
         staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
         owner_role = interaction.guild.get_role(OWNER_ROLE_ID)
@@ -344,7 +343,7 @@ class TicketControlView(discord.ui.View):
         owner_ping = owner_role.mention if owner_role else ""
         await interaction.response.send_message(f"🔔 {staff_ping} {owner_ping} — تم طلب حضور الإدارة بواسطة {interaction.user.mention} في هذا التكت.")
 
-    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v5")
+    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v99")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.claimed_by = interaction.user
         button.disabled = True
@@ -363,9 +362,9 @@ class TicketControlView(discord.ui.View):
         except Exception as e:
             print(f"خطأ في تعديل الصلاحيات: {e}")
 
-        await interaction.response.send_message(f"🛡️️ **تم استلام التكت بواسطة:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة وأصبح الروم مرئياً للإدارة للقراءة فقط.**")
+        await interaction.response.send_message(f"🛡 **تم استلام التكت بواسطة:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة وأصبح الروم مرئياً للإدارة للقراءة فقط.**")
 
-    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v5")
+    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v99")
     async def add_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("✍️ يرجى عمل منشن (Mention) للعضو الذي ترغب في إضافته للتكت خلال 30 ثانية.", ephemeral=True)
         def check(m):
@@ -380,7 +379,7 @@ class TicketControlView(discord.ui.View):
         except Exception:
             await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
 
-    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v5")
+    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v99")
     async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت...")
         await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر الأزرار وإنجاز")
@@ -390,7 +389,7 @@ class TicketPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v5")
+    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v99")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
 
@@ -460,7 +459,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v9")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v99")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
@@ -487,7 +486,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v9")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v99")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
@@ -510,7 +509,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v9")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v99")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -742,13 +741,13 @@ async def profile(ctx, member: discord.Member = None):
     if isinstance(user_info, int):
         user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
 
-    embed = discord.Embed(title=f"🛡️ | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
+    embed = discord.Embed(title=f"🛡️️ | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
-    embed.add_field(name="📊 النقاط", value=f"`{user_info.get('points', 0)}` نقطة", inline=True)
-    embed.add_field(name="🎫 التكتات", value=f"`{user_info.get('tickets', 0)}` إنجاز", inline=True)
-    embed.add_field(name="⚠ التحذيرات", value=f"`{user_info.get('warns', 0)}` تحذير", inline=True)
-    embed.add_field(name="🔇 التايم آوت", value=f"`{user_info.get('timeouts', 0)}` إجراء", inline=True)
-    embed.add_field(name="🔨 الباندات", value=f"`{user_info.get('bans', 0)}` بان", inline=True)
+    embed.add_field(name="📊 النقاط", value=`{user_info.get('points', 0)}` نقطة", inline=True)
+    embed.add_field(name="🎫 التكتات", value=`{user_info.get('tickets', 0)}` إنجاز", inline=True)
+    embed.add_field(name="⚠ التحذيرات", value=`{user_info.get('warns', 0)}` تحذير", inline=True)
+    embed.add_field(name="🔇 التايم آوت", value=`{user_info.get('timeouts', 0)}` إجراء", inline=True)
+    embed.add_field(name="🔨 الباندات", value=`{user_info.get('bans', 0)}` بان", inline=True)
     await ctx.send(embed=embed)
 
 @bot.command(name="نقاط", aliases=["points"])
