@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate Full Production 24/7 - Active!"
+    return "Staffbot Ultimate Production Enterprise 24/7 - Online & Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # ----------------------------------------------------
-# الثوابت وأيدي الرولات والقنوات (كاملة بدون نقصان)
+# الثوابت وأيدي الرولات والقنوات (كاملة بدون أي نقص)
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
@@ -89,10 +89,12 @@ MIDDLE_ROLES = [
     1548408357457756200
 ]
 
+# تفعيل كافة الصلاحيات والانتيتس المطلوبة بقوة
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
+intents.presences = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 DATA_FILE = "points.json"
@@ -105,7 +107,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
 # ----------------------------------------------------
@@ -323,7 +325,7 @@ async def remove_points(ctx, member: discord.Member, points: int):
     await send_unified_log(ctx.guild, "➖ | تعديل نقاط يدوي (خصم)", f"قام {ctx.author.mention} بخصم `{points}` نقطة من {member.mention}\n📈 المجموع الجديد: `{new_pts}`", discord.Color.red())
 
 # ----------------------------------------------------
-# 2. نظام التكتات والتحكم الدائم المتكامل
+# 2. نظام التكتات والتحكم الدائم المتكامل (مُحسن وخاص بالمطوّرين)
 # ----------------------------------------------------
 class TicketControlView(discord.ui.View):
     def __init__(self, ticket_owner: discord.Member):
@@ -331,11 +333,11 @@ class TicketControlView(discord.ui.View):
         self.ticket_owner = ticket_owner
         self.claimed_by = None
 
-    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v99")
+    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v100")
     async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(f"👤 {self.ticket_owner.mention}, الإداري {interaction.user.mention} يستدعي أطراف التكت هنا.")
 
-    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v99")
+    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v100")
     async def call_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
         staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
         owner_role = interaction.guild.get_role(OWNER_ROLE_ID)
@@ -343,7 +345,7 @@ class TicketControlView(discord.ui.View):
         owner_ping = owner_role.mention if owner_role else ""
         await interaction.response.send_message(f"🔔 {staff_ping} {owner_ping} — تم طلب حضور الإدارة بواسطة {interaction.user.mention} في هذا التكت.")
 
-    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v99")
+    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v100")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.claimed_by = interaction.user
         button.disabled = True
@@ -364,7 +366,7 @@ class TicketControlView(discord.ui.View):
 
         await interaction.response.send_message(f"🛡 **تم استلام التكت بواسطة:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة وأصبح الروم مرئياً للإدارة للقراءة فقط.**")
 
-    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v99")
+    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v100")
     async def add_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("✍️ يرجى عمل منشن (Mention) للعضو الذي ترغب في إضافته للتكت خلال 30 ثانية.", ephemeral=True)
         def check(m):
@@ -379,7 +381,7 @@ class TicketControlView(discord.ui.View):
         except Exception:
             await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
 
-    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v99")
+    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v100")
     async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت...")
         await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر الأزرار وإنجاز")
@@ -389,8 +391,11 @@ class TicketPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v99")
+    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v100")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # التأكد من عدم انتهاء الاستجابة وسرعة معالجة الروم
+        if interaction.response.is_done():
+            return
         await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
@@ -398,6 +403,7 @@ class TicketPanelView(discord.ui.View):
         staff_role = guild.get_role(STAFF_ROLE_ID)
         owner_role = guild.get_role(OWNER_ROLE_ID)
 
+        # التحقق إذا كان لدى المستخدم تكت مفتوح سابقاً
         for ch in guild.text_channels:
             if ch.topic and str(interaction.user.id) in ch.topic:
                 await interaction.followup.send(f"❌ لديك تكت مفتوح مسبقاً: {ch.mention}", ephemeral=True)
@@ -405,13 +411,13 @@ class TicketPanelView(discord.ui.View):
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, view_channel=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True, view_channel=True)
         }
         if staff_role:
-            overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
         if owner_role:
-            overwrites[owner_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            overwrites[owner_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
 
         try:
             ticket_channel = await guild.create_text_channel(
@@ -421,7 +427,7 @@ class TicketPanelView(discord.ui.View):
                 topic=f"صاحب التكت ID: {interaction.user.id}"
             )
         except Exception as e:
-            await interaction.followup.send(f"❌ حدث خطأ أثناء إنشاء الروم: {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ حدث خطأ أثناء إنشاء الروم (تأكد من صلاحيات البوت والكاتيجوري): {e}", ephemeral=True)
             return
 
         embed = discord.Embed(
@@ -459,7 +465,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v99")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v100")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
@@ -486,7 +492,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v99")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v100")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
@@ -509,7 +515,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v99")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v100")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -731,7 +737,7 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [BOT READY & PERSISTENT VIEWS LOADED] تم تشغيل البوت بنجاح: {bot.user}")
+    print(f"🚀 [BOT READY & PERSISTENT VIEWS LOADED 100%] تم تشغيل البوت بنجاح: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
