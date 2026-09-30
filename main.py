@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Defer fix is Active!"
+    return "Staffbot Ultimate OP 24/7 - Discord Cloud Backup & Points Reset on Promotion is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -34,7 +34,6 @@ ALLOWED_ROLE_IDS = [
     1540838084151877714   
 ]
 
-# الرومات والأيدي الأساسية
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   
 
@@ -61,6 +60,9 @@ OWNER_ROLE_ID = 1535687924425818283
 WARN_1_ID = 1543278808583372901
 WARN_2_ID = 1543278965857198271
 WARN_3_ID = 1543279133164048576
+
+# روم سري في ديسكورد لحفظ ملف النقاط سحابياً (ضع آيدي روم إداري خاص بك هنا)
+BACKUP_CHANNEL_ID = 1553913719128588389  # يمكنك استبداله بروم خاص بالأدمن إن أردت
 
 POINTS_CONFIG = {
     "ticket": 10,
@@ -124,6 +126,46 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
+# ----------------------------------------------------
+# نظام الحفظ السحابي عبر رسائل ديسكورد لتجنب مسح ريندر
+# ----------------------------------------------------
+async def fetch_points_from_discord():
+    try:
+        channel = bot.get_channel(BACKUP_CHANNEL_ID)
+        if not channel:
+            return {}
+        async for message in channel.history(limit=20):
+            if message.author == bot.user and message.attachments:
+                for att in message.attachments:
+                    if att.filename == "points_backup.json":
+                        await att.save(DATA_FILE)
+                        with open(DATA_FILE, "r", encoding="utf-8") as f:
+                            return json.load(f)
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء استرجاع النقاط من ديسكورد: {e}")
+    return {}
+
+async def save_points_to_discord(guild):
+    try:
+        channel = guild.get_channel(BACKUP_CHANNEL_ID)
+        if not channel:
+            return
+        if os.path.exists(DATA_FILE):
+            # حذف الرسائل القديمة للبوت لمنع تكرار الملفات الضخمة
+            async for message in channel.history(limit=10):
+                if message.author == bot.user and message.attachments:
+                    for att in message.attachments:
+                        if att.filename == "points_backup.json":
+                            try:
+                                await message.delete()
+                            except:
+                                pass
+            
+            file = discord.File(DATA_FILE, filename="points_backup.json")
+            await channel.send("💾 **[Cloud Backup] النسخة الاحتياطية التلقائية لنقاط الإداريين:**", file=file)
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
+
 def load_json(filename):
     if os.path.exists(filename):
         try:
@@ -147,8 +189,10 @@ def save_json(filename, data):
 def load_data():
     return load_json(DATA_FILE)
 
-def save_data(data):
+def save_data(data, guild=None):
     save_json(DATA_FILE, data)
+    if guild:
+        bot.loop.create_task(save_points_to_discord(guild))
 
 def load_cooldowns():
     return load_json(COOLDOWN_FILE)
@@ -206,23 +250,26 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                     await member.remove_roles(*roles_to_remove, reason="ترقية إدارية: سحب الرتبة القديمة")
                 await member.add_roles(target_role, reason="ترقية إدارية جديدة")
                 
+                # 🔄 تصفير النقاط عند الوصول للترقية بنجاح
                 data = load_data()
                 user_id = str(member.id)
                 if user_id in data and isinstance(data[user_id], dict):
                     data[user_id]["points"] = 0
-                    save_data(data)
+                elif user_id in data:
+                    data[user_id] = 0
+                save_data(data, guild)
 
                 role_ping_str = notif_role.mention if notif_role else ""
                 msg = (
-                    f"{role_ping_str} 🎉 **ترقية إدارية وتصفير نقاط:**\n"
+                    f"{role_ping_str} 🎉 **ترقية إدارية جديدة وتصفير النقاط:**\n"
                     f"وصل الإداري {member.mention} وتمت ترقيته إلى الرتبة الجديدة `{target_role.name}` ضمن **{role_category_name}**!\n"
-                    f"🔄 **ملاحظة:** تم سحب رتبته القديمة وتصفير نقاطه بنجاح."
+                    f"🔄 **ملاحظة:** تم تصفير نقاطه تلقائياً ليبدأ رحلة جديدة للصعود."
                 )
                 log_channel = guild.get_channel(LOG_CHANNEL_ID)
                 if log_channel:
                     await log_channel.send(msg)
             except Exception as e:
-                print(f"خطأ أثناء منح الترقية وسحب القديمة: {e}")
+                print(f"خطأ أثناء منح الترقية وسحب القديمة وتصفير النقاط: {e}")
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str):
     global double_points_end_time
@@ -244,7 +291,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     if "تقديم" in action_name or "تكت" in action_name:
         user_data["tickets"] = user_data.get("tickets", 0) + 1
 
-    save_data(data)
+    save_data(data, guild)
     
     double_text = " 🔥 **(تم تطبيق دبل النقاط x2!)**" if is_double_active else ""
     await send_unified_log(
@@ -335,7 +382,7 @@ class TicketControlView(discord.ui.View):
             return
 
         await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
-        await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر زر الأزرار وإنجاز")
+        await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر الأزرار وإنجاز")
         await interaction.channel.delete()
 
 class TicketPanelView(discord.ui.View):
@@ -344,7 +391,6 @@ class TicketPanelView(discord.ui.View):
 
     @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v3")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 🟢 استجابة فورية لمنع خطأ The application didn't respond in time
         await interaction.response.defer(ephemeral=True)
 
         guild = interaction.guild
@@ -621,9 +667,14 @@ async def on_message(message):
 
 @bot.event
 async def on_ready():
+    # استرجاع النقاط سحابياً من ديسكورد فور تشغيل البوت
+    for guild in bot.guilds:
+        await fetch_points_from_discord()
+        break
+
     bot.add_view(ApplyButtonView())
     bot.add_view(TicketPanelView())
-    print(f"🚀 [ULTIMATE OP BOT - DEFER FIX READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - DISCORD CLOUD BACKUP READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -718,7 +769,7 @@ async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: st
         if user_id not in data or not isinstance(data[user_id], dict):
             data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
         data[user_id]["bans"] += 1
-        save_data(data)
+        save_data(data, guild)
 
         await add_points_direct(guild, ctx.author, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
 
@@ -765,7 +816,7 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
         if user_id not in data or not isinstance(data[user_id], dict):
             data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
         data[user_id]["timeouts"] += 1
-        save_data(data)
+        save_data(data, guild)
 
         await add_points_direct(guild, ctx.author, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
 
@@ -834,7 +885,7 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     if user_id not in data or not isinstance(data[user_id], dict):
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
     data[user_id]["warns"] += 1
-    save_data(data)
+    save_data(data, guild)
 
     await add_points_direct(guild, ctx.author, POINTS_CONFIG["warn"], "إعطاء تحذير إداري")
 
@@ -908,7 +959,7 @@ async def addpoints(ctx, member: discord.Member, amount: int):
     if user_id not in data or not isinstance(data[user_id], dict):
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
     data[user_id]["points"] += amount
-    save_data(data)
+    save_data(data, ctx.guild)
     await ctx.send(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention}")
     
     await send_unified_log(
@@ -927,7 +978,7 @@ async def removepoints(ctx, member: discord.Member, amount: int):
     user_id = str(member.id)
     if user_id in data and isinstance(data[user_id], dict):
         data[user_id]["points"] = max(0, data[user_id]["points"] - amount)
-        save_data(data)
+        save_data(data, ctx.guild)
         await ctx.send(f"📉 تم خصم `{amount}` نقطة من {member.mention}.")
         
         await send_unified_log(
@@ -946,7 +997,7 @@ async def resetpoints(ctx, member: discord.Member):
     user_id = str(member.id)
     if user_id in data:
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-        save_data(data)
+        save_data(data, ctx.guild)
         await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention}.")
         
         await send_unified_log(
