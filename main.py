@@ -396,7 +396,7 @@ async def unlock_channel(ctx):
         await ctx.send(f"❌ حدث خطأ: {e}")
 
 # ----------------------------------------------------
-# نظام إغلاق التكت مع زر التأكيد وإعطاء النقاط (.اغلاق / .close)
+# نظام إغلاق التكت أو الدعم الفني مع التحقق وزر التأكيد
 # ----------------------------------------------------
 class ConfirmCloseTicketView(discord.ui.View):
     def __init__(self, staff: discord.Member):
@@ -416,11 +416,11 @@ class ConfirmCloseTicketView(discord.ui.View):
         except Exception:
             pass
 
-        await interaction.response.send_message("🔒 **تم تأكيد الإغلاق. جاري حذف التكت وإضافة النقاط...**")
+        await interaction.response.send_message("🔒 **تم تأكيد الإغلاق. جاري حذف تكت الدعم وإضافة النقاط...**")
         
         # إضافة النقاط للإداري الذي أغلق التكت
-        await add_points_direct(interaction.guild, self.staff, POINTS_CONFIG["ticket_close"], f"إغلاق تكت: {interaction.channel.name}")
-        await send_unified_log(interaction.guild, "🔒 | إغلاق تكت", f"قام الإداري {self.staff.mention} بإغلاق التكت `{interaction.channel.name}` بنجاح.", discord.Color.red())
+        await add_points_direct(interaction.guild, self.staff, POINTS_CONFIG["ticket_close"], f"إغلاق تكت/دعم فني: {interaction.channel.name}")
+        await send_unified_log(interaction.guild, "🔒 | إغلاق تكت / دعم فني", f"قام الإداري {self.staff.mention} بإغلاق التكت `{interaction.channel.name}` بنجاح.", discord.Color.red())
 
         import asyncio
         await asyncio.sleep(3)
@@ -449,9 +449,33 @@ async def close_ticket_command(ctx):
         await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
         return
 
+    # التحقق مما إذا كانت القناة تكت أو دعم فني (من اسم القناة أو اسم الكاتيجوري)
+    channel_name = ctx.channel.name.lower()
+    category_name = ctx.channel.category.name.lower() if ctx.channel.category else ""
+    
+    is_ticket_or_support = (
+        "ticket" in channel_name or 
+        "تكت" in channel_name or 
+        "support" in channel_name or 
+        "دعم" in channel_name or 
+        "ticket" in category_name or 
+        "تكت" in category_name or 
+        "support" in category_name or 
+        "دعم" in category_name
+    )
+
+    if not is_ticket_or_support:
+        embed_err = discord.Embed(
+            title="❌ | خطأ في الاستخدام",
+            description="لا يمكنك استخدام هذا الأمر إلا داخل قنوات **التكتات أو الدعم الفني**!",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed_err, delete_after=6)
+        return
+
     embed = discord.Embed(
-        title="⚠️ | تأكيد إغلاق التكت",
-        description=f"هل أنت متأكد من رغبتك في إغلاق التكت الحالي يا {ctx.author.mention}؟\n(سيتم حذف الروم واحتساب النقاط تلقائياً فور التأكيد).",
+        title="⚠️ | تأكيد إغلاق التكت / الدعم الفني",
+        description=f"هل أنت متأكد من رغبتك في إغلاق تكت الدعم الحالي يا {ctx.author.mention}؟\n(سيتم حذف الروم واحتساب النقاط فور التأكيد).",
         color=discord.Color.gold()
     )
     view = ConfirmCloseTicketView(staff=ctx.author)
@@ -736,7 +760,7 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [ULTIMATE BOT READY 100%] تم تشغيل البوت بنجاح وإلغاء نظام التكتات: {bot.user}")
+    print(f"🚀 [ULTIMATE BOT READY 100%] تم تشغيل البوت بنجاح والتحقق من التكتات والدعم الفني: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
