@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Claim & Close Ticket Buttons is Active!"
+    return "Staffbot Ultimate OP 24/7 with Defer fix is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -36,7 +36,7 @@ ALLOWED_ROLE_IDS = [
 
 # الرومات والأيدي الأساسية
 LOG_CHANNEL_ID = 1553913719128588389
-NOTIFICATION_CHANNEL_ID = 1541179719297278072   # أيدي رتبة إشعار الترقية
+NOTIFICATION_CHANNEL_ID = 1541179719297278072   
 
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
@@ -50,11 +50,9 @@ UNVERIFIED_ROLE_ID = 1545695261446250516
 VERIFIED_ROLE_ID = 1545516954754875523        
 BAN_ROLE_ID = 1543325398761345175             
 
-# أيدي روم تغيير الاسم ورتبة الأسماء الجديدة
 NICKNAME_CHANNEL_ID = 1552311822747443351
 NICKNAME_ROLE_ID = 1543071855920029778
 
-# أيدي نظام التكتات الجديد
 TICKET_PANEL_CHANNEL_ID = 1543094490468847666
 TICKET_CATEGORY_ID = 1546498225404379279
 STAFF_ROLE_ID = 1545520633939624006
@@ -68,7 +66,7 @@ POINTS_CONFIG = {
     "ticket": 10,
     "warn": 10,
     "timeout": 10,
-    "ban": 20,          # نقاط الحرمان 20 نقطة
+    "ban": 20,          
     "apply_accept": 10 
 }
 
@@ -267,14 +265,14 @@ class TicketControlView(discord.ui.View):
         self.ticket_owner = ticket_owner
         self.claimed_by = None
 
-    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v2")
+    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v3")
     async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
             return
         await interaction.response.send_message(f"👤 {self.ticket_owner.mention}, الإداري {interaction.user.mention} يستدعي أطراف التكت هنا.")
 
-    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v2")
+    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v3")
     async def call_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
@@ -285,7 +283,7 @@ class TicketControlView(discord.ui.View):
         owner_ping = owner_role.mention if owner_role else ""
         await interaction.response.send_message(f"🔔 {staff_ping} {owner_ping} — تم طلب حضور الإدارة بواسطة {interaction.user.mention} في هذا التكت.")
 
-    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v2")
+    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v3")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
@@ -311,7 +309,7 @@ class TicketControlView(discord.ui.View):
 
         await interaction.response.send_message(f"🛡️ **تم استلام التكت بنجاح بواسطة الإداري:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة في الروم وأصبح مرئياً لباقي الإدارة للقراءة فقط.**")
 
-    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v2")
+    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v3")
     async def add_member(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
@@ -330,7 +328,7 @@ class TicketControlView(discord.ui.View):
         except Exception:
             await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
 
-    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v2")
+    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v3")
     async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
@@ -344,8 +342,11 @@ class TicketPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v2")
-    async def open_ticket(self, interaction: discord.Interaction, custom_id: str = None):
+    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v3")
+    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # 🟢 استجابة فورية لمنع خطأ The application didn't respond in time
+        await interaction.response.defer(ephemeral=True)
+
         guild = interaction.guild
         category = guild.get_category(TICKET_CATEGORY_ID)
         staff_role = guild.get_role(STAFF_ROLE_ID)
@@ -353,10 +354,8 @@ class TicketPanelView(discord.ui.View):
 
         for ch in guild.text_channels:
             if ch.topic and str(interaction.user.id) in ch.topic:
-                await interaction.response.send_message(f"❌ لديك تكت مفتوح مسبقاً: {ch.mention}", ephemeral=True)
+                await interaction.followup.send(f"❌ لديك تكت مفتوح مسبقاً: {ch.mention}", ephemeral=True)
                 return
-
-        await interaction.response.defer(ephemeral=True)
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -368,12 +367,16 @@ class TicketPanelView(discord.ui.View):
         if owner_role:
             overwrites[owner_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        ticket_channel = await guild.create_text_channel(
-            name=f"ticket-{interaction.user.name}",
-            category=category,
-            overwrites=overwrites,
-            topic=f"صاحب التكت ID: {interaction.user.id}"
-        )
+        try:
+            ticket_channel = await guild.create_text_channel(
+                name=f"ticket-{interaction.user.name}",
+                category=category,
+                overwrites=overwrites,
+                topic=f"صاحب التكت ID: {interaction.user.id}"
+            )
+        except Exception as e:
+            await interaction.followup.send(f"❌ حدث خطأ أثناء إنشاء الروم: {e}", ephemeral=True)
+            return
 
         embed = discord.Embed(
             title="🎫 | الدعم الفني - منتدى النظيم",
@@ -415,7 +418,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v6")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v7")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -453,7 +456,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v6")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v7")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -485,7 +488,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v6")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v7")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -620,7 +623,7 @@ async def on_message(message):
 async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(TicketPanelView())
-    print(f"🚀 [ULTIMATE OP BOT - CLAIM & CLOSE BUTTONS READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - DEFER FIX READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
