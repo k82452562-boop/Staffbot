@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Auto Nickname System is Active!"
+    return "Staffbot Ultimate OP 24/7 with Exclusive Ticket Claim System is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -34,7 +34,7 @@ ALLOWED_ROLE_IDS = [
     1540838084151877714   
 ]
 
-# الرومات والأيدي الجديدة
+# الرومات والأيدي الأساسية
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   # أيدي رتبة إشعار الترقية
 
@@ -53,6 +53,12 @@ BAN_ROLE_ID = 1543325398761345175
 # أيدي روم تغيير الاسم ورتبة الأسماء الجديدة
 NICKNAME_CHANNEL_ID = 1552311822747443351
 NICKNAME_ROLE_ID = 1543071855920029778
+
+# أيدي نظام التكتات الجديد
+TICKET_PANEL_CHANNEL_ID = 1543094490468847666
+TICKET_CATEGORY_ID = 1546498225404379279
+STAFF_ROLE_ID = 1545520633939624006
+OWNER_ROLE_ID = 1535687924425818283
 
 WARN_1_ID = 1543278808583372901
 WARN_2_ID = 1543278965857198271
@@ -130,12 +136,15 @@ def load_json(filename):
     return {}
 
 def save_json(filename, data):
-    temp_file = filename + ".tmp"
-    with open(temp_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(temp_file, filename)
+    try:
+        temp_file = filename + ".tmp"
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_file, filename)
+    except Exception as e:
+        print(f"❌ خطأ أثناء حفظ الملف {filename}: {e}")
 
 def load_data():
     return load_json(DATA_FILE)
@@ -250,7 +259,148 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر
+# 2. نظام التكتات والتحكم (Support Tickets System)
+# ----------------------------------------------------
+class TicketControlView(discord.ui.View):
+    def __init__(self, ticket_owner: discord.Member):
+        super().__init__(timeout=None)
+        self.ticket_owner = ticket_owner
+        self.claimed_by = None
+
+    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v2")
+    async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
+            return
+        await interaction.response.send_message(f"👤 {self.ticket_owner.mention}, الإداري {interaction.user.mention} يستدعي أطراف التكت هنا.")
+
+    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v2")
+    async def call_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
+            return
+        staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
+        owner_role = interaction.guild.get_role(OWNER_ROLE_ID)
+        staff_ping = staff_role.mention if staff_role else ""
+        owner_ping = owner_role.mention if owner_role else ""
+        await interaction.response.send_message(f"🔔 {staff_ping} {owner_ping} — تم طلب حضور الإدارة بواسطة {interaction.user.mention} في هذا التكت.")
+
+    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v2")
+    async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
+            return
+        
+        self.claimed_by = interaction.user
+        button.disabled = True
+        button.label = f"استلمها: {interaction.user.name}"
+        await interaction.message.edit(view=self)
+
+        guild = interaction.guild
+        staff_role = guild.get_role(STAFF_ROLE_ID)
+
+        # قفل الروم: يظل متاحاً فقط لصاحب التكت والإداري المستلم، بينما باقي الإدارة يمكنهم الرؤية دون الكتابة
+        try:
+            await interaction.channel.set_permissions(guild.default_role, send_messages=False)
+            if staff_role:
+                # بقية الإدارة يقدرون يشوفون الروم (read_messages=True) لكن ممنوعين من الكتابة (send_messages=False)
+                await interaction.channel.set_permissions(staff_role, read_messages=True, send_messages=False)
+            
+            # صاحب التكت والإداري المستلم مسموح لهم بالكتابة
+            await interaction.channel.set_permissions(self.ticket_owner, read_messages=True, send_messages=True)
+            await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
+        except Exception as e:
+            print(f"خطأ في تعديل صلاحيات التكت: {e}")
+
+        await interaction.response.send_message(f"🛡️ **تم استلام التكت بنجاح بواسطة الإداري:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة في الروم وأصبح مرئياً لباقي الإدارة للقراءة فقط.**")
+
+    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v2")
+    async def add_member(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
+            return
+        
+        await interaction.response.send_message("✍️ يرجى عمل منشن (Mention) للعضو الذي ترغب في إضافته للتكت في رسالة جديدة خلال 30 ثانية.", ephemeral=True)
+        def check(m):
+            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.mentions) > 0
+
+        try:
+            msg = await bot.wait_for('message', timeout=30.0, check=check)
+            target_member = msg.mentions[0]
+            await interaction.channel.set_permissions(target_member, read_messages=True, send_messages=True)
+            await msg.delete()
+            await interaction.followup.send(f"✅ تمت إضافة العضو {target_member.mention} إلى التكت بنجاح بواسطة {interaction.user.mention}.")
+        except Exception:
+            await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
+
+class TicketPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v2")
+    async def open_ticket(self, interaction: discord.Interaction, custom_id: str = None):
+        guild = interaction.guild
+        category = guild.get_category(TICKET_CATEGORY_ID)
+        staff_role = guild.get_role(STAFF_ROLE_ID)
+        owner_role = guild.get_role(OWNER_ROLE_ID)
+
+        for ch in guild.text_channels:
+            if ch.topic and str(interaction.user.id) in ch.topic:
+                await interaction.response.send_message(f"❌ لديك تكت مفتوح مسبقاً: {ch.mention}", ephemeral=True)
+                return
+
+        await interaction.response.defer(ephemeral=True)
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+        }
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        if owner_role:
+            overwrites[owner_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+        ticket_channel = await guild.create_text_channel(
+            name=f"ticket-{interaction.user.name}",
+            category=category,
+            overwrites=overwrites,
+            topic=f"صاحب التكت ID: {interaction.user.id}"
+        )
+
+        embed = discord.Embed(
+            title="🎫 | الدعم الفني - منتدى النظيم",
+            description=f"أهلاً بك {interaction.user.mention}\nيرجى شرح مشكلتك أو طلبك بالتفصيل وسيتم خدمتك في أقرب وقت ممكن من قبل الإدارة.\n\nاستخدم الأزرار أدناه للتحكم بالتكت.",
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text="منتدى النظيم | قسم الدعم الفني")
+
+        view = TicketControlView(ticket_owner=interaction.user)
+        await ticket_channel.send(content=f"🔔 {interaction.user.mention} | <@&{STAFF_ROLE_ID}>", embed=embed, view=view)
+        await interaction.followup.send(f"✅ تم فتح تكت الدعم الفني الخاص بك بنجاح: {ticket_channel.mention}", ephemeral=True)
+
+@bot.command(name="بانل_التكت", aliases=["ticketpanel"])
+async def ticket_panel(ctx):
+    if not ctx.author.guild_permissions.administrator:
+        return
+    
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
+    embed = discord.Embed(
+        title="🎫 | نظام تكتات الدعم الفني",
+        description="إذا كنت تواجه مشكلة أو تحتاج إلى مساعدة أو استفسار، يرجى الضغط على الزر أدناه لفتح تكت خاص وسيتم التواصل معك مباشرة.",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text="منتدى النظيم | قسم الدعم الفني")
+    
+    view = TicketPanelView()
+    await ctx.send(embed=embed, view=view)
+
+# ----------------------------------------------------
+# 3. نظام التقديم بالزر
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -258,7 +408,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_fixed_v3")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v6")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -296,7 +446,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_fixed_v3")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v6")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -328,7 +478,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_fixed_v3")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v6")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -414,19 +564,16 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 3. نظام تغيير الاسم التلقائي في روم "اسم حسابك"
+# 4. نظام تغيير الاسم التلقائي في روم "اسم حسابك"
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
-    # السماح للبوت بمعالجة الأوامر العادية الأخرى
     await bot.process_commands(message)
 
     if message.author.bot:
         return
 
-    # التحقق هل الرسالة في روم "اسم حسابك" المخصص
     if message.channel.id == NICKNAME_CHANNEL_ID:
-        # حذف رسالة العضو تلقائياً فوراً
         try:
             await message.delete()
         except Exception:
@@ -439,21 +586,17 @@ async def on_message(message):
         if not raw_name:
             return
 
-        # تنسيق الاسم الجديد مع بادئة NZM | (مع التأكد من الحد الأقصى لديسكورد 32 حرفاً)
         new_nickname = f"NZM | {raw_name}"
         if len(new_nickname) > 32:
             new_nickname = new_nickname[:32]
 
         try:
-            # تعديل اسم العضو في السيرفر
             await member.edit(nick=new_nickname, reason="تغيير الاسم التلقائي عبر روم اسم حسابك")
             
-            # منح رتبة الأسماء المحددة
             role_to_add = guild.get_role(NICKNAME_ROLE_ID)
             if role_to_add and role_to_add not in member.roles:
                 await member.add_roles(role_to_add, reason="منح رتبة اسم حسابك تلقائياً")
 
-            # إرسال رسالة توجيهية تختفي تلقائياً بالخاص أو بالروم (اختياري تم إرسال تنبيه بالخاص)
             try:
                 await member.send(f"✅ **تم تغيير اسمك بنجاح في سيرفر {guild.name} إلى:** `{new_nickname}` ومنحك الرتبة الخاصة.")
             except Exception:
@@ -463,13 +606,14 @@ async def on_message(message):
             print(f"خطأ في تغيير اسم العضو أو إعطائه الرتبة: {e}")
 
 # ----------------------------------------------------
-# 4. الأوامر الأساسية والإدارية
+# 5. الأوامر الأساسية والإدارية
 # ----------------------------------------------------
 
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    print(f"🚀 [ULTIMATE OP BOT - AUTO NICKNAME READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    bot.add_view(TicketPanelView())
+    print(f"🚀 [ULTIMATE OP BOT - EXCLUSIVE CLAIM READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -730,7 +874,7 @@ async def profile(ctx, member: discord.Member = None):
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
-    embed.add_field(name="⚠️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
+    embed.add_field(name="⚠️️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"`{bans}` باند", inline=True)
     await ctx.send(embed=embed)
