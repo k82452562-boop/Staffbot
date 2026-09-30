@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Exclusive Ticket Claim System is Active!"
+    return "Staffbot Ultimate OP 24/7 with Claim & Close Ticket Buttons is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -299,14 +299,11 @@ class TicketControlView(discord.ui.View):
         guild = interaction.guild
         staff_role = guild.get_role(STAFF_ROLE_ID)
 
-        # قفل الروم: يظل متاحاً فقط لصاحب التكت والإداري المستلم، بينما باقي الإدارة يمكنهم الرؤية دون الكتابة
         try:
             await interaction.channel.set_permissions(guild.default_role, send_messages=False)
             if staff_role:
-                # بقية الإدارة يقدرون يشوفون الروم (read_messages=True) لكن ممنوعين من الكتابة (send_messages=False)
                 await interaction.channel.set_permissions(staff_role, read_messages=True, send_messages=False)
             
-            # صاحب التكت والإداري المستلم مسموح لهم بالكتابة
             await interaction.channel.set_permissions(self.ticket_owner, read_messages=True, send_messages=True)
             await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
         except Exception as e:
@@ -332,6 +329,16 @@ class TicketControlView(discord.ui.View):
             await interaction.followup.send(f"✅ تمت إضافة العضو {target_member.mention} إلى التكت بنجاح بواسطة {interaction.user.mention}.")
         except Exception:
             await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
+
+    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v2")
+    async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+            await interaction.response.send_message("❌ هذا الزر مخصص للإدارة فقط.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
+        await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر زر الأزرار وإنجاز")
+        await interaction.channel.delete()
 
 class TicketPanelView(discord.ui.View):
     def __init__(self):
@@ -613,7 +620,7 @@ async def on_message(message):
 async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(TicketPanelView())
-    print(f"🚀 [ULTIMATE OP BOT - EXCLUSIVE CLAIM READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - CLAIM & CLOSE BUTTONS READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -874,7 +881,7 @@ async def profile(ctx, member: discord.Member = None):
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
-    embed.add_field(name="⚠️️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
+    embed.add_field(name="⚠ التحذيرات", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"`{bans}` باند", inline=True)
     await ctx.send(embed=embed)
