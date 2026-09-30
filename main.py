@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import json
 import os
+import time
 from flask import Flask
 from threading import Thread
 
@@ -12,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate OP 24/7 with Ban Points (20 pts) & Unified Logs is Active!"
+    return "Staffbot Ultimate OP 24/7 with Double Points System is Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -27,6 +28,7 @@ def keep_alive():
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
 
+# الصلاحيات الاعتيادية للإداريين (الأوامر العامة كالحرمان والميوت والتحذير)
 ALLOWED_ROLE_IDS = [
     1545520633939624006,  
     1545520950064316516,  
@@ -58,7 +60,7 @@ POINTS_CONFIG = {
     "ticket": 10,
     "warn": 10,
     "timeout": 10,
-    "ban": 20,          # تم تعديل نقاط الحرمان لتصبح 20 نقطة
+    "ban": 20,          # نقاط الحرمان الأساسية قبل الدبل
     "apply_accept": 10 
 }
 
@@ -87,6 +89,10 @@ intents.guilds = True
 
 bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 DATA_FILE = "points.json"
+COOLDOWN_FILE = "cooldowns.json"
+
+# متغير عام لتتبع وقت انتهاء حالة دبل النقاط
+double_points_end_time = 0
 
 @bot.check
 async def check_permissions(ctx):
@@ -110,23 +116,37 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
-def load_data():
-    if os.path.exists(DATA_FILE):
+def load_json(filename):
+    if os.path.exists(filename):
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
+            with open(filename, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
     return {}
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+def save_json(filename, data):
+    temp_file = filename + ".tmp"
+    with open(temp_file, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
         f.flush()
         os.fsync(f.fileno())
+    os.replace(temp_file, filename)
+
+def load_data():
+    return load_json(DATA_FILE)
+
+def save_data(data):
+    save_json(DATA_FILE, data)
+
+def load_cooldowns():
+    return load_json(COOLDOWN_FILE)
+
+def save_cooldowns(data):
+    save_json(COOLDOWN_FILE, data)
 
 async def send_unified_log(guild, title, description, color=discord.Color.blue(), fields=None):
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
@@ -196,7 +216,13 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             except Exception as e:
                 print(f"خطأ أثناء منح الترقية وسحب القديمة: {e}")
 
-async def add_points_direct(guild, staff: discord.Member, points_amount: int, action_name: str):
+async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str):
+    global double_points_end_time
+    
+    # التحقق هل فترة دبل النقاط مفعلة حالياً (الوقت الحالي أقل من وقت الانتهاء)
+    is_double_active = time.time() < double_points_end_time
+    actual_points = (base_points * 2) if is_double_active else base_points
+    
     data = load_data()
     user_id = str(staff.id)
 
@@ -205,25 +231,26 @@ async def add_points_direct(guild, staff: discord.Member, points_amount: int, ac
         data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
 
     user_data = data[user_id]
-    user_data["points"] = user_data.get("points", 0) + points_amount
+    user_data["points"] = user_data.get("points", 0) + actual_points
     current_pts = user_data["points"]
 
-    if "تقديم" in action_name:
+    if "تقديم" in action_name or "تكت" in action_name:
         user_data["tickets"] = user_data.get("tickets", 0) + 1
 
     save_data(data)
     
+    double_text = " 🔥 **(تم تطبيق دبل النقاط x2!)**" if is_double_active else ""
     await send_unified_log(
         guild, 
         "📊 | احتساب وتسجيل نقاط", 
-        f"تم إضافة `{points_amount}` نقطة للإداري {staff.mention}\n📌 **السبب / الإنجاز:** {action_name}\n📈 **المجموع الحالي:** `{current_pts}` نقطة",
-        discord.Color.green()
+        f"تم إضافة `{actual_points}` نقطة للإداري {staff.mention}{double_text}\n📌 **السبب / الإنجاز:** {action_name}\n📈 **المجموع الحالي:** `{current_pts}` نقطة",
+        discord.Color.green() if not is_double_active else discord.Color.gold()
     )
     
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر
+# 2. نظام التقديم بالزر (منع القبول المزدوج + وقت انتظار 10 دقائق للرفض)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -231,7 +258,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_dm_v9")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_double_v1")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -239,7 +266,10 @@ class ApplyReviewView(discord.ui.View):
 
         for child in self.children:
             child.disabled = True
-        await interaction.message.edit(view=self)
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
         
         unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
         verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
@@ -256,7 +286,7 @@ class ApplyReviewView(discord.ui.View):
 
         embed = discord.Embed(
             title="✅ | تم قبول التقديم بنجاح",
-            description=f"تم قبول العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n✨ **تم سحب (غير مفعل) ومنحه رتبة (مفعل)**، وإضافة 10 نقاط للإداري!",
+            description=f"تم قبول العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n✨ **تم سحب (غير مفعل) ومنحه رتبة (مفعل)**!",
             color=discord.Color.green()
         )
         await interaction.channel.send(embed=embed)
@@ -266,7 +296,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_dm_v9")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_double_v1")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -274,16 +304,23 @@ class ApplyReviewView(discord.ui.View):
 
         for child in self.children:
             child.disabled = True
-        await interaction.message.edit(view=self)
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
+
+        cooldowns = load_cooldowns()
+        cooldowns[str(self.applicant.id)] = time.time()
+        save_cooldowns(cooldowns)
         
         embed = discord.Embed(
             title="❌ | تم رفض التقديم",
-            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}.",
+            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n⏳ **تم تطبيق وقت انتظار 10 دقائق قبل إمكانية التقديم مجدداً.**",
             color=discord.Color.red()
         )
         await interaction.channel.send(embed=embed)
         try:
-            await self.applicant.send(f"❌ نعتذر لك، تم رفض تقديمك في سيرفر **{self.guild.name}**.")
+            await self.applicant.send(f"❌ نعتذر لك، تم رفض تقديمك في سيرفر **{self.guild.name}**. يمكنك إعادة التقديم بعد مرور 10 دقائق.")
         except:
             pass
 
@@ -291,8 +328,20 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_btn_v7")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_double_v1")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
+        user_id = str(interaction.user.id)
+        cooldowns = load_cooldowns()
+        
+        if user_id in cooldowns:
+            elapsed = time.time() - cooldowns[user_id]
+            if elapsed < 600:
+                remaining = int(600 - elapsed)
+                mins = remaining // 60
+                secs = remaining % 60
+                await interaction.response.send_message(f"⏳ **عذرًا!** تم رفض تقديمك السابق، يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` قبل التقديم مرة أخرى.", ephemeral=True)
+                return
+
         await interaction.response.defer(ephemeral=True)
         
         try:
@@ -361,13 +410,32 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 3. الأوامر الأساسية والإدارية
+# 3. الأوامر الأساسية وإدارية
 # ----------------------------------------------------
 
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    print(f"🚀 [ULTIMATE OP BOT - BAN 20 PTS & UNIFIED LOGS] تم تشغيل البوت بنجاح باسم: {bot.user}")
+    print(f"🚀 [ULTIMATE OP BOT - DOUBLE POINTS READY] تم تشغيل البوت بنجاح باسم: {bot.user}")
+
+# أمر دبل النقاط (خاص بحاملي صلاحية Administrator فقط ولمدة ساعة كاملة)
+@bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
+async def double_points(ctx):
+    global double_points_end_time
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ هذا الأمر مخصص حصرياً لأصحاب صلاحية الأدمنستريتور (Administrator) فقط.", delete_after=5)
+        return
+
+    # تفعيل دبل النقاط لمدة ساعة كاملة (3600 ثانية)
+    double_points_end_time = time.time() + 3600
+
+    embed = discord.Embed(
+        title="🔥 | تم تفعيل دبل النقاط (Double Points)!",
+        description=f"بواسطة الأدمن: {ctx.author.mention}\n⏳ **تم تفعيل مضاعفة النقاط (x2) لجميع الإداريين لمدة ساعة كاملة (60 دقيقة)!**",
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=embed)
+    await send_unified_log(ctx.guild, "🔥 | تفعيل دبل النقاط", f"قام الأدمن {ctx.author.mention} بتفعيل دبل النقاط لمدة ساعة كاملة.", discord.Color.gold())
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
@@ -434,29 +502,21 @@ async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: st
         else:
             await ctx.send(ban_model_msg)
 
-        # تسجيل في اللوق الموحد
         await send_unified_log(
             guild, "🚫 | عقوبة حرمان رول", 
             f"**الإداري:** {ctx.author.mention}\n**العضو:** {member.mention}\n**المدة:** {duration}\n**السبب:** {reason}", 
             discord.Color.dark_red()
         )
 
-        # إضافة 20 نقطة للإداري
         data = load_data()
         user_id = str(ctx.author.id)
         if user_id not in data or not isinstance(data[user_id], dict):
             data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-        data[user_id]["points"] += POINTS_CONFIG["ban"]
         data[user_id]["bans"] += 1
         save_data(data)
-        
-        await send_unified_log(
-            guild, "📊 | نقاط عقوبة الحرمان (20 نقطة)", 
-            f"تم إضافة `{POINTS_CONFIG['ban']}` نقطة للإداري {ctx.author.mention} بسبب تطبيق عقوبة الحرمان.",
-            discord.Color.green()
-        )
 
-        await check_and_promote(ctx, ctx.author, data[user_id]["points"])
+        # إضافة النقاط مع فحص الدبل (20 نقطة أساسية)
+        await add_points_direct(guild, ctx.author, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
 
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الحرمان: {e}")
@@ -500,17 +560,11 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
         user_id = str(ctx.author.id)
         if user_id not in data or not isinstance(data[user_id], dict):
             data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-        data[user_id]["points"] += POINTS_CONFIG["timeout"]
         data[user_id]["timeouts"] += 1
         save_data(data)
 
-        await send_unified_log(
-            guild, "📊 | نقاط عقوبة التايم", 
-            f"تم إضافة `{POINTS_CONFIG['timeout']}` نقطة للإداري {ctx.author.mention} بسبب عقوبة التايم.",
-            discord.Color.green()
-        )
-
-        await check_and_promote(ctx, ctx.author, data[user_id]["points"])
+        # إضافة النقاط مع فحص الدبل
+        await add_points_direct(guild, ctx.author, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
 
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الميوت: {e}")
@@ -576,17 +630,11 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     user_id = str(ctx.author.id)
     if user_id not in data or not isinstance(data[user_id], dict):
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-    data[user_id]["points"] += POINTS_CONFIG["warn"]
     data[user_id]["warns"] += 1
     save_data(data)
 
-    await send_unified_log(
-        guild, "📊 | نقاط التحذير", 
-        f"تم إضافة `{POINTS_CONFIG['warn']}` نقطة للإداري {ctx.author.mention} بسبب إعطاء تحذير.",
-        discord.Color.green()
-    )
-
-    await check_and_promote(ctx, ctx.author, data[user_id]["points"])
+    # إضافة النقاط مع فحص الدبل
+    await add_points_direct(guild, ctx.author, POINTS_CONFIG["warn"], "إعطاء تحذير إداري")
 
 @bot.command(name="رول")
 async def role_play_message(ctx):
@@ -613,21 +661,9 @@ async def close(ctx):
         return
 
     await ctx.send("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
-    data = load_data()
-    user_id = str(ctx.author.id)
-    if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
-    data[user_id]["points"] += POINTS_CONFIG["ticket"]
-    data[user_id]["tickets"] += 1
-    save_data(data)
-
-    await send_unified_log(
-        ctx.guild, "🎫 | إغلاق تكت وإنجاز", 
-        f"الإداري {ctx.author.mention} قام بإغلاق تكت واكتساب `{POINTS_CONFIG['ticket']}` نقطة.",
-        discord.Color.blue()
-    )
-
-    await check_and_promote(ctx, ctx.author, data[user_id]["points"])
+    
+    # إضافة النقاط للتكت مع فحص الدبل
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت وإنجاز")
     await ctx.channel.delete()
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
