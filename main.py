@@ -361,7 +361,7 @@ async def reset_all(ctx):
     await send_unified_log(ctx.guild, "🗑️ | تصفير النقاط", f"قام المسؤول {ctx.author.mention} بتصفير نقاط جميع الإداريين.", discord.Color.red())
 
 # ----------------------------------------------------
-# نظام إغلاق وفتح الروم العادي (Lock / Unlock)
+# نظام قفل وفتح الروم العادي (Lock / Unlock)
 # ----------------------------------------------------
 @bot.command(name="قفل", aliases=["lock"])
 async def lock_channel(ctx):
@@ -396,6 +396,43 @@ async def unlock_channel(ctx):
         await ctx.send(f"❌ حدث خطأ: {e}")
 
 # ----------------------------------------------------
+# نظام استلام التكت (Claim) - يمنح 5 نقاط للإداري
+# ----------------------------------------------------
+@bot.command(name="استلام", aliases=["claim"])
+async def claim_ticket(ctx):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
+        return
+
+    channel_name = ctx.channel.name.lower()
+    category_name = ctx.channel.category.name.lower() if ctx.channel.category else ""
+    
+    is_ticket_or_support = (
+        "ticket" in channel_name or "تكت" in channel_name or 
+        "support" in channel_name or "دعم" in channel_name or 
+        "ticket" in category_name or "تكت" in category_name or 
+        "support" in category_name or "دعم" in category_name
+    )
+
+    if not is_ticket_or_support:
+        embed_err = discord.Embed(
+            title="❌ | خطأ في الاستخدام",
+            description="لا يمكنك استخدام هذا الأمر إلا داخل قنوات **التكتات أو الدعم الفني**!",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed_err, delete_after=6)
+        return
+
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket_claim"], f"استلام تكت/دعم فني: {ctx.channel.name}")
+    
+    embed = discord.Embed(
+        title="📌 | تم استلام التكت",
+        description=f"تم استلام تكت الدعم الحالي بواسطة الإداري {ctx.author.mention}.",
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
+
+# ----------------------------------------------------
 # نظام إغلاق التكت أو الدعم الفني مع التحقق وزر التأكيد (10 نقاط)
 # ----------------------------------------------------
 class ConfirmCloseTicketView(discord.ui.View):
@@ -417,8 +454,6 @@ class ConfirmCloseTicketView(discord.ui.View):
             pass
 
         await interaction.response.send_message("🔒 **تم تأكيد الإغلاق. جاري حذف تكت الدعم وإضافة النقاط...**")
-        
-        # إضافة 10 نقاط للإداري عند إغلاق التكت
         await add_points_direct(interaction.guild, self.staff, POINTS_CONFIG["ticket_close"], f"إغلاق تكت/دعم فني: {interaction.channel.name}")
         await send_unified_log(interaction.guild, "🔒 | إغلاق تكت / دعم فني", f"قام الإداري {self.staff.mention} بإغلاق التكت `{interaction.channel.name}` بنجاح.", discord.Color.red())
 
@@ -449,19 +484,14 @@ async def close_ticket_command(ctx):
         await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
         return
 
-    # التحقق مما إذا كانت القناة تكت أو دعم فني
     channel_name = ctx.channel.name.lower()
     category_name = ctx.channel.category.name.lower() if ctx.channel.category else ""
     
     is_ticket_or_support = (
-        "ticket" in channel_name or 
-        "تكت" in channel_name or 
-        "support" in channel_name or 
-        "دعم" in channel_name or 
-        "ticket" in category_name or 
-        "تكت" in category_name or 
-        "support" in category_name or 
-        "دعم" in category_name
+        "ticket" in channel_name or "تكت" in channel_name or 
+        "support" in channel_name or "دعم" in channel_name or 
+        "ticket" in category_name or "تكت" in category_name or 
+        "support" in category_name or "دعم" in category_name
     )
 
     if not is_ticket_or_support:
@@ -612,7 +642,7 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# نظام العقوبات (بان 20 نقطة، تايم آوت 10 نقاط، تحذير 10 نقاط)
+# نظام العقوبات الكامل (بان 20، تايم آوت 10، تحذير 10، وحرمان الإداري)
 # ----------------------------------------------------
 @bot.command(name="بان", aliases=["ban"])
 async def staff_ban(ctx, member: discord.Member, *, reason=None):
@@ -718,6 +748,39 @@ async def staff_warn(ctx, member: discord.Member, *, reason=None):
         embed.add_field(name="السبب", value=reason or "بدون سبب محدد", inline=False)
         await warn_ch.send(embed=embed)
 
+@bot.command(name="حرمان", aliases=["banstaff", "punishstaff"])
+async def staff_deprivation(ctx, member: discord.Member, *, reason=None):
+    if not any(r.id in ALLOWED_ROLE_IDS for r in ctx.author.roles) and not ctx.author.guild_permissions.administrator:
+        await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
+        return
+
+    ban_role = ctx.guild.get_role(BAN_ROLE_ID)
+    if not ban_role:
+        await ctx.send("❌ لم يتم العثور على رتبة الحرمان (`BAN_ROLE_ID`) في السيرفر.", delete_after=5)
+        return
+
+    all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES + ALLOWED_ROLE_IDS
+    roles_to_remove = [r for r in member.roles if r.id in all_admin_roles_ids]
+
+    try:
+        if roles_to_remove:
+            await member.remove_roles(*roles_to_remove, reason=f"عقوبة حرمان إداري بواسطة {ctx.author}: {reason}")
+        if ban_role not in member.roles:
+            await member.add_roles(ban_role, reason=f"عقوبة حرمان إداري بواسطة {ctx.author}: {reason}")
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ أثناء تعديل رتب العضو: {e}")
+        return
+
+    embed = discord.Embed(
+        title="⛔ | عقوبة حرمان إداري",
+        description=f"تم حرمان الإداري {member.mention} وسحب جميع رتبه الإدارية وإعطائه رتبة الحرمان.",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="السبب", value=reason or "بدون سبب محدد", inline=False)
+    embed.add_field(name="المشرف المسؤول", value=ctx.author.mention, inline=True)
+    await ctx.send(embed=embed)
+    await send_unified_log(ctx.guild, "⛔ | حرمان إداري", f"قام {ctx.author.mention} بحرمان الإداري {member.mention}\n📌 السبب: {reason or 'بدون سبب'}", discord.Color.red())
+
 # ----------------------------------------------------
 # نظام تغيير الاسم التلقائي
 # ----------------------------------------------------
@@ -760,7 +823,7 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [ULTIMATE BOT READY 100%] تم ضبط النقاط والعقوبات بدقة بنجاح: {bot.user}")
+    print(f"🚀 [ULTIMATE BOT READY 100%] تم استرجاع كافة الأوامر والميزات بنجاح: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
