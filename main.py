@@ -13,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Staffbot Ultimate Production Enterprise 24/7 - Online & Active!"
+    return "Staffbot Ultimate Enterprise 24/7 - Online & Active!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # ----------------------------------------------------
-# الثوابت وأيدي الرولات والقنوات (كاملة بدون أي نقص)
+# الثوابت وأيدي الرولات والقنوات (كاملة ومحدثة)
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
@@ -52,11 +52,6 @@ BAN_ROLE_ID = 1543325398761345175
 NICKNAME_CHANNEL_ID = 1552311822747443351
 NICKNAME_ROLE_ID = 1543071855920029778
 
-TICKET_PANEL_CHANNEL_ID = 1543094490468847666
-TICKET_CATEGORY_ID = 1546498225404379279
-STAFF_ROLE_ID = 1545520633939624006
-OWNER_ROLE_ID = 1535687924425818283
-
 WARN_1_ID = 1543278808583372901
 WARN_2_ID = 1543278965857198271
 WARN_3_ID = 1543279133164048576
@@ -64,7 +59,6 @@ WARN_3_ID = 1543279133164048576
 BACKUP_CHANNEL_ID = 1553913719128588389  
 
 POINTS_CONFIG = {
-    "ticket": 10,
     "warn": 10,
     "timeout": 10,
     "ban": 20,          
@@ -89,7 +83,7 @@ MIDDLE_ROLES = [
     1548408357457756200
 ]
 
-# تفعيل كافة الصلاحيات والانتيتس المطلوبة بقوة
+# إعدادات الانتنتس والصلاحيات
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -107,7 +101,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
 # ----------------------------------------------------
@@ -262,14 +256,11 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
 
     if user_id not in data or not isinstance(data[user_id], dict):
         old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
-        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": old_pts, "warns": 0, "timeouts": 0, "bans": 0}
 
     user_data = data[user_id]
     user_data["points"] = user_data.get("points", 0) + actual_points
     current_pts = user_data["points"]
-
-    if "تقديم" in action_name or "تكت" in action_name:
-        user_data["tickets"] = user_data.get("tickets", 0) + 1
 
     save_data(data, guild)
     
@@ -283,7 +274,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 1. نظام إعطاء وسحب النقاط اليدوي الكامل
+# نظام النقاط اليدوي
 # ----------------------------------------------------
 @bot.command(name="إعطاء_نقاط", aliases=["givepoints"])
 async def give_points(ctx, member: discord.Member, points: int):
@@ -295,7 +286,7 @@ async def give_points(ctx, member: discord.Member, points: int):
     user_id = str(member.id)
     if user_id not in data or not isinstance(data[user_id], dict):
         old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
-        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": old_pts, "warns": 0, "timeouts": 0, "bans": 0}
 
     data[user_id]["points"] += points
     new_pts = data[user_id]["points"]
@@ -315,7 +306,7 @@ async def remove_points(ctx, member: discord.Member, points: int):
     user_id = str(member.id)
     if user_id not in data or not isinstance(data[user_id], dict):
         old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
-        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": old_pts, "warns": 0, "timeouts": 0, "bans": 0}
 
     data[user_id]["points"] = max(0, data[user_id]["points"] - points)
     new_pts = data[user_id]["points"]
@@ -325,139 +316,7 @@ async def remove_points(ctx, member: discord.Member, points: int):
     await send_unified_log(ctx.guild, "➖ | تعديل نقاط يدوي (خصم)", f"قام {ctx.author.mention} بخصم `{points}` نقطة من {member.mention}\n📈 المجموع الجديد: `{new_pts}`", discord.Color.red())
 
 # ----------------------------------------------------
-# 2. نظام التكتات والتحكم الدائم المتكامل (مُحسن وخاص بالمطوّرين)
-# ----------------------------------------------------
-class TicketControlView(discord.ui.View):
-    def __init__(self, ticket_owner: discord.Member):
-        super().__init__(timeout=None)
-        self.ticket_owner = ticket_owner
-        self.claimed_by = None
-
-    @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="ticket_call_member_v100")
-    async def call_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"👤 {self.ticket_owner.mention}, الإداري {interaction.user.mention} يستدعي أطراف التكت هنا.")
-
-    @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="ticket_call_staff_v100")
-    async def call_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
-        staff_role = interaction.guild.get_role(STAFF_ROLE_ID)
-        owner_role = interaction.guild.get_role(OWNER_ROLE_ID)
-        staff_ping = staff_role.mention if staff_role else ""
-        owner_ping = owner_role.mention if owner_role else ""
-        await interaction.response.send_message(f"🔔 {staff_ping} {owner_ping} — تم طلب حضور الإدارة بواسطة {interaction.user.mention} في هذا التكت.")
-
-    @discord.ui.button(label="استلام التكت", style=discord.ButtonStyle.green, emoji="🛡️", custom_id="ticket_claim_v100")
-    async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.claimed_by = interaction.user
-        button.disabled = True
-        button.label = f"استلمها: {interaction.user.name}"
-        await interaction.message.edit(view=self)
-
-        guild = interaction.guild
-        staff_role = guild.get_role(STAFF_ROLE_ID)
-
-        try:
-            await interaction.channel.set_permissions(guild.default_role, send_messages=False)
-            if staff_role:
-                await interaction.channel.set_permissions(staff_role, read_messages=True, send_messages=False)
-            await interaction.channel.set_permissions(self.ticket_owner, read_messages=True, send_messages=True)
-            await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=True)
-        except Exception as e:
-            print(f"خطأ في تعديل الصلاحيات: {e}")
-
-        await interaction.response.send_message(f"🛡 **تم استلام التكت بواسطة:** {interaction.user.mention}\n🔒 **تم تقييد الكتابة وأصبح الروم مرئياً للإدارة للقراءة فقط.**")
-
-    @discord.ui.button(label="إضافة عضو", style=discord.ButtonStyle.blurple, emoji="➕", custom_id="ticket_add_member_v100")
-    async def add_member(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("✍️ يرجى عمل منشن (Mention) للعضو الذي ترغب في إضافته للتكت خلال 30 ثانية.", ephemeral=True)
-        def check(m):
-            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.mentions) > 0
-
-        try:
-            msg = await bot.wait_for('message', timeout=30.0, check=check)
-            target_member = msg.mentions[0]
-            await interaction.channel.set_permissions(target_member, read_messages=True, send_messages=True)
-            await msg.delete()
-            await interaction.followup.send(f"✅ تمت إضافة العضو {target_member.mention} للتكت بنجاح.")
-        except Exception:
-            await interaction.followup.send("⌛ انقطعت الاستجابة أو لم تقم بمنشن أي عضو.", ephemeral=True)
-
-    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.red, emoji="🔒", custom_id="ticket_close_btn_v100")
-    async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🔒 جاري أرشيف وإغلاق التكت...")
-        await add_points_direct(interaction.guild, interaction.user, POINTS_CONFIG["ticket"], "إغلاق تكت عبر الأزرار وإنجاز")
-        await interaction.channel.delete()
-
-class TicketPanelView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="فتح تكت دعم فني", style=discord.ButtonStyle.blurple, emoji="🎫", custom_id="open_ticket_btn_v100")
-    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # التأكد من عدم انتهاء الاستجابة وسرعة معالجة الروم
-        if interaction.response.is_done():
-            return
-        await interaction.response.defer(ephemeral=True)
-
-        guild = interaction.guild
-        category = guild.get_category(TICKET_CATEGORY_ID)
-        staff_role = guild.get_role(STAFF_ROLE_ID)
-        owner_role = guild.get_role(OWNER_ROLE_ID)
-
-        # التحقق إذا كان لدى المستخدم تكت مفتوح سابقاً
-        for ch in guild.text_channels:
-            if ch.topic and str(interaction.user.id) in ch.topic:
-                await interaction.followup.send(f"❌ لديك تكت مفتوح مسبقاً: {ch.mention}", ephemeral=True)
-                return
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True, view_channel=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True, view_channel=True)
-        }
-        if staff_role:
-            overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
-        if owner_role:
-            overwrites[owner_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
-
-        try:
-            ticket_channel = await guild.create_text_channel(
-                name=f"ticket-{interaction.user.name}",
-                category=category,
-                overwrites=overwrites,
-                topic=f"صاحب التكت ID: {interaction.user.id}"
-            )
-        except Exception as e:
-            await interaction.followup.send(f"❌ حدث خطأ أثناء إنشاء الروم (تأكد من صلاحيات البوت والكاتيجوري): {e}", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title="🎫 | الدعم الفني - منتدى النظيم",
-            description=f"أهلاً بك {interaction.user.mention}\nيرجى شرح مشكلتك بالتفصيل وستتم خدمتك قريباً.",
-            color=discord.Color.blue()
-        )
-        view = TicketControlView(ticket_owner=interaction.user)
-        await ticket_channel.send(content=f"🔔 {interaction.user.mention} | <@&{STAFF_ROLE_ID}>", embed=embed, view=view)
-        await interaction.followup.send(f"✅ تم فتح تكت الدعم الفني الخاص بك بنجاح: {ticket_channel.mention}", ephemeral=True)
-
-@bot.command(name="بانل_التكت", aliases=["ticketpanel"])
-async def ticket_panel(ctx):
-    if not ctx.author.guild_permissions.administrator:
-        return
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-
-    embed = discord.Embed(
-        title="🎫 | نظام تكتات الدعم الفني",
-        description="إذا كنت تواجه مشكلة أو تحتاج إلى مساعدة، اضغط على الزر أدناه لفتح تكت خاص.",
-        color=discord.Color.blue()
-    )
-    view = TicketPanelView()
-    await ctx.send(embed=embed, view=view)
-
-# ----------------------------------------------------
-# 3. نظام التقديم بالزر والخاص الكامل
+# نظام التقديم بالزر والخاص (دائم وخارق)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -465,7 +324,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v100")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v200")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
@@ -492,7 +351,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v100")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v200")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         for child in self.children:
             child.disabled = True
@@ -515,7 +374,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v100")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v200")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -587,7 +446,7 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 4. نظام العقوبات والتحذيرات والبان والتايم آوت الكامل
+# نظام العقوبات (بان، تايم آوت، تحذيرات)
 # ----------------------------------------------------
 @bot.command(name="بان", aliases=["ban"])
 async def staff_ban(ctx, member: discord.Member, *, reason=None):
@@ -602,7 +461,7 @@ async def staff_ban(ctx, member: discord.Member, *, reason=None):
     data = load_data()
     user_id = str(ctx.author.id)
     if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": 0, "warns": 0, "timeouts": 0, "bans": 0}
     data[user_id]["bans"] = data[user_id].get("bans", 0) + 1
     save_data(data, ctx.guild)
 
@@ -632,7 +491,7 @@ async def staff_timeout(ctx, member: discord.Member, minutes: int, *, reason=Non
     data = load_data()
     user_id = str(ctx.author.id)
     if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": 0, "warns": 0, "timeouts": 0, "bans": 0}
     data[user_id]["timeouts"] = data[user_id].get("timeouts", 0) + 1
     save_data(data, ctx.guild)
 
@@ -678,7 +537,7 @@ async def staff_warn(ctx, member: discord.Member, *, reason=None):
     data = load_data()
     user_id = str(ctx.author.id)
     if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": 0, "warns": 0, "timeouts": 0, "bans": 0}
     data[user_id]["warns"] = data[user_id].get("warns", 0) + 1
     save_data(data, ctx.guild)
 
@@ -694,7 +553,7 @@ async def staff_warn(ctx, member: discord.Member, *, reason=None):
         await warn_ch.send(embed=embed)
 
 # ----------------------------------------------------
-# 5. نظام تغيير الاسم التلقائي الكامل
+# نظام تغيير الاسم التلقائي
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
@@ -727,30 +586,27 @@ async def on_message(message):
             print(f"خطأ في تعديل الاسم: {e}")
 
 # ----------------------------------------------------
-# 6. الأحداث والبروفايل والأوامر العامة
+# الأحداث والبروفايل
 # ----------------------------------------------------
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    bot.add_view(TicketPanelView())
-
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [BOT READY & PERSISTENT VIEWS LOADED 100%] تم تشغيل البوت بنجاح: {bot.user}")
+    print(f"🚀 [ULTIMATE BOT READY 100%] تم تشغيل البوت بنجاح وبدون تكتات: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
     target = member or ctx.author
     data = load_data()
-    user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0})
+    user_info = data.get(str(target.id), {"points": 0, "warns": 0, "timeouts": 0, "bans": 0})
     if isinstance(user_info, int):
-        user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        user_info = {"points": user_info, "warns": 0, "timeouts": 0, "bans": 0}
 
     embed = discord.Embed(title=f"🛡 | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"{user_info.get('points', 0)} نقطة", inline=True)
-    embed.add_field(name="🎫 التكتات", value=f"{user_info.get('tickets', 0)} إنجاز", inline=True)
     embed.add_field(name="⚠ التحذيرات", value=f"{user_info.get('warns', 0)} تحذير", inline=True)
     embed.add_field(name="🔇 التايم آوت", value=f"{user_info.get('timeouts', 0)} إجراء", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"{user_info.get('bans', 0)} بان", inline=True)
