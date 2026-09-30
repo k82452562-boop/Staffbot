@@ -59,12 +59,12 @@ WARN_3_ID = 1543279133164048576
 BACKUP_CHANNEL_ID = 1553913719128588389  
 
 POINTS_CONFIG = {
-    "warn": 10,
-    "timeout": 10,
-    "ban": 20,          
-    "apply_accept": 10,
-    "ticket_claim": 5,
-    "ticket_close": 5   # نقاط إغلاق التكت للإداري
+    "warn": 10,         # التحذير: 10 نقاط
+    "timeout": 10,      # التايم آوت: 10 نقاط
+    "ban": 20,          # الحرمان / البان: 20 نقطة
+    "apply_accept": 10, # الهوية: 10 نقاط
+    "ticket_claim": 5,  # استلام التكت: 5 نقاط
+    "ticket_close": 10  # إغلاق التكت: 10 نقاط
 }
 
 JUNIOR_ROLES = [
@@ -275,7 +275,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# أوامر النقاط والشرف
+# أوامر النقاط والشرف (إضافة وسحب يدوي)
 # ----------------------------------------------------
 @bot.command(name="إعطاء_نقاط", aliases=["givepoints"])
 async def give_points(ctx, member: discord.Member, points: int):
@@ -396,7 +396,7 @@ async def unlock_channel(ctx):
         await ctx.send(f"❌ حدث خطأ: {e}")
 
 # ----------------------------------------------------
-# نظام إغلاق التكت أو الدعم الفني مع التحقق وزر التأكيد
+# نظام إغلاق التكت أو الدعم الفني مع التحقق وزر التأكيد (10 نقاط)
 # ----------------------------------------------------
 class ConfirmCloseTicketView(discord.ui.View):
     def __init__(self, staff: discord.Member):
@@ -418,7 +418,7 @@ class ConfirmCloseTicketView(discord.ui.View):
 
         await interaction.response.send_message("🔒 **تم تأكيد الإغلاق. جاري حذف تكت الدعم وإضافة النقاط...**")
         
-        # إضافة النقاط للإداري الذي أغلق التكت
+        # إضافة 10 نقاط للإداري عند إغلاق التكت
         await add_points_direct(interaction.guild, self.staff, POINTS_CONFIG["ticket_close"], f"إغلاق تكت/دعم فني: {interaction.channel.name}")
         await send_unified_log(interaction.guild, "🔒 | إغلاق تكت / دعم فني", f"قام الإداري {self.staff.mention} بإغلاق التكت `{interaction.channel.name}` بنجاح.", discord.Color.red())
 
@@ -449,7 +449,7 @@ async def close_ticket_command(ctx):
         await ctx.send("❌ ليس لديك صلاحية لاستخدام هذا الأمر.", delete_after=5)
         return
 
-    # التحقق مما إذا كانت القناة تكت أو دعم فني (من اسم القناة أو اسم الكاتيجوري)
+    # التحقق مما إذا كانت القناة تكت أو دعم فني
     channel_name = ctx.channel.name.lower()
     category_name = ctx.channel.category.name.lower() if ctx.channel.category else ""
     
@@ -482,7 +482,7 @@ async def close_ticket_command(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# نظام التقديم بالزر والخاص
+# نظام التقديم بالزر والخاص (10 نقاط عند القبول)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -612,7 +612,7 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# نظام العقوبات (بان، تايم آوت، تحذيرات)
+# نظام العقوبات (بان 20 نقطة، تايم آوت 10 نقاط، تحذير 10 نقاط)
 # ----------------------------------------------------
 @bot.command(name="بان", aliases=["ban"])
 async def staff_ban(ctx, member: discord.Member, *, reason=None):
@@ -631,7 +631,7 @@ async def staff_ban(ctx, member: discord.Member, *, reason=None):
     data[user_id]["bans"] = data[user_id].get("bans", 0) + 1
     save_data(data, ctx.guild)
 
-    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ban"], f"حظر عضو: {member.name}")
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ban"], f"حظر عضو (بان): {member.name}")
     await ctx.send(f"🔨 تم حظر العضو {member.mention} بنجاح.")
 
     ban_model_ch = ctx.guild.get_channel(BAN_MODEL_CHANNEL_ID)
@@ -760,7 +760,7 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [ULTIMATE BOT READY 100%] تم تشغيل البوت بنجاح والتحقق من التكتات والدعم الفني: {bot.user}")
+    print(f"🚀 [ULTIMATE BOT READY 100%] تم ضبط النقاط والعقوبات بدقة بنجاح: {bot.user}")
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
