@@ -3,6 +3,7 @@ from discord.ext import commands
 import json
 import os
 import time
+import asyncio
 from flask import Flask
 from threading import Thread
 
@@ -137,7 +138,7 @@ async def fetch_points_from_discord():
                         print("☁️ [Cloud Backup] تم استرجاع ملف النقاط من ديسكورد بنجاح!")
                         return
     except Exception as e:
-        print(f"⚠️️ خطأ أثناء استرجاع النسخة الاحتياطية من ديسكورد: {e}")
+        print(f"⚠ خطأ أثناء استرجاع النسخة الاحتياطية من ديسكورد: {e}")
 
 async def save_points_to_discord(guild):
     try:
@@ -145,7 +146,6 @@ async def save_points_to_discord(guild):
         if not channel:
             return
         if os.path.exists(DATA_FILE):
-            # حذف الرسائل السابقة للنسخ الاحتياطي لمنع تكرارها
             async for message in channel.history(limit=15):
                 if message.author == bot.user and message.attachments:
                     for att in message.attachments:
@@ -294,53 +294,79 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر
+# 2. نظام التقديم بالزر (مع مؤقت 5 ثواني لمنع القبول المباشر ثم تفعيل الزر)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
         super().__init__(timeout=None)
         self.applicant = applicant
         self.guild = guild
+        self.accepted_staff = set()  # لتسجيل الإداريين الذين ضغطوا وقبلوا الطلب
+        self.is_role_assigned = False
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v4")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v6")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
             return
 
-        for child in self.children:
-            child.disabled = True
-        try:
-            await interaction.message.edit(view=self)
-        except Exception:
-            pass
-        
-        unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
-        verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
+        staff = interaction.user
 
-        try:
-            if unverified_role and unverified_role in self.applicant.roles:
-                await self.applicant.remove_roles(unverified_role, reason=f"قبول التقديم بواسطة {interaction.user.name}")
-            if verified_role and verified_role not in self.applicant.roles:
-                await self.applicant.add_roles(verified_role, reason=f"قبول التقديم بواسطة {interaction.user.name}")
-        except Exception as e:
-            print(f"خطأ في تعديل رتب التقديم: {e}")
+        # إذا قام الإداري بالضغط مسبقاً
+        if staff.id in self.accepted_staff:
+            await interaction.response.send_message("⚠️ لقد قمت بقبول هذا الطلب مسبقاً!", ephemeral=True)
+            return
 
-        await add_points_direct(self.guild, interaction.user, POINTS_CONFIG["apply_accept"], "قبول تقديم هوية عضو")
-
-        embed = discord.Embed(
-            title="✅ | تم قبول التقديم بنجاح",
-            description=f"تم قبول العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n✨ **تم سحب (غير مفعل) ومنحه رتبة (مفعل)**!",
-            color=discord.Color.green()
+        # الخطوة 1: عند الضغط لأول مرة، نطبق مؤقت الـ 5 ثواني الخاص بهذا الإداري لقراءة الإجابات
+        await interaction.response.send_message(
+            f"⏳ **يا {staff.mention}، يرجى قراءة إجابات المتقدم بعناية...\nجاري فتح زر القبول النهائي خلال (5 ثوانٍ)...**", 
+            ephemeral=True
         )
-        await interaction.channel.send(embed=embed)
         
+        # الانتظار لمدة 5 ثوانٍ بالضبط لكي يقرأ الإداري الأسئلة والأسماء
+        await asyncio.sleep(5)
+
+        # بعد مرور الـ 5 ثواني، نضيف الإداري لقائمة المقبولين ونعطيه النقاط
+        self.accepted_staff.add(staff.id)
+
+        # إذا كانت هذه أول مرة يتم فيها قبول الطلب عموماً، نقوم بمنح العضو رتبة التفعيل
+        if not self.is_role_assigned:
+            self.is_role_assigned = True
+            unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
+            verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
+
+            try:
+                if unverified_role and unverified_role in self.applicant.roles:
+                    await self.applicant.remove_roles(unverified_role, reason="قبول التقديم الرسمي")
+                if verified_role and verified_role not in self.applicant.roles:
+                    await self.applicant.add_roles(verified_role, reason="قبول التقديم الرسمي")
+            except Exception as e:
+                print(f"خطأ في تعديل رتب التقديم: {e}")
+
+            try:
+                await self.applicant.send(f"🎉 مبارك! تم قبول تقديمك في سيرفر **{self.guild.name}** ومنحك رتبة التفعيل.")
+            except:
+                pass
+
+        # احتساب النقاط للإداري الذي أتم الـ 5 ثواني وضغط
+        await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})")
+
+        # إرسال تأكيد خاص للإداري بأن القبول تم بنجاح
         try:
-            await self.applicant.send(f"🎉 مبارك! تم قبول تقديمك في سيرفر **{self.guild.name}** ومنحك رتبة التفعيل.")
+            await interaction.followup.send(f"✅ **تم اعتماد قبولك للطلب بنجاح يا {staff.mention} وإضافة النقاط لرصيدك!**", ephemeral=True)
         except:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v4")
+        # تحديث رسالة القناة العامة لتوضيح الإداريين الذين قبلوا الطلب
+        staff_mentions = ", ".join([f"<@{uid}>" for uid in self.accepted_staff])
+        try:
+            embed = interaction.message.embeds[0]
+            embed.set_field_at(0, name="👤 المتقدم", value=f"{self.applicant.mention}\n✅ **تم القبول بواسطة:** {staff_mentions}", inline=False)
+            await interaction.message.edit(embed=embed, view=self)
+        except Exception:
+            pass
+
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v6")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -372,7 +398,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v4")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v6")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -554,7 +580,7 @@ async def remove_role(ctx, member: discord.Member, role: discord.Role):
         await member.remove_roles(role)
         embed = discord.Embed(title="🔄 | إدارة الرتب الفاخرة", description=f"تم بنجاح سحب رتبة {role.mention} من العضو {member.mention}", color=discord.Color.orange())
         await ctx.send(embed=embed)
-        await send_unified_log(ctx.guild, "🛡️️ | تعديل الرتب", f"الإداري {ctx.author.mention} قام بسحب رتبة {role.mention} من العضو {member.mention}")
+        await send_unified_log(ctx.guild, "🛡 | تعديل الرتب", f"الإداري {ctx.author.mention} قام بسحب رتبة {role.mention} من العضو {member.mention}")
     except discord.Forbidden:
         await ctx.send("❌ **خطأ:** لا يمتلك البوت صلاحية كافية.")
 
