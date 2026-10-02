@@ -121,7 +121,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
 # دوال الحفظ والقراءة الآمنة مع النسخ الاحتياطي السحابي في ديسكورد
@@ -157,7 +157,7 @@ async def save_points_to_discord(guild):
             file = discord.File(DATA_FILE, filename="points_backup.json")
             await channel.send("💾 **[Cloud Backup] النسخة الاحتياطية التلقائية لقاعدة بيانات النقاط:**", file=file)
     except Exception as e:
-        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
+        print(f"⚠️️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -294,72 +294,83 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر (أزرار مغلقة لمدة 5 ثوانٍ عند الإرسال ثم تفتح تلقائياً)
+# 2. نظام التقديم بالزر (أزرار مغلقة أول 5 ثواني ثم شخص واحد يقبل فقط)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
         super().__init__(timeout=None)
         self.applicant = applicant
         self.guild = guild
-        self.accepted_staff = set()  # لتسجيل الإداريين الذين قبلوا الطلب
-        self.is_role_assigned = False
+        self.is_completed = False  # لمعرفة هل تم قبول أو رفض الطلب مسبقاً
         
-        # إغلاق الأزرار فوراً عند بدء الـ View
+        # إغلاق الأزرار فوراً عند إرسال التقديم
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v7")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v8")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
             return
 
-        staff = interaction.user
-
-        if staff.id in self.accepted_staff:
-            await interaction.response.send_message("⚠️ لقد قمت بقبول هذا الطلب مسبقاً!", ephemeral=True)
+        # التحقق إذا كان الطلب قد تم حسمه من قبل إداري آخر مسبقاً
+        if self.is_completed:
+            await interaction.response.send_message("⚠️ عذراً، لقد قام إداري آخر بحسم هذا الطلب بالفعل!", ephemeral=True)
             return
 
-        self.accepted_staff.add(staff.id)
+        self.is_completed = True
+        staff = interaction.user
 
-        # إذا كانت هذه أول مرة يتم فيها قبول الطلب، نقوم بمنح العضو رتبة التفعيل
-        if not self.is_role_assigned:
-            self.is_role_assigned = True
-            unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
-            verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
+        # تعطيل جميع الأزرار نهائياً لمنع أي شخص آخر من الضغط
+        for child in self.children:
+            child.disabled = True
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
 
-            try:
-                if unverified_role and unverified_role in self.applicant.roles:
-                    await self.applicant.remove_roles(unverified_role, reason="قبول التقديم الرسمي")
-                if verified_role and verified_role not in self.applicant.roles:
-                    await self.applicant.add_roles(verified_role, reason="قبول التقديم الرسمي")
-            except Exception as e:
-                print(f"خطأ في تعديل رتب التقديم: {e}")
+        # منح رتبة التفعيل للعضو المتقدم
+        unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
+        verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
 
-            try:
-                await self.applicant.send(f"🎉 مبارك! تم قبول تقديمك في سيرفر **{self.guild.name}** ومنحك رتبة التفعيل.")
-            except:
-                pass
+        try:
+            if unverified_role and unverified_role in self.applicant.roles:
+                await self.applicant.remove_roles(unverified_role, reason="قبول التقديم الرسمي")
+            if verified_role and verified_role not in self.applicant.roles:
+                await self.applicant.add_roles(verified_role, reason="قبول التقديم الرسمي")
+        except Exception as e:
+            print(f"خطأ في تعديل رتب التقديم: {e}")
 
-        # احتساب النقاط للإداري
+        try:
+            await self.applicant.send(f"🎉 مبارك! تم قبول تقديمك في سيرفر **{self.guild.name}** ومنحك رتبة التفعيل.")
+        except:
+            pass
+
+        # احتساب النقاط للإداري الذي قبل الطلب وحده
         await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})")
 
-        await interaction.response.send_message(f"✅ **تم اعتماد قبولك للطلب بنجاح يا {staff.mention} وإضافة النقاط لرصيدك!**", ephemeral=True)
+        await interaction.response.send_message(f"✅ **تم قبول التقديم بنجاح بواسطة الإداري {staff.mention} وإضافة النقاط لرصيده!**")
 
-        # تحديث رسالة القناة العامة لتوضيح الإداريين الذين قبلوا الطلب
-        staff_mentions = ", ".join([f"<@{uid}>" for uid in self.accepted_staff])
+        # تحديث رسالة القناة العامة
         try:
             embed = interaction.message.embeds[0]
-            embed.set_field_at(0, name="👤 المتقدم", value=f"{self.applicant.mention}\n✅ **تم القبول بواسطة:** {staff_mentions}", inline=False)
+            embed.set_field_at(0, name="👤 المتقدم", value=f"{self.applicant.mention}\n✅ **تم القبول بواسطة:** {staff.mention}", inline=False)
             await interaction.message.edit(embed=embed, view=self)
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v7")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v8")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
             return
+
+        if self.is_completed:
+            await interaction.response.send_message("⚠️ عذراً، لقد قام إداري آخر بحسم هذا الطلب بالفعل!", ephemeral=True)
+            return
+
+        self.is_completed = True
+        staff = interaction.user
 
         for child in self.children:
             child.disabled = True
@@ -374,7 +385,7 @@ class ApplyReviewView(discord.ui.View):
         
         embed = discord.Embed(
             title="❌ | تم رفض التقديم",
-            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة الإداري {interaction.user.mention}\n⏳ **تم تطبيق وقت انتظار 10 دقائق قبل إمكانية التقديم مجدداً.**",
+            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة الإداري {staff.mention}\n⏳ **تم تطبيق وقت انتظار 10 دقائق قبل إمكانية التقديم مجدداً.**",
             color=discord.Color.red()
         )
         await interaction.channel.send(embed=embed)
@@ -387,7 +398,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v7")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v8")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -453,18 +464,19 @@ class ApplyButtonView(discord.ui.View):
             # إرسال الرسالة والأزرار مغلقة
             sent_message = await review_channel.send(content=f"🔔 {admin_role_mention} يوجد تقديم هوية جديد بانتظار المراجعة!", embed=embed, view=view)
             
-            # تشغيل مؤقت لمدة 5 ثوانٍ في الخلفية لفتح الأزرار تلقائياً
+            # تشغيل مؤقت لمدة 5 ثوانٍ لفتح الأزرار تلقائياً
             async def enable_buttons_after_delay(msg, v):
                 await asyncio.sleep(5)
-                for child in v.children:
-                    child.disabled = False
-                try:
-                    # تحديث الوصف وإزالة رسالة الانتظار
-                    emb = msg.embeds[0]
-                    emb.description = "✅ **تم فتح الأزرار، يمكنك مراجعة وقبول أو رفض التقديم الآن.**"
-                    await msg.edit(embed=emb, view=v)
-                except Exception:
-                    pass
+                # إذا لم يتم حسم الطلب بعد، نفتح الأزرار
+                if not v.is_completed:
+                    for child in v.children:
+                        child.disabled = False
+                    try:
+                        emb = msg.embeds[0]
+                        emb.description = "✅ **تم فتح الأزرار، يمكنك مراجعة وقبول أو رفض التقديم الآن (أول إداري يقبل سيحصل على النقاط ويُغلق الطلب).**"
+                        await msg.edit(embed=emb, view=v)
+                    except Exception:
+                        pass
 
             bot.loop.create_task(enable_buttons_after_delay(sent_message, view))
         
