@@ -32,8 +32,10 @@ PREFIX = "."
 ALLOWED_ROLE_IDS = [
     1545520633939624006,  
     1545520950064316516,  
-    1540838084151877714   
+    1540838084151877714   # الرتبة الخاصة بتعديل عتبة النقاط إلى 700
 ]
+
+SPECIAL_PROMOTION_ROLE_ID = 1540838084151877714
 
 # الرومات والأيدي
 LOG_CHANNEL_ID = 1553913719128588389
@@ -121,7 +123,7 @@ async def on_command_error(ctx, error):
         embed = discord.Embed(title="⚠️ | نقص في البيانات", description="يرجى كتابة الأمر بشكل صحيح وتعبئة كافة الحقول المطلوبة.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️ | خطأ في المدخلات", description="تأكد من اختيار عضو أو منشن رتبة بشكل صحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
 # دوال الحفظ والقراءة الآمنة مع النسخ الاحتياطي السحابي في ديسكورد
@@ -157,7 +159,7 @@ async def save_points_to_discord(guild):
             file = discord.File(DATA_FILE, filename="points_backup.json")
             await channel.send("💾 **[Cloud Backup] النسخة الاحتياطية التلقائية لقاعدة بيانات النقاط:**", file=file)
     except Exception as e:
-        print(f"⚠️️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
+        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -210,29 +212,77 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     role_category_name = ""
     all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES
 
-    if current_pts >= 700:
-        current_middle_index = -1
-        for idx, r_id in enumerate(MIDDLE_ROLES):
-            if guild.get_role(r_id) in member.roles:
-                current_middle_index = idx
-                break
-        if current_middle_index == -1:
-            target_role_id = MIDDLE_ROLES[0]
-        elif current_middle_index < len(MIDDLE_ROLES) - 1:
-            target_role_id = MIDDLE_ROLES[current_middle_index + 1]
-        role_category_name = "الإدارة الوسطى"
+    # التحقق هل العضو يمتلك الرتبة الخاصة لتحديد عتبة الترقيات والنقاط
+    has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
+    
+    # تحديد الحد الأدنى للترقية بناءً على الرتبة الخاصة أو العادية
+    junior_threshold = 700 if has_special_role else 400
+    middle_threshold = 1200 if has_special_role else 700  # أو حسب رغبتك، تم ضبط الصغرى لتنتهي عند 700 لمن يمتلك الرتبة
 
-    elif 400 <= current_pts < 700:
-        current_junior_index = -1
-        for idx, r_id in enumerate(JUNIOR_ROLES):
-            if guild.get_role(r_id) in member.roles:
-                current_junior_index = idx
-                break
-        if current_junior_index == -1:
-            target_role_id = JUNIOR_ROLES[0]
-        elif current_junior_index < len(JUNIOR_ROLES) - 1:
-            target_role_id = JUNIOR_ROLES[current_junior_index + 1]
-        role_category_name = "الإدارة الصغرى"
+    # فحص ما إذا كان العضو في الإدارة الوسطى حالياً
+    is_in_middle = any(guild.get_role(r_id) in member.roles for r_id in MIDDLE_ROLES)
+    is_in_junior = any(guild.get_role(r_id) in member.roles for r_id in JUNIOR_ROLES)
+
+    # المنطق الدقيق لمنع التداخل بين الصغرى والوسطى
+    if has_special_role:
+        # أصحاب الرتبة الخاصة: ترقيات الصغرى تتطلب 700 نقطة لكل خطوة، وإذا تجاوز الحد ينتقل للوسطى أو يرتقي داخلها
+        if current_pts >= 700:
+            if not is_in_middle and not is_in_junior:
+                # إذا لم يكن لديه أي رتبة إدارية، يبدأ بالوسطى أو الصغرى حسب النقاط
+                target_role_id = MIDDLE_ROLES[0]
+                role_category_name = "الإدارة الوسطى"
+            elif is_in_junior:
+                # انتقال من الصغرى للوسطى
+                target_role_id = MIDDLE_ROLES[0]
+                role_category_name = "الإدارة الوسطى"
+            else:
+                # ترقيات داخل الإدارة الوسطى
+                current_middle_index = -1
+                for idx, r_id in enumerate(MIDDLE_ROLES):
+                    if guild.get_role(r_id) in member.roles:
+                        current_middle_index = idx
+                        break
+                if current_middle_index < len(MIDDLE_ROLES) - 1:
+                    target_role_id = MIDDLE_ROLES[current_middle_index + 1]
+                    role_category_name = "الإدارة الوسطى"
+        else:
+            # ترقيات داخل الإدارة الصغرى لمن لديه الرتبة الخاصة (كل ترقيات الصغرى تتم بـ 700 نقطة كمجموع أو تصفير)
+            current_junior_index = -1
+            for idx, r_id in enumerate(JUNIOR_ROLES):
+                if guild.get_role(r_id) in member.roles:
+                    current_junior_index = idx
+                    break
+            if current_junior_index == -1:
+                target_role_id = JUNIOR_ROLES[0]
+                role_category_name = "الإدارة الصغرى"
+            elif current_junior_index < len(JUNIOR_ROLES) - 1 and current_pts >= 700:
+                target_role_id = JUNIOR_ROLES[current_junior_index + 1]
+                role_category_name = "الإدارة الصغرى"
+    else:
+        # النظام العادي (الصغرى من 400 إلى 700، والوسطى من 700 فما فوق)
+        if current_pts >= 700:
+            current_middle_index = -1
+            for idx, r_id in enumerate(MIDDLE_ROLES):
+                if guild.get_role(r_id) in member.roles:
+                    current_middle_index = idx
+                    break
+            if current_middle_index == -1:
+                target_role_id = MIDDLE_ROLES[0]
+            elif current_middle_index < len(MIDDLE_ROLES) - 1:
+                target_role_id = MIDDLE_ROLES[current_middle_index + 1]
+            role_category_name = "الإدارة الوسطى"
+
+        elif 400 <= current_pts < 700:
+            current_junior_index = -1
+            for idx, r_id in enumerate(JUNIOR_ROLES):
+                if guild.get_role(r_id) in member.roles:
+                    current_junior_index = idx
+                    break
+            if current_junior_index == -1:
+                target_role_id = JUNIOR_ROLES[0]
+            elif current_junior_index < len(JUNIOR_ROLES) - 1:
+                target_role_id = JUNIOR_ROLES[current_junior_index + 1]
+            role_category_name = "الإدارة الصغرى"
 
     if target_role_id:
         target_role = guild.get_role(target_role_id)
@@ -301,19 +351,17 @@ class ApplyReviewView(discord.ui.View):
         super().__init__(timeout=None)
         self.applicant = applicant
         self.guild = guild
-        self.is_completed = False  # لمعرفة هل تم قبول أو رفض الطلب مسبقاً
+        self.is_completed = False
         
-        # إغلاق الأزرار فوراً عند إرسال التقديم
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v8")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v9")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
             return
 
-        # التحقق إذا كان الطلب قد تم حسمه من قبل إداري آخر مسبقاً
         if self.is_completed:
             await interaction.response.send_message("⚠️ عذراً، لقد قام إداري آخر بحسم هذا الطلب بالفعل!", ephemeral=True)
             return
@@ -321,7 +369,6 @@ class ApplyReviewView(discord.ui.View):
         self.is_completed = True
         staff = interaction.user
 
-        # تعطيل جميع الأزرار نهائياً لمنع أي شخص آخر من الضغط
         for child in self.children:
             child.disabled = True
         try:
@@ -329,7 +376,6 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-        # منح رتبة التفعيل للعضو المتقدم
         unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
         verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
 
@@ -346,12 +392,10 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-        # احتساب النقاط للإداري الذي قبل الطلب وحده
         await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})")
 
         await interaction.response.send_message(f"✅ **تم قبول التقديم بنجاح بواسطة الإداري {staff.mention} وإضافة النقاط لرصيده!**")
 
-        # تحديث رسالة القناة العامة
         try:
             embed = interaction.message.embeds[0]
             embed.set_field_at(0, name="👤 المتقدم", value=f"{self.applicant.mention}\n✅ **تم القبول بواسطة:** {staff.mention}", inline=False)
@@ -359,7 +403,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v8")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v9")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -398,7 +442,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v8")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v9")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -461,13 +505,10 @@ class ApplyButtonView(discord.ui.View):
             admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
             view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
             
-            # إرسال الرسالة والأزرار مغلقة
             sent_message = await review_channel.send(content=f"🔔 {admin_role_mention} يوجد تقديم هوية جديد بانتظار المراجعة!", embed=embed, view=view)
             
-            # تشغيل مؤقت لمدة 5 ثوانٍ لفتح الأزرار تلقائياً
             async def enable_buttons_after_delay(msg, v):
                 await asyncio.sleep(5)
-                # إذا لم يتم حسم الطلب بعد، نفتح الأزرار
                 if not v.is_completed:
                     for child in v.children:
                         child.disabled = False
