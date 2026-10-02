@@ -294,17 +294,21 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر (مع مؤقت 5 ثواني لمنع القبول المباشر ثم تفعيل الزر)
+# 2. نظام التقديم بالزر (أزرار مغلقة لمدة 5 ثوانٍ عند الإرسال ثم تفتح تلقائياً)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
         super().__init__(timeout=None)
         self.applicant = applicant
         self.guild = guild
-        self.accepted_staff = set()  # لتسجيل الإداريين الذين ضغطوا وقبلوا الطلب
+        self.accepted_staff = set()  # لتسجيل الإداريين الذين قبلوا الطلب
         self.is_role_assigned = False
+        
+        # إغلاق الأزرار فوراً عند بدء الـ View
+        for child in self.children:
+            child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v6")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v7")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -312,24 +316,13 @@ class ApplyReviewView(discord.ui.View):
 
         staff = interaction.user
 
-        # إذا قام الإداري بالضغط مسبقاً
         if staff.id in self.accepted_staff:
             await interaction.response.send_message("⚠️ لقد قمت بقبول هذا الطلب مسبقاً!", ephemeral=True)
             return
 
-        # الخطوة 1: عند الضغط لأول مرة، نطبق مؤقت الـ 5 ثواني الخاص بهذا الإداري لقراءة الإجابات
-        await interaction.response.send_message(
-            f"⏳ **يا {staff.mention}، يرجى قراءة إجابات المتقدم بعناية...\nجاري فتح زر القبول النهائي خلال (5 ثوانٍ)...**", 
-            ephemeral=True
-        )
-        
-        # الانتظار لمدة 5 ثوانٍ بالضبط لكي يقرأ الإداري الأسئلة والأسماء
-        await asyncio.sleep(5)
-
-        # بعد مرور الـ 5 ثواني، نضيف الإداري لقائمة المقبولين ونعطيه النقاط
         self.accepted_staff.add(staff.id)
 
-        # إذا كانت هذه أول مرة يتم فيها قبول الطلب عموماً، نقوم بمنح العضو رتبة التفعيل
+        # إذا كانت هذه أول مرة يتم فيها قبول الطلب، نقوم بمنح العضو رتبة التفعيل
         if not self.is_role_assigned:
             self.is_role_assigned = True
             unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
@@ -348,14 +341,10 @@ class ApplyReviewView(discord.ui.View):
             except:
                 pass
 
-        # احتساب النقاط للإداري الذي أتم الـ 5 ثواني وضغط
+        # احتساب النقاط للإداري
         await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})")
 
-        # إرسال تأكيد خاص للإداري بأن القبول تم بنجاح
-        try:
-            await interaction.followup.send(f"✅ **تم اعتماد قبولك للطلب بنجاح يا {staff.mention} وإضافة النقاط لرصيدك!**", ephemeral=True)
-        except:
-            pass
+        await interaction.response.send_message(f"✅ **تم اعتماد قبولك للطلب بنجاح يا {staff.mention} وإضافة النقاط لرصيدك!**", ephemeral=True)
 
         # تحديث رسالة القناة العامة لتوضيح الإداريين الذين قبلوا الطلب
         staff_mentions = ", ".join([f"<@{uid}>" for uid in self.accepted_staff])
@@ -366,7 +355,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v6")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v7")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -398,7 +387,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v6")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v7")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -445,6 +434,7 @@ class ApplyButtonView(discord.ui.View):
         if review_channel:
             embed = discord.Embed(
                 title="📥 | تقديم هوية جديد (عبر زر الخاص)",
+                description="⏳ **يرجى قراءة إجابات المتقدم بعناية... (الأزرار ستفتح تلقائياً بعد 5 ثوانٍ)**",
                 color=discord.Color.gold(),
                 timestamp=discord.utils.utcnow()
             )
@@ -459,7 +449,24 @@ class ApplyButtonView(discord.ui.View):
 
             admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
             view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
-            await review_channel.send(content=f"🔔 {admin_role_mention} يوجد تقديم هوية جديد بانتظار المراجعة!", embed=embed, view=view)
+            
+            # إرسال الرسالة والأزرار مغلقة
+            sent_message = await review_channel.send(content=f"🔔 {admin_role_mention} يوجد تقديم هوية جديد بانتظار المراجعة!", embed=embed, view=view)
+            
+            # تشغيل مؤقت لمدة 5 ثوانٍ في الخلفية لفتح الأزرار تلقائياً
+            async def enable_buttons_after_delay(msg, v):
+                await asyncio.sleep(5)
+                for child in v.children:
+                    child.disabled = False
+                try:
+                    # تحديث الوصف وإزالة رسالة الانتظار
+                    emb = msg.embeds[0]
+                    emb.description = "✅ **تم فتح الأزرار، يمكنك مراجعة وقبول أو رفض التقديم الآن.**"
+                    await msg.edit(embed=emb, view=v)
+                except Exception:
+                    pass
+
+            bot.loop.create_task(enable_buttons_after_delay(sent_message, view))
         
         await interaction.user.send("✅ **تم استلام إجاباتك وإرسالها للإدارة بنجاح!** سيتم إبلاغك فور مراجعتها.")
 
