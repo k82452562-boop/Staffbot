@@ -4,24 +4,6 @@ import json
 import os
 import time
 import asyncio
-from flask import Flask
-from threading import Thread
-
-# ----------------------------------------------------
-# سيرفر Flask لإبقاء البوت نشطاً على Render 24/7
-# ----------------------------------------------------
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Staffbot Ultimate OP 24/7 with Ultimate Data Persistence is Active!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
 
 # ----------------------------------------------------
 # 1. الثوابت والأيدي (IDs) المطلوبة للسيرفر
@@ -159,7 +141,7 @@ async def save_points_to_discord(guild):
             file = discord.File(DATA_FILE, filename="points_backup.json")
             await channel.send("💾 **[Cloud Backup] النسخة الاحتياطية التلقائية لقاعدة بيانات النقاط:**", file=file)
     except Exception as e:
-        print(f"⚠️️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
+        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية لديسكورد: {e}")
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -212,16 +194,13 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     role_category_name = ""
     all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES
 
-    # التحقق هل العضو يمتلك الرتبة الخاصة (عتبة 700 نقطة)
     has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
     threshold = 700 if has_special_role else 400
 
-    # فحص مكان العضو بدقة منعاً للتداخل
     is_in_middle = any(guild.get_role(r_id) in member.roles for r_id in MIDDLE_ROLES)
     is_in_junior = any(guild.get_role(r_id) in member.roles for r_id in JUNIOR_ROLES)
 
     if is_in_middle:
-        # الإدارة الوسطى: الترقية تتطلب 700 نقطة حصراً
         if current_pts >= 700:
             current_middle_index = -1
             for idx, r_id in enumerate(MIDDLE_ROLES):
@@ -234,7 +213,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 role_category_name = "الإدارة الوسطى"
 
     elif is_in_junior:
-        # الإدارة الصغرى: الترقية تتطلب 700 إذا كان لديه الرتبة الخاصة أو 400 للعامة
         if current_pts >= threshold:
             current_junior_index = -1
             for idx, r_id in enumerate(JUNIOR_ROLES):
@@ -246,12 +224,10 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 target_role_id = JUNIOR_ROLES[current_junior_index + 1]
                 role_category_name = "الإدارة الصغرى"
             else:
-                # إذا وصل لآخر رتبة في الصغرى، ينتقل للوسطى الأولى
                 target_role_id = MIDDLE_ROLES[0]
                 role_category_name = "الإدارة الوسطى"
 
     else:
-        # ليس لديه رتبة إدارية، يبدأ من الصغرى إذا وصل للحد
         if current_pts >= threshold:
             target_role_id = JUNIOR_ROLES[0]
             role_category_name = "الإدارة الصغرى"
@@ -316,7 +292,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر (أزرار مغلقة أول 5 ثواني ثم شخص واحد يقبل فقط)
+# 2. نظام التقديم بالزر
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -328,7 +304,7 @@ class ApplyReviewView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v10")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v11")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -375,7 +351,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v10")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v11")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -414,7 +390,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v10")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v11")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -567,7 +543,7 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [ULTIMATE OP BOT - PERSISTENT DATA READY] تم تشغيل البوت بنجاح واسترجاع النقاط باسم: {bot.user}")
+    print(f"🚀 [RAILWAY BOT READY] تم تشغيل البوت بنجاح واسترجاع النقاط باسم: {bot.user}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -828,7 +804,7 @@ async def profile(ctx, member: discord.Member = None):
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
-    embed.add_field(name="⚠️️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
+    embed.add_field(name="⚠️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"`{bans}` باند", inline=True)
     await ctx.send(embed=embed)
@@ -921,6 +897,7 @@ async def leaderboard(ctx):
     await ctx.send(embed=embed)
 
 if __name__ == "__main__":
-    keep_alive()
     if TOKEN:
         bot.run(TOKEN)
+    else:
+        print("❌ خطأ: يرجى وضع متغير DISCORD_TOKEN في إعدادات Railway (Variables).")
