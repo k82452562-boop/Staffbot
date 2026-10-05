@@ -14,10 +14,8 @@ PREFIX = "."
 ALLOWED_ROLE_IDS = [
     1545520633939624006,  
     1545520950064316516,  
-    1540838084151877714   # الرتبة الخاصة لتحديد عتبة النقاط إلى 700
+    1540838084151877714   
 ]
-
-SPECIAL_PROMOTION_ROLE_ID = 1540838084151877714
 
 # الرومات والأيدي
 LOG_CHANNEL_ID = 1553913719128588389
@@ -50,9 +48,14 @@ POINTS_CONFIG = {
     "ticket": 10,
     "warn": 10,
     "timeout": 10,
-    "ban": 20,          # نقاط الحرمان 20 نقطة
+    "ban": 20,          
     "apply_accept": 10 
 }
+
+# ----------------------------------------------------
+# أيديات رتب الإدارة الصغرى والوسطى بالترتيب
+# ----------------------------------------------------
+JUNIOR_BASE_ROLE_ID = 1540839564506300476  # رتبة الإدارة الصغرى الرئيسية (الترقية عند 400)
 
 JUNIOR_ROLES = [
     1548407040014155806,
@@ -64,12 +67,18 @@ JUNIOR_ROLES = [
     1548407949356048534
 ]
 
+MIDDLE_BASE_ROLE_ID = 1540838084151877714  # رتبة الإدارة الوسطى الرئيسية (الترقية عند 700)
+
 MIDDLE_ROLES = [
-    1548408037272715465,
+    1540838084151877714,
     1548408124531154974,
     1548408197176361191,
     1548408266239910020,
-    1548408357457756200
+    1548408357457756200,
+    1540838584922280016,
+    1554920899583549521,
+    1555165805317197915,
+    1555325627647791215
 ]
 
 intents = discord.Intents.default()
@@ -119,7 +128,7 @@ async def fetch_points_from_discord():
                 for att in message.attachments:
                     if att.filename == "points_backup.json":
                         await att.save(DATA_FILE)
-                        print("☁️️ [Cloud Backup] تم استرجاع ملف النقاط من ديسكورد بنجاح!")
+                        print("☁ [Cloud Backup] تم استرجاع ملف النقاط من ديسكورد بنجاح!")
                         return
     except Exception as e:
         print(f"⚠ خطأ أثناء استرجاع النسخة الاحتياطية من ديسكورد: {e}")
@@ -186,61 +195,80 @@ async def send_unified_log(guild, title, description, color=discord.Color.blue()
                 embed.add_field(name=name, value=value, inline=inline)
         await log_channel.send(embed=embed)
 
+# ----------------------------------------------------
+# 2. دالة الترقية التلقائية وتصفير النقاط
+# ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
     
     target_role_id = None
     role_category_name = ""
-    all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES
+    
+    all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES + [JUNIOR_BASE_ROLE_ID, MIDDLE_BASE_ROLE_ID]
 
-    has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
-    threshold = 700 if has_special_role else 400
+    # فحص موقع العضو في رتب الوسطى
+    middle_index = -1
+    for idx, r_id in enumerate(MIDDLE_ROLES):
+        if any(r.id == r_id for r in member.roles):
+            middle_index = idx
+            break
 
-    is_in_middle = any(guild.get_role(r_id) in member.roles for r_id in MIDDLE_ROLES)
-    is_in_junior = any(guild.get_role(r_id) in member.roles for r_id in JUNIOR_ROLES)
+    # فحص موقع العضو في رتب الصغرى
+    junior_index = -1
+    for idx, r_id in enumerate(JUNIOR_ROLES):
+        if any(r.id == r_id for r in member.roles):
+            junior_index = idx
+            break
 
-    if is_in_middle:
+    has_junior_base = any(r.id == JUNIOR_BASE_ROLE_ID for r in member.roles)
+    has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
+
+    # 1. حالة الإدارة الوسطى (العتبة = 700 نقطة)
+    if middle_index != -1 or has_middle_base:
         if current_pts >= 700:
-            current_middle_index = -1
-            for idx, r_id in enumerate(MIDDLE_ROLES):
-                if guild.get_role(r_id) in member.roles:
-                    current_middle_index = idx
-                    break
-            
-            if current_middle_index != -1 and current_middle_index < len(MIDDLE_ROLES) - 1:
-                target_role_id = MIDDLE_ROLES[current_middle_index + 1]
+            if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
+                target_role_id = MIDDLE_ROLES[middle_index + 1]
+                role_category_name = "الإدارة الوسطى"
+            elif middle_index == -1 and has_middle_base:
+                target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
                 role_category_name = "الإدارة الوسطى"
 
-    elif is_in_junior:
-        if current_pts >= threshold:
-            current_junior_index = -1
-            for idx, r_id in enumerate(JUNIOR_ROLES):
-                if guild.get_role(r_id) in member.roles:
-                    current_junior_index = idx
-                    break
-            
-            if current_junior_index != -1 and current_junior_index < len(JUNIOR_ROLES) - 1:
-                target_role_id = JUNIOR_ROLES[current_junior_index + 1]
+    # 2. حالة الإدارة الصغرى (العتبة = 400 نقطة)
+    elif junior_index != -1 or has_junior_base:
+        if current_pts >= 400:
+            if junior_index != -1:
+                if junior_index < len(JUNIOR_ROLES) - 1:
+                    target_role_id = JUNIOR_ROLES[junior_index + 1]
+                    role_category_name = "الإدارة الصغرى"
+                else:
+                    target_role_id = MIDDLE_ROLES[0]
+                    role_category_name = "الإدارة الوسطى"
+            elif has_junior_base:
+                target_role_id = JUNIOR_ROLES[0]
                 role_category_name = "الإدارة الصغرى"
-            else:
-                target_role_id = MIDDLE_ROLES[0]
-                role_category_name = "الإدارة الوسطى"
 
-    else:
-        if current_pts >= threshold:
-            target_role_id = JUNIOR_ROLES[0]
-            role_category_name = "الإدارة الصغرى"
+    # 3. إذا لم يملك أي رتبة فرعية لكنه وصل 400 نقطة
+    elif current_pts >= 400:
+        target_role_id = JUNIOR_ROLES[0]
+        role_category_name = "الإدارة الصغرى"
 
+    # تنفيذ عملية الترقية وسحب القديم وتصفير النقاط
     if target_role_id:
         target_role = guild.get_role(target_role_id)
         if target_role and target_role not in member.roles:
             try:
-                roles_to_remove = [guild.get_role(rid) for rid in all_admin_roles_ids if guild.get_role(rid) in member.roles and rid != target_role_id]
+                # سحب الرتب القديمة (عدا الرتبة الجديدة ورتب الإدارة الأساسية)
+                roles_to_remove = [
+                    guild.get_role(rid) for rid in JUNIOR_ROLES + MIDDLE_ROLES 
+                    if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id
+                ]
                 if roles_to_remove:
                     await member.remove_roles(*roles_to_remove, reason="ترقية إدارية: سحب الرتبة القديمة")
+                
                 await member.add_roles(target_role, reason="ترقية إدارية جديدة")
                 
+                # تصفير النقاط
                 data = load_data()
                 user_id = str(member.id)
                 if user_id in data and isinstance(data[user_id], dict):
@@ -292,7 +320,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. نظام التقديم بالزر
+# 3. نظام التقديم بالزر
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -371,7 +399,6 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-        # تطبيق وقت انتظار (الكول داون) لمدة 10 دقائق (600 ثانية) عند الرفض أو القبول إذا أردت
         cooldowns = load_cooldowns()
         cooldowns[str(self.applicant.id)] = time.time()
         save_cooldowns(cooldowns)
@@ -396,7 +423,6 @@ class ApplyButtonView(discord.ui.View):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
         
-        # فحص الكول داون (10 دقائق = 600 ثانية)
         if user_id in cooldowns:
             elapsed = time.time() - cooldowns[user_id]
             if elapsed < 600:
@@ -435,7 +461,6 @@ class ApplyButtonView(discord.ui.View):
                 await interaction.user.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى الضغط على زر التقديم من جديد في السيرفر.")
                 return
 
-        # تسجيل وقت بدء التقديم في الكول داون لمنع تكرار التقديم مباشرة
         cooldowns[user_id] = time.time()
         save_cooldowns(cooldowns)
 
@@ -498,7 +523,7 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 3. نظام تغيير الاسم التلقائي في روم "اسم حسابك"
+# 4. نظام تغيير الاسم التلقائي
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
@@ -540,7 +565,7 @@ async def on_message(message):
             print(f"خطأ في تغيير اسم العضو أو إعطائه الرتبة: {e}")
 
 # ----------------------------------------------------
-# 4. الأوامر الأساسية والإدارية
+# 5. الأوامر الأساسية والإدارية
 # ----------------------------------------------------
 
 @bot.event
