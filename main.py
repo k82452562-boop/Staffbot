@@ -119,7 +119,7 @@ async def fetch_points_from_discord():
                 for att in message.attachments:
                     if att.filename == "points_backup.json":
                         await att.save(DATA_FILE)
-                        print("☁️ [Cloud Backup] تم استرجاع ملف النقاط من ديسكورد بنجاح!")
+                        print("☁️️ [Cloud Backup] تم استرجاع ملف النقاط من ديسكورد بنجاح!")
                         return
     except Exception as e:
         print(f"⚠ خطأ أثناء استرجاع النسخة الاحتياطية من ديسكورد: {e}")
@@ -371,6 +371,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
+        # تطبيق وقت انتظار (الكول داون) لمدة 10 دقائق (600 ثانية) عند الرفض أو القبول إذا أردت
         cooldowns = load_cooldowns()
         cooldowns[str(self.applicant.id)] = time.time()
         save_cooldowns(cooldowns)
@@ -395,13 +396,14 @@ class ApplyButtonView(discord.ui.View):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
         
+        # فحص الكول داون (10 دقائق = 600 ثانية)
         if user_id in cooldowns:
             elapsed = time.time() - cooldowns[user_id]
             if elapsed < 600:
                 remaining = int(600 - elapsed)
                 mins = remaining // 60
                 secs = remaining % 60
-                await interaction.response.send_message(f"⏳ **عذرًا!** تم رفض تقديمك السابق، يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` قبل التقديم مرة أخرى.", ephemeral=True)
+                await interaction.response.send_message(f"⏳ **عذرًا!** لديك تقديم سابق قيد المراجعة أو تم رفضه مؤخراً، يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` قبل التقديم مرة أخرى.", ephemeral=True)
                 return
 
         await interaction.response.defer(ephemeral=True)
@@ -432,6 +434,10 @@ class ApplyButtonView(discord.ui.View):
             except Exception:
                 await interaction.user.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى الضغط على زر التقديم من جديد في السيرفر.")
                 return
+
+        # تسجيل وقت بدء التقديم في الكول داون لمنع تكرار التقديم مباشرة
+        cooldowns[user_id] = time.time()
+        save_cooldowns(cooldowns)
 
         review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
         if review_channel:
