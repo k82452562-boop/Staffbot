@@ -207,14 +207,12 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     
     all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES + [JUNIOR_BASE_ROLE_ID, MIDDLE_BASE_ROLE_ID]
 
-    # فحص موقع العضو في رتب الوسطى
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
         if any(r.id == r_id for r in member.roles):
             middle_index = idx
             break
 
-    # فحص موقع العضو في رتب الصغرى
     junior_index = -1
     for idx, r_id in enumerate(JUNIOR_ROLES):
         if any(r.id == r_id for r in member.roles):
@@ -224,7 +222,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     has_junior_base = any(r.id == JUNIOR_BASE_ROLE_ID for r in member.roles)
     has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
 
-    # 1. حالة الإدارة الوسطى (العتبة = 700 نقطة)
     if middle_index != -1 or has_middle_base:
         if current_pts >= 700:
             if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
@@ -234,7 +231,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
                 role_category_name = "الإدارة الوسطى"
 
-    # 2. حالة الإدارة الصغرى (العتبة = 400 نقطة)
     elif junior_index != -1 or has_junior_base:
         if current_pts >= 400:
             if junior_index != -1:
@@ -248,17 +244,14 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 target_role_id = JUNIOR_ROLES[0]
                 role_category_name = "الإدارة الصغرى"
 
-    # 3. إذا لم يملك أي رتبة فرعية لكنه وصل 400 نقطة
     elif current_pts >= 400:
         target_role_id = JUNIOR_ROLES[0]
         role_category_name = "الإدارة الصغرى"
 
-    # تنفيذ عملية الترقية وسحب القديم وتصفير النقاط
     if target_role_id:
         target_role = guild.get_role(target_role_id)
         if target_role and target_role not in member.roles:
             try:
-                # سحب الرتب القديمة (عدا الرتبة الجديدة ورتب الإدارة الأساسية)
                 roles_to_remove = [
                     guild.get_role(rid) for rid in JUNIOR_ROLES + MIDDLE_ROLES 
                     if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id
@@ -268,7 +261,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 
                 await member.add_roles(target_role, reason="ترقية إدارية جديدة")
                 
-                # تصفير النقاط
                 data = load_data()
                 user_id = str(member.id)
                 if user_id in data and isinstance(data[user_id], dict):
@@ -298,7 +290,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
 
     if user_id not in data or not isinstance(data[user_id], dict):
         old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
-        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
 
     user_data = data[user_id]
     user_data["points"] = user_data.get("points", 0) + actual_points
@@ -306,6 +298,10 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
 
     if "تقديم" in action_name or "تكت" in action_name:
         user_data["tickets"] = user_data.get("tickets", 0) + 1
+        
+    # إذا كانت العملية قبول تقديم هوية، يتم زيادة عداد الهويات تلقائياً
+    if "قبول تقديم هوية" in action_name:
+        user_data["identities"] = user_data.get("identities", 0) + 1
 
     save_data(data, guild)
     
@@ -667,7 +663,7 @@ async def ban_role_cmd(ctx, member: discord.Member, duration: str, *, reason: st
         data = load_data()
         user_id = str(ctx.author.id)
         if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
         data[user_id]["bans"] += 1
         save_data(data, guild)
 
@@ -714,7 +710,7 @@ async def timeout(ctx, member: discord.Member, minutes: int, *, reason: str):
         data = load_data()
         user_id = str(ctx.author.id)
         if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
         data[user_id]["timeouts"] += 1
         save_data(data, guild)
 
@@ -783,7 +779,7 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     data = load_data()
     user_id = str(ctx.author.id)
     if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
     data[user_id]["warns"] += 1
     save_data(data, guild)
 
@@ -821,20 +817,22 @@ async def close(ctx):
 async def profile(ctx, member: discord.Member = None):
     target = member or ctx.author
     data = load_data()
-    user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0})
+    user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0})
     if isinstance(user_info, int):
-        user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
 
     pts = user_info.get("points", 0)
     tickets = user_info.get("tickets", 0)
     warns = user_info.get("warns", 0)
     timeouts = user_info.get("timeouts", 0)
     bans = user_info.get("bans", 0)
+    identities = user_info.get("identities", 0) # عداد الهويات المقبولة
 
     embed = discord.Embed(title=f"🛡️ | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
+    embed.add_field(name="🪪 الهويات المقبولة", value=f"`{identities}` هوية", inline=True)
     embed.add_field(name="⚠️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
     embed.add_field(name="🔨 الباندات", value=f"`{bans}` باند", inline=True)
@@ -857,7 +855,7 @@ async def addpoints(ctx, member: discord.Member, amount: int):
     data = load_data()
     user_id = str(member.id)
     if user_id not in data or not isinstance(data[user_id], dict):
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
     data[user_id]["points"] += amount
     save_data(data, ctx.guild)
     await ctx.send(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention}")
@@ -896,7 +894,7 @@ async def resetpoints(ctx, member: discord.Member):
     data = load_data()
     user_id = str(member.id)
     if user_id in data:
-        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0}
+        data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
         save_data(data, ctx.guild)
         await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention}.")
         
