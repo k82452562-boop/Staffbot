@@ -52,10 +52,13 @@ POINTS_CONFIG = {
     "apply_accept": 10 
 }
 
+# الرتبة الخاصة التي تتطلب 5000 نقطة للترقية
+SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
+
 # ----------------------------------------------------
 # أيديات رتب الإدارة الصغرى والوسطى بالترتيب
 # ----------------------------------------------------
-JUNIOR_BASE_ROLE_ID = 1540839564506300476  # رتبة الإدارة الصغرى الرئيسية (الترقية عند 400)
+JUNIOR_BASE_ROLE_ID = 1540839564506300476  # رتبة الإدارة الصغرى الرئيسية
 
 JUNIOR_ROLES = [
     1548407040014155806,
@@ -67,7 +70,7 @@ JUNIOR_ROLES = [
     1548407949356048534
 ]
 
-MIDDLE_BASE_ROLE_ID = 1540838084151877714  # رتبة الإدارة الوسطى الرئيسية (الترقية عند 700)
+MIDDLE_BASE_ROLE_ID = 1540838084151877714  # رتبة الإدارة الوسطى الرئيسية
 
 MIDDLE_ROLES = [
     1540838084151877714,
@@ -196,7 +199,7 @@ async def send_unified_log(guild, title, description, color=discord.Color.blue()
         await log_channel.send(embed=embed)
 
 # ----------------------------------------------------
-# 2. دالة الترقية التلقائية وتصفير النقاط
+# 2. دالة الترقية التلقائية وتصفير النقاط (مع شرط 5000 نقطة للرتبة المحددة)
 # ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
@@ -204,6 +207,10 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     
     target_role_id = None
     role_category_name = ""
+
+    # التحقق مما إذا كان العضو يحمل الرتبة التي تتطلب 5000 نقطة للترقية
+    has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
+    required_points = 5000 if has_special_role else 700 
 
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
@@ -221,7 +228,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
 
     if middle_index != -1 or has_middle_base:
-        if current_pts >= 700:
+        if current_pts >= required_points:
             if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
                 target_role_id = MIDDLE_ROLES[middle_index + 1]
                 role_category_name = "الإدارة الوسطى"
@@ -230,7 +237,8 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 role_category_name = "الإدارة الوسطى"
 
     elif junior_index != -1 or has_junior_base:
-        if current_pts >= 400:
+        junior_req = 400
+        if current_pts >= junior_req:
             if junior_index != -1:
                 if junior_index < len(JUNIOR_ROLES) - 1:
                     target_role_id = JUNIOR_ROLES[junior_index + 1]
@@ -294,7 +302,6 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     user_data["points"] = user_data.get("points", 0) + actual_points
     current_pts = user_data["points"]
 
-    # زيادة العداد بحسب نوع العملية بدقة دون تداخل
     if target_type == "ticket":
         user_data["tickets"] = user_data.get("tickets", 0) + 1
     elif target_type == "identity":
@@ -313,7 +320,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 3. نظام التقديم بالزر
+# 3. نظام التقديم بالزر (مع منع التكرار 10 دقائق)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -361,9 +368,7 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-        # تمرير target_type="identity" لكي تُحسب حصرياً في الهويات المقبولة دون التكتات
         await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})", target_type="identity")
-
         await interaction.response.send_message(f"✅ **تم قبول التقديم بنجاح بواسطة الإداري {staff.mention} وإضافة النقاط لرصيده!**")
 
         try:
@@ -417,14 +422,18 @@ class ApplyButtonView(discord.ui.View):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
         
+        # فحص الكول داون (10 دقائق = 600 ثانية)
         if user_id in cooldowns:
             elapsed = time.time() - cooldowns[user_id]
             if elapsed < 600:
                 remaining = int(600 - elapsed)
                 mins = remaining // 60
                 secs = remaining % 60
-                await interaction.response.send_message(f"⏳ **عذرًا!** لديك تقديم سابق قيد المراجعة أو تم رفضه مؤخراً، يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` قبل التقديم مرة أخرى.", ephemeral=True)
+                await interaction.response.send_message(f"⏳ **عذرًا!** لا يمكنك تقديم طلب جديد الآن. يرجى الانتظار لمدة `{mins} دقيقة و {secs} ثانية` لتكرار التقديم.", ephemeral=True)
                 return
+
+        cooldowns[user_id] = time.time()
+        save_cooldowns(cooldowns)
 
         await interaction.response.defer(ephemeral=True)
         
@@ -454,9 +463,6 @@ class ApplyButtonView(discord.ui.View):
             except Exception:
                 await interaction.user.send("⌛ انقطعت الاستجابة بسبب التأخير. يرجى الضغط على زر التقديم من جديد في السيرفر.")
                 return
-
-        cooldowns[user_id] = time.time()
-        save_cooldowns(cooldowns)
 
         review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
         if review_channel:
@@ -747,7 +753,7 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     proof = ctx.message.attachments[0].url if ctx.message.attachments else (guild.banner.url if guild.banner else guild.icon.url if guild.icon else ctx.author.display_avatar.url)
 
     embed = discord.Embed(
-        title="⚠️️ | تنبيه وتحذير إداري",
+        title="⚠ | تنبيه وتحذير إداري",
         description=f"تم تحذير العضو {member.mention}\n📌 **الرتبة المطبقة:** `{assigned_warn_name}`\n📝 **السبب:** {reason}",
         color=discord.Color.red()
     )
@@ -804,11 +810,10 @@ async def role_play_message(ctx):
 async def close(ctx):
     channel_name = ctx.channel.name.lower()
     if not any(k in channel_name for k in ["ticket", "تكت", "الدعم", "support"]):
-        await ctx.send("⚠️ **حماية:** لا يمكن استخدام أمر الإغلاق هنا!")
+        await ctx.send("⚠ **حماية:** لا يمكن استخدام أمر الإغلاق هنا!")
         return
 
     await ctx.send("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
-    # تمرير target_type="ticket" لكي يُحسب حصرياً في التكتات فقط
     await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت وإنجاز", target_type="ticket")
     await ctx.channel.delete()
 
