@@ -204,8 +204,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     
     target_role_id = None
     role_category_name = ""
-    
-    all_admin_roles_ids = JUNIOR_ROLES + MIDDLE_ROLES + [JUNIOR_BASE_ROLE_ID, MIDDLE_BASE_ROLE_ID]
 
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
@@ -279,7 +277,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             except Exception as e:
                 print(f"خطأ أثناء منح الترقية وسحب القديمة: {e}")
 
-async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str):
+async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
     global double_points_end_time
     
     is_double_active = time.time() < double_points_end_time
@@ -296,11 +294,10 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     user_data["points"] = user_data.get("points", 0) + actual_points
     current_pts = user_data["points"]
 
-    if "تقديم" in action_name or "تكت" in action_name:
+    # زيادة العداد بحسب نوع العملية بدقة دون تداخل
+    if target_type == "ticket":
         user_data["tickets"] = user_data.get("tickets", 0) + 1
-        
-    # إذا كانت العملية قبول تقديم هوية، يتم زيادة عداد الهويات تلقائياً
-    if "قبول تقديم هوية" in action_name:
+    elif target_type == "identity":
         user_data["identities"] = user_data.get("identities", 0) + 1
 
     save_data(data, guild)
@@ -328,7 +325,7 @@ class ApplyReviewView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v11")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v12")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية قبول التقديمات.", ephemeral=True)
@@ -364,7 +361,8 @@ class ApplyReviewView(discord.ui.View):
         except:
             pass
 
-        await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})")
+        # تمرير target_type="identity" لكي تُحسب حصرياً في الهويات المقبولة دون التكتات
+        await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية عضو ({self.applicant.name})", target_type="identity")
 
         await interaction.response.send_message(f"✅ **تم قبول التقديم بنجاح بواسطة الإداري {staff.mention} وإضافة النقاط لرصيده!**")
 
@@ -375,7 +373,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v11")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v12")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ لا تملك صلاحية رفض التقديمات.", ephemeral=True)
@@ -414,7 +412,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v11")
+    @discord.ui.button(label="تقديم", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v12")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -749,7 +747,7 @@ async def warn(ctx, member: discord.Member, *, reason="بدون سبب"):
     proof = ctx.message.attachments[0].url if ctx.message.attachments else (guild.banner.url if guild.banner else guild.icon.url if guild.icon else ctx.author.display_avatar.url)
 
     embed = discord.Embed(
-        title="⚠️ | تنبيه وتحذير إداري",
+        title="⚠️️ | تنبيه وتحذير إداري",
         description=f"تم تحذير العضو {member.mention}\n📌 **الرتبة المطبقة:** `{assigned_warn_name}`\n📝 **السبب:** {reason}",
         color=discord.Color.red()
     )
@@ -810,7 +808,8 @@ async def close(ctx):
         return
 
     await ctx.send("🔒 جاري أرشيف وإغلاق التكت بنجاح...")
-    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت وإنجاز")
+    # تمرير target_type="ticket" لكي يُحسب حصرياً في التكتات فقط
+    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت وإنجاز", target_type="ticket")
     await ctx.channel.delete()
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
@@ -826,12 +825,12 @@ async def profile(ctx, member: discord.Member = None):
     warns = user_info.get("warns", 0)
     timeouts = user_info.get("timeouts", 0)
     bans = user_info.get("bans", 0)
-    identities = user_info.get("identities", 0) # عداد الهويات المقبولة
+    identities = user_info.get("identities", 0)
 
     embed = discord.Embed(title=f"🛡️ | بروفايل الإداري: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط", value=f"`{pts}` نقطة", inline=True)
-    embed.add_field(name="🎫 التكتات والتقديمات", value=f"`{tickets}` إنجاز", inline=True)
+    embed.add_field(name="🎫 التكتات", value=f"`{tickets}` تكت", inline=True)
     embed.add_field(name="🪪 الهويات المقبولة", value=f"`{identities}` هوية", inline=True)
     embed.add_field(name="⚠️ التحذيرات", value=f"`{warns}` تحذير", inline=True)
     embed.add_field(name="🔇 الميوتات", value=f"`{timeouts}` مرة", inline=True)
