@@ -52,7 +52,7 @@ POINTS_CONFIG = {
     "apply_accept": 10 
 }
 
-# الرتبة الخاصة التي تتطلب 5000 نقطة للترقية
+# الرتبة الخاصة بالإدارة العليا التي تتطلب 5000 نقطة للترقية وتمنع الترقية العضو على 400
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
 
 # ----------------------------------------------------
@@ -199,7 +199,7 @@ async def send_unified_log(guild, title, description, color=discord.Color.blue()
         await log_channel.send(embed=embed)
 
 # ----------------------------------------------------
-# 2. دالة الترقية التلقائية وتصفير النقاط (مع شرط 5000 نقطة للرتبة المحددة)
+# 2. دالة الترقية التلقائية وتصفير النقاط (مع شرط 5000 نقطة حصرياً للإدارة العليا)
 # ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
@@ -208,9 +208,13 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     target_role_id = None
     role_category_name = ""
 
-    # التحقق مما إذا كان العضو يحمل الرتبة التي تتطلب 5000 نقطة للترقية
+    # التحقق مما إذا كان العضو يحمل رتبة الإدارة العليا الخاصة (شرط 5000 نقطة)
     has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
-    required_points = 5000 if has_special_role else 700 
+    required_points = 5000 if has_special_role else 400
+
+    # إذا لم يصل الإداري للنقاط المطلوبة بناءً على رتبته، أوقف الترقية فوراً
+    if current_pts < required_points:
+        return
 
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
@@ -228,29 +232,26 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
 
     if middle_index != -1 or has_middle_base:
-        if current_pts >= required_points:
-            if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
-                target_role_id = MIDDLE_ROLES[middle_index + 1]
-                role_category_name = "الإدارة الوسطى"
-            elif middle_index == -1 and has_middle_base:
-                target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
-                role_category_name = "الإدارة الوسطى"
+        if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
+            target_role_id = MIDDLE_ROLES[middle_index + 1]
+            role_category_name = "الإدارة الوسطى / العليا"
+        elif middle_index == -1 and has_middle_base:
+            target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
+            role_category_name = "الإدارة الوسطى / العليا"
 
     elif junior_index != -1 or has_junior_base:
-        junior_req = 400
-        if current_pts >= junior_req:
-            if junior_index != -1:
-                if junior_index < len(JUNIOR_ROLES) - 1:
-                    target_role_id = JUNIOR_ROLES[junior_index + 1]
-                    role_category_name = "الإدارة الصغرى"
-                else:
-                    target_role_id = MIDDLE_ROLES[0]
-                    role_category_name = "الإدارة الوسطى"
-            elif has_junior_base:
-                target_role_id = JUNIOR_ROLES[0]
+        if junior_index != -1:
+            if junior_index < len(JUNIOR_ROLES) - 1:
+                target_role_id = JUNIOR_ROLES[junior_index + 1]
                 role_category_name = "الإدارة الصغرى"
+            else:
+                target_role_id = MIDDLE_ROLES[0]
+                role_category_name = "الإدارة الوسطى"
+        elif has_junior_base:
+            target_role_id = JUNIOR_ROLES[0]
+            role_category_name = "الإدارة الصغرى"
 
-    elif current_pts >= 400:
+    elif current_pts >= 400 and not has_special_role:
         target_role_id = JUNIOR_ROLES[0]
         role_category_name = "الإدارة الصغرى"
 
@@ -260,7 +261,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             try:
                 roles_to_remove = [
                     guild.get_role(rid) for rid in JUNIOR_ROLES + MIDDLE_ROLES 
-                    if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id
+                    if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id and rid != SPECIAL_PROMOTION_ROLE_ID
                 ]
                 if roles_to_remove:
                     await member.remove_roles(*roles_to_remove, reason="ترقية إدارية: سحب الرتبة القديمة")
@@ -276,8 +277,8 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 role_ping_str = notif_role.mention if notif_role else ""
                 msg = (
                     f"{role_ping_str} 🎉 **ترقية إدارية وتصفير نقاط:**\n"
-                    f"وصل الإداري {member.mention} وتمت ترقيته إلى الرتبة الجديدة `{target_role.name}` ضمن **{role_category_name}**!\n"
-                    f"🔄 **ملاحظة:** تم سحب رتبته القديمة وتصفير نقاطه بنجاح."
+                    f"وصل الإداري {member.mention} إلى `{required_points}` نقطة وتمت ترقيته إلى الرتبة الجديدة `{target_role.name}` ضمن **{role_category_name}**!\n"
+                    f"🔄 **ملاحظة:** تم تصفير نقاطه بنجاح."
                 )
                 log_channel = guild.get_channel(LOG_CHANNEL_ID)
                 if log_channel:
