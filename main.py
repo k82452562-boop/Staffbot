@@ -89,7 +89,7 @@ intents.message_content = True
 intents.members = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix=PREFIX, intents=intents)
+bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
 
@@ -576,6 +576,59 @@ async def on_ready():
         await fetch_points_from_discord()
         break
     print(f"🚀 [RAILWAY BOT READY] تم تشغيل البوت بنجاح واسترجاع النقاط باسم: {bot.user}")
+
+@bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
+async def help_command(ctx):
+    embed = discord.Embed(
+        title="🤖 | قائمة أوامر بوت منتدى النظيم الإداري",
+        description="مرحباً بك ياطويل العمر، إليك جميع الأوامر المتاحة مرتبة بشكل جميل ومنظم:",
+        color=discord.Color.blurple(),
+        timestamp=discord.utils.utcnow()
+    )
+    
+    # قسم النقاط والبروفايل
+    embed.add_field(
+        name="📊 | قسم النقاط والبروفايل",
+        value=(
+            "`.نقاط [@العضو]` - الاستعلام عن النقاط الحالية.\n"
+            "`.بروفايل [@العضو]` - عرض بروفايل الإداري وإنجازاته الكاملة.\n"
+            "`.توب` - عرض لوحة الشرف وصدارة الإداريين.\n"
+            "`.إضافة_نقاط [@العضو] [العدد]` - إضافة نقاط لإداري *(أدمن)*.\n"
+            "`.خصم_نقاط [@العضو] [العدد]` - خصم نقاط من إداري *(أدمن)*.\n"
+            "`.تصفير_نقاط [@العضو]` - تصفير نقاط إداري بالكامل *(أدمن)*.\n"
+            "`.دبل_نقاط` - تفعيل مضاعفة النقاط (x2) لمدة ساعة *(أدمن)*."
+        ),
+        inline=False
+    )
+
+    # قسم العقوبات والإنذارات
+    embed.add_field(
+        name="🛡️ | قسم العقوبات والإنذارات",
+        value=(
+            "`.تحذير [@العضو] [السبب]` - إعطاء تحذير إداري وتدريجي.\n"
+            "`.ميوت [@العضو] [الدقائق] [السبب]` - تطبيق عقوبة إسكات (تايم أوت).\n"
+            "`.حرمان [@العضو] [المدة] [السبب]` - تطبيق عقوبة حرمان رول.\n"
+            "`.إغلاق` أو `.اغلاق` - إغلاق وأرشفة روم التكت وإعطاء النقاط."
+        ),
+        inline=False
+    )
+
+    # قسم إدارة الرتب والأنظمة
+    embed.add_field(
+        name="⚙️ | قسم إدارة الرتب والأنظمة",
+        value=(
+            "`.رتبة [@العضو] [الرتبة]` - منح رتبة إدارية أو عامة.\n"
+            "`.سحب_رتبة [@العضو] [الرتبة]` - سحب رتبة من عضو.\n"
+            "`.بانل_تقديم` - إرسال بانل تقديم الهويات التفاعلي بالزر *(أدمن)*.\n"
+            "`.رول` - إرسال رسالة فتح رول بلاي الرسمي."
+        ),
+        inline=False
+    )
+
+    embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else ctx.author.display_avatar.url)
+    embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+
+    await ctx.send(embed=embed)
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
