@@ -22,7 +22,7 @@ ALLOWED_ROLE_IDS = [
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   # أيدي رتبة إشعار الترقية
 
-# 🎯 أيدي روم لوق التكتات المحدث
+# 🎯 أيدي روم لوق التكتات
 TICKET_LOG_CHANNEL_ID = 1543094678038257784  
 
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
@@ -369,14 +369,13 @@ async def on_message(message):
             if user_ids:
                 staff_member = message.guild.get_member(int(user_ids[0]))
 
-        # البحث بداخل الـ Embeds (البطاقات الملونة مثل الظاهرة بالصورة)
+        # البحث بداخل الـ Embeds
         if not staff_member and message.embeds:
             for embed in message.embeds:
                 embed_title = embed.title or ""
                 embed_desc = embed.description or ""
                 
                 if "استلام تكت" in embed_title or "Claim Ticket" in embed_title or "تم استلام التكت" in embed_desc:
-                    # البحث في حقول الـ Embed
                     for field in embed.fields:
                         if "المستلم" in field.name or "استلام" in field.name:
                             user_ids = re.findall(r'(\d{17,19})', field.value)
@@ -384,13 +383,12 @@ async def on_message(message):
                                 staff_member = message.guild.get_member(int(user_ids[0]))
                                 break
                     
-                    # البحث في وصف الـ Embed إذا لم يوجد بالحقول
                     if not staff_member:
                         user_ids = re.findall(r'(\d{17,19})', embed_desc)
                         if user_ids:
                             staff_member = message.guild.get_member(int(user_ids[0]))
 
-        # إذا تم التقاط الإداري المستلم بنجاح، يتم احتساب النقطة في سجله
+        # إضافة النقاط عند الاستلام
         if staff_member:
             ticket_name = "تكت جديدة"
             if message.embeds:
@@ -649,7 +647,7 @@ async def help_command(ctx):
             "▫️ `.تحذير [@العضو] [السبب]` ↞ تنبيه وتطبيق رتب التحذير التلقائية.\n"
             "▫️ `.ميوت [@العضو] [الدقائق] [السبب]` ↞ تطبيق التايم أوت ونشر النموذج.\n"
             "▫️ `.حرمان [@العضو] [المدة] [السبب]` ↞ سحب الرتب وتطبيق عقوبة حرمان رول.\n"
-            "▫️ `.إغلاق` ↞ أرشفة التكت واحتساب النقطة في رصيد الإداري *(اختياري)*."
+            "▫️ `.إغلاق` ↞ التنبيه بأن الإغلاق عن طريق زر التكت فقط."
         ),
         inline=False
     )
@@ -900,6 +898,7 @@ async def role_play_message(ctx):
     await ctx.message.delete()
     await ctx.send(message_content)
 
+# 🎯 أمر الإغلاق التنبيهي الجديد
 @bot.command(name="إغلاق", aliases=["اغلاق", "close"])
 async def close(ctx):
     channel_name = ctx.channel.name.lower()
@@ -907,9 +906,12 @@ async def close(ctx):
         await ctx.send("⚠ **حماية:** الأمر هذا مخصص لـ رومات التكت فقط!")
         return
 
-    await ctx.send("🔒 جاري أرشيف التكت وإغلاقه...")
-    await add_points_direct(ctx.guild, ctx.author, POINTS_CONFIG["ticket"], "إغلاق تكت وانجازه", target_type="ticket")
-    await ctx.channel.delete()
+    embed = discord.Embed(
+        title="⚠️ | تنبيه إغلاق التكت",
+        description="**الإغلاق عن طريق زر التكت فقط!**\n*(جاتك النقاط في وقت استلامك للتذكرة)*",
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=embed)
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
 async def profile(ctx, member: discord.Member = None):
