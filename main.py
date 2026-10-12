@@ -4,6 +4,7 @@ import json
 import os
 import time
 import asyncio
+import re
 
 # ----------------------------------------------------
 # 1. الثوابت والأيدي (IDs) المطلوبة للسيرفر
@@ -20,6 +21,9 @@ ALLOWED_ROLE_IDS = [
 # الرومات والأيدي
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   # أيدي رتبة إشعار الترقية
+
+# 🎯 أيدي روم لوق التكتات المحدث
+TICKET_LOG_CHANNEL_ID = 1543094678038257784  
 
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
@@ -321,7 +325,89 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 3. نظام التقديم بالزر (مع منع التكرار 10 دقائق)
+# 3. نظام قراءة لوق التكتات وإضافة النقاط تلقائياً للمستلم 🎟️
+# ----------------------------------------------------
+@bot.event
+async def on_message(message):
+    await bot.process_commands(message)
+
+    # 1. نظام تغيير الاسم التلقائي
+    if message.channel.id == NICKNAME_CHANNEL_ID and not message.author.bot:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        guild = message.guild
+        member = message.author
+        raw_name = message.content.strip()
+
+        if raw_name:
+            new_nickname = f"NZM | {raw_name}"
+            if len(new_nickname) > 32:
+                new_nickname = new_nickname[:32]
+
+            try:
+                await member.edit(nick=new_nickname, reason="تغيير الاسم تلقائياً")
+                role_to_add = guild.get_role(NICKNAME_ROLE_ID)
+                if role_to_add and role_to_add not in member.roles:
+                    await member.add_roles(role_to_add, reason="منح رتبة اسم الحساب تلقائياً")
+                try:
+                    await member.send(f"✅ **تم تغيير اسمك بالسيرفر لـ:** `{new_nickname}` ونزلت لك الرتبة.")
+                except Exception:
+                    pass
+            except Exception as e:
+                print(f"خطأ في تعديل الاسم: {e}")
+
+    # 2. 🎯 رصد لوق استلام التكت (Claim Ticket) وإضافة النقاط فوراً
+    if message.channel.id == TICKET_LOG_CHANNEL_ID and message.author.bot:
+        staff_member = None
+
+        # البحث بالمحتوى العادي
+        if "تم استلام التكت بواسطة" in message.content:
+            user_ids = re.findall(r'<@!?(\d+)>', message.content)
+            if user_ids:
+                staff_member = message.guild.get_member(int(user_ids[0]))
+
+        # البحث بداخل الـ Embeds (البطاقات الملونة مثل الظاهرة بالصورة)
+        if not staff_member and message.embeds:
+            for embed in message.embeds:
+                embed_title = embed.title or ""
+                embed_desc = embed.description or ""
+                
+                if "استلام تكت" in embed_title or "Claim Ticket" in embed_title or "تم استلام التكت" in embed_desc:
+                    # البحث في حقول الـ Embed
+                    for field in embed.fields:
+                        if "المستلم" in field.name or "استلام" in field.name:
+                            user_ids = re.findall(r'(\d{17,19})', field.value)
+                            if user_ids:
+                                staff_member = message.guild.get_member(int(user_ids[0]))
+                                break
+                    
+                    # البحث في وصف الـ Embed إذا لم يوجد بالحقول
+                    if not staff_member:
+                        user_ids = re.findall(r'(\d{17,19})', embed_desc)
+                        if user_ids:
+                            staff_member = message.guild.get_member(int(user_ids[0]))
+
+        # إذا تم التقاط الإداري المستلم بنجاح، يتم احتساب النقطة في سجله
+        if staff_member:
+            ticket_name = "تكت جديدة"
+            if message.embeds:
+                for field in message.embeds[0].fields:
+                    if "التكت" in field.name:
+                        ticket_name = field.value
+            
+            await add_points_direct(
+                message.guild, 
+                staff_member, 
+                POINTS_CONFIG["ticket"], 
+                f"استلام تكت ({ticket_name}) عبر اللوق تلقائياً", 
+                target_type="ticket"
+            )
+
+# ----------------------------------------------------
+# 4. نظام التقديم بالزر (مع منع التكرار 10 دقائق)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -523,49 +609,7 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 4. نظام تغيير الاسم التلقائي
-# ----------------------------------------------------
-@bot.event
-async def on_message(message):
-    await bot.process_commands(message)
-
-    if message.author.bot:
-        return
-
-    if message.channel.id == NICKNAME_CHANNEL_ID:
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        guild = message.guild
-        member = message.author
-        raw_name = message.content.strip()
-
-        if not raw_name:
-            return
-
-        new_nickname = f"NZM | {raw_name}"
-        if len(new_nickname) > 32:
-            new_nickname = new_nickname[:32]
-
-        try:
-            await member.edit(nick=new_nickname, reason="تغيير الاسم تلقائياً")
-            
-            role_to_add = guild.get_role(NICKNAME_ROLE_ID)
-            if role_to_add and role_to_add not in member.roles:
-                await member.add_roles(role_to_add, reason="منح رتبة اسم الحساب تلقائياً")
-
-            try:
-                await member.send(f"✅ **تم تغيير اسمك بالسيرفر لـ:** `{new_nickname}` ونزلت لك الرتبة.")
-            except Exception:
-                pass
-
-        except Exception as e:
-            print(f"خطأ في تعديل الاسم: {e}")
-
-# ----------------------------------------------------
-# 5. الأوامر الأساسية والإدارية (مع التشغيل التلقائي لاسترجاع البيانات)
+# 5. الأوامر الأساسية والإدارية
 # ----------------------------------------------------
 
 @bot.event
@@ -576,9 +620,6 @@ async def on_ready():
         break
     print(f"🚀 [مطنوخ الحدود شغال] جاهزين ولابسين المحزم باسم: {bot.user}")
 
-# ----------------------------------------------------
-# أمر المساعدة الرئاسي والهيبة (.help)
-# ----------------------------------------------------
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
 async def help_command(ctx):
     embed = discord.Embed(
@@ -608,7 +649,7 @@ async def help_command(ctx):
             "▫️ `.تحذير [@العضو] [السبب]` ↞ تنبيه وتطبيق رتب التحذير التلقائية.\n"
             "▫️ `.ميوت [@العضو] [الدقائق] [السبب]` ↞ تطبيق التايم أوت ونشر النموذج.\n"
             "▫️ `.حرمان [@العضو] [المدة] [السبب]` ↞ سحب الرتب وتطبيق عقوبة حرمان رول.\n"
-            "▫️ `.إغلاق` ↞ أرشفة التكت واحتساب النقطة في رصيد الإداري."
+            "▫️ `.إغلاق` ↞ أرشفة التكت واحتساب النقطة في رصيد الإداري *(اختياري)*."
         ),
         inline=False
     )
