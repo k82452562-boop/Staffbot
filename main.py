@@ -114,27 +114,29 @@ async def check_permissions(ctx):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(title="⚠️ | خانك التعبير أو ناقصك بيانات", description="يا بعدي ايمسح الأمر واكتبه كامل ومضبوط.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️ | خانك التعبير أو ناقصك بيانات", description="يا بعدي امسح الأمر واكتبه كامل ومضبوط.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
         embed = discord.Embed(title="⚠️ | فيه خطأ بالمدخلات", description="تأكد إنك مسوي منشن للعضو أو للرتبة بالشكل الصحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
-# دوال الحفظ والقراءة الآمنة مع النسخ الاحتياطي السحابي في ديسكورد
+# دوال الحفظ والقراءة الآمنة مع النسخ الاحتياطي السحابي التلقائي
 async def fetch_points_from_discord():
     try:
         channel = bot.get_channel(BACKUP_CHANNEL_ID)
         if not channel:
+            print("⚠️ روم النسخ الاحتياطي غير موجود أو البوت ما يشوفه!")
             return
-        async for message in channel.history(limit=20):
-            if message.author == bot.user and message.attachments:
+        async for message in channel.history(limit=30):
+            if message.attachments:
                 for att in message.attachments:
                     if att.filename == "points_backup.json":
                         await att.save(DATA_FILE)
-                        print("☁️ [نسخة السحاب] تم استرجاع نقاط الإدارة بنجاح!")
+                        print("☁️ [استرجاع سحابي ناجح] تم سحب قاعدة بيانات النقاط من الروم المخصص بنجاح!")
                         return
+        print("ℹ️ لم يتم العثور على نسخة سابقة في الروم، سيتم البدء بملف جديد.")
     except Exception as e:
-        print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية: {e}")
+        print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية من ديسكورد: {e}")
 
 async def save_points_to_discord(guild):
     try:
@@ -151,7 +153,7 @@ async def save_points_to_discord(guild):
                             except:
                                 pass
             file = discord.File(DATA_FILE, filename="points_backup.json")
-            await channel.send("💾 **[حفظ تلقائي] تم حفظ قاعدة بيانات النقاط بالسحاب بنجاح:**", file=file)
+            await channel.send("💾 **[حفظ تلقائي بالسحاب] تم تحديث نسخة النقاط:**", file=file)
     except Exception as e:
         print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية: {e}")
 
@@ -208,11 +210,9 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     target_role_id = None
     role_category_name = ""
 
-    # التحقق مما إذا كان العضو يحمل رتبة الإدارة العليا الخاصة (شرط 5000 نقطة)
     has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
     required_points = 5000 if has_special_role else 400
 
-    # إذا ما وصل النقاط المطلوبة، يطلع فوراً
     if current_pts < required_points:
         return
 
@@ -423,7 +423,6 @@ class ApplyButtonView(discord.ui.View):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
         
-        # فحص الكول داون (10 دقائق = 600 ثانية)
         if user_id in cooldowns:
             elapsed = time.time() - cooldowns[user_id]
             if elapsed < 600:
@@ -566,7 +565,7 @@ async def on_message(message):
             print(f"خطأ في تعديل الاسم: {e}")
 
 # ----------------------------------------------------
-# 5. الأوامر الأساسية والإدارية
+# 5. الأوامر الأساسية والإدارية (مع التشغيل التلقائي لاسترجاع البيانات)
 # ----------------------------------------------------
 
 @bot.event
