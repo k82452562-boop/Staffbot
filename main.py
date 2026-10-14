@@ -12,6 +12,9 @@ import re
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
 
+# 🎯 أيدي صاحب البوت الرئيسي (له الصلاحية المطلقة في جميع الأحوال)
+BOT_OWNER_ID = 917414299184533515
+
 ALLOWED_ROLE_IDS = [
     1545520633939624006,  
     1545520950064316516,  
@@ -99,10 +102,20 @@ COOLDOWN_FILE = "cooldowns.json"
 
 double_points_end_time = 0
 
+# ----------------------------------------------------
+# فحص الصلاحيات التلقائي
+# ----------------------------------------------------
 @bot.check
 async def check_permissions(ctx):
+    # منح الصلاحية الكاملة صاحب الأيدي مباشرة بدون رتب
+    if ctx.author.id == BOT_OWNER_ID:
+        return True
+    
+    # منح الصلاحية للأدمن
     if ctx.author.guild_permissions.administrator:
         return True
+        
+    # منح الصلاحية لرتب الإدارة المحددة
     has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
     if has_role:
         return True
@@ -419,7 +432,7 @@ class ApplyReviewView(discord.ui.View):
 
     @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v12")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية قبول التقديمات يا الغالي.", ephemeral=True)
             return
 
@@ -465,7 +478,7 @@ class ApplyReviewView(discord.ui.View):
 
     @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v12")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية رفض التقديمات.", ephemeral=True)
             return
 
@@ -588,7 +601,7 @@ class ApplyButtonView(discord.ui.View):
 
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
 async def panel_apply(ctx):
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         return
     
     try:
@@ -607,8 +620,27 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 5. الأوامر الأساسية والإدارية
+# 5. الأوامر الأساسية والإدارية (مع أمر الحذف المخصص)
 # ----------------------------------------------------
+
+# 👑 أمر حذف الروم المخصص لصاحب الأيدي حصرياً
+@bot.command(name="حذف", aliases=["delete", "del"])
+async def delete_channel_cmd(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        embed = discord.Embed(
+            title="⛔ | أمر محكور ومستقل",
+            description="معليش، هذا الأمر خاص ومحكور لصاحب الصلاحية المطلقة فقط!",
+            color=discord.Color.red()
+        )
+        await ctx.send(embed=embed, delete_after=5)
+        return
+
+    try:
+        await ctx.send("💥 جاري حذف الروم بنجاح...")
+        await asyncio.sleep(1)
+        await ctx.channel.delete(reason=f"حذف الروم بطلب من صاحب البوت ({ctx.author.name})")
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ أثناء حذف الروم: {e}")
 
 @bot.event
 async def on_ready():
@@ -658,6 +690,7 @@ async def help_command(ctx):
             "▫️ `.رتبة [@العضو] [الرتبة]` ↞ إعطاء رتبة مباشرة مع حماية الرتب الأعلى.\n"
             "▫️ `.سحب_رتبة [@العضو] [الرتبة]` ↞ سحب رتبة محددة من العضو.\n"
             "▫️ `.بانل_تقديم` ↞ تنزيل بانل التقديم التفاعلي لـ روم التفعيل *(للأدمن)*.\n"
+            "▫️ `.حذف` ↞ حذف الروم الحالي مباشرة *(خاص بالمالك)*.\n"
             "▫️ `.رول` ↞ نداء رسمي لبداية فعالية الرول بلاي."
         ),
         inline=False
@@ -671,7 +704,7 @@ async def help_command(ctx):
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
     global double_points_end_time
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         await ctx.send("❌ هذا الأمر محكور لأهل الصلاحيات العليا (Administrator) فقط.", delete_after=5)
         return
 
@@ -687,7 +720,7 @@ async def double_points(ctx):
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         if ctx.author.top_role <= role:
             await ctx.send("❌ **حماية:** ما يمديك تعطي رتبة أعلى من رتبتك أو تساويها!", delete_after=6)
             return
@@ -702,7 +735,7 @@ async def give_role(ctx, member: discord.Member, role: discord.Role):
 
 @bot.command(name="سحب_رتبة", aliases=["removerole"])
 async def remove_role(ctx, member: discord.Member, role: discord.Role):
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         if ctx.author.top_role <= role:
             await ctx.send("❌ **حماية:** ما يمديك تسحب رتبة أعلى من رتبتك أو تساويها!", delete_after=6)
             return
@@ -898,7 +931,6 @@ async def role_play_message(ctx):
     await ctx.message.delete()
     await ctx.send(message_content)
 
-# 🎯 أمر الإغلاق التنبيهي الجديد
 @bot.command(name="إغلاق", aliases=["اغلاق", "close"])
 async def close(ctx):
     channel_name = ctx.channel.name.lower()
@@ -950,7 +982,7 @@ async def points(ctx, member: discord.Member = None):
 
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         return
     data = load_data()
     user_id = str(member.id)
@@ -970,7 +1002,7 @@ async def addpoints(ctx, member: discord.Member, amount: int):
 
 @bot.command(name="خصم_نقاط", aliases=["removepoints"])
 async def removepoints(ctx, member: discord.Member, amount: int):
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         return
     data = load_data()
     user_id = str(member.id)
@@ -989,7 +1021,7 @@ async def removepoints(ctx, member: discord.Member, amount: int):
 
 @bot.command(name="تصفير_نقاط", aliases=["resetpoints"])
 async def resetpoints(ctx, member: discord.Member):
-    if not ctx.author.guild_permissions.administrator:
+    if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         return
     data = load_data()
     user_id = str(member.id)
