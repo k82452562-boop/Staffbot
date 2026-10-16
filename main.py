@@ -103,7 +103,6 @@ double_points_end_time = 0
 # ----------------------------------------------------
 async def find_member_by_name(guild: discord.Guild, query: str):
     query = query.strip().lower()
-    # إذا كتب المستخدم أيدي بالخطأ، ندعمه برضه
     if query.isdigit():
         member = guild.get_member(int(query))
         if member:
@@ -113,7 +112,6 @@ async def find_member_by_name(guild: discord.Guild, query: str):
         except:
             pass
 
-    # البحث بالاسم داخل السيرفر (Display Name أو Username)
     for member in guild.members:
         if query in member.name.lower() or (member.nick and query in member.nick.lower()):
             return member
@@ -370,7 +368,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. النماذج والأزرار التفاعلية لأمر (.عقوبات) (البحث بالاسم / اليوزر) 🛡️
+# 2. النماذج والأزرار التفاعلية لأمر (.عقوبات) 🛡️
 # ----------------------------------------------------
 
 async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove: discord.Role, duration_seconds: int):
@@ -396,7 +394,7 @@ async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove:
 
 # نموذج التحذيرات
 class WarnModal(discord.ui.Modal, title="⚠ | تطبيق تحذير إداري"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا (مثل: Rayan)", required=True)
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
     duration_input = discord.ui.TextInput(label="المدة (مثال: 3 ايام / 5 دقائق)", placeholder="سوف يزول التحذير بعدها تلقائياً", required=True)
     reason_input = discord.ui.TextInput(label="سبب التحذير", style=discord.TextStyle.paragraph, placeholder="اكتب السبب بالتفصيل هنا...", required=True)
     proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط صورة أو فيديو للدليل...", required=False)
@@ -600,7 +598,7 @@ class PenaltiesView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تحذير إداري", style=discord.ButtonStyle.gold, emoji="⚠️", custom_id="btn_warn_penalties_v1")
+    @discord.ui.button(label="تحذير إداري", style=discord.ButtonStyle.secondary, emoji="⚠️", custom_id="btn_warn_penalties_v1")
     async def btn_warn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(WarnModal())
 
