@@ -12,7 +12,7 @@ import re
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
 
-# 🎯 أيدي الحاكم ريان (صاحب الصلاحية المطلقة)
+# 🎯 أيدي الحاكم ريان (صاحب السيادة والتحكم الكلي)
 BOT_OWNER_ID = 917414299184533515
 
 ALLOWED_ROLE_IDS = [
@@ -99,6 +99,16 @@ COOLDOWN_FILE = "cooldowns.json"
 double_points_end_time = 0
 
 # ----------------------------------------------------
+# دالة فحص صلاحيات الأدمنستريتر والمطانيخ
+# ----------------------------------------------------
+def is_admin_or_owner(ctx):
+    if ctx.author.id == BOT_OWNER_ID:
+        return True
+    if ctx.author.guild_permissions.administrator:
+        return True
+    return any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
+
+# ----------------------------------------------------
 # دالة البحث عن العضو بالاسم أو اليوزر نيم
 # ----------------------------------------------------
 async def find_member_by_name(guild: discord.Guild, query: str):
@@ -138,23 +148,16 @@ def parse_duration_to_seconds(duration_str: str) -> int:
     return val * 86400
 
 # ----------------------------------------------------
-# فحص الصلاحيات التلقائي
+# فحص الصلاحيات التلقائي العام
 # ----------------------------------------------------
 @bot.check
 async def check_permissions(ctx):
-    if ctx.author.id == BOT_OWNER_ID:
-        return True
-    
-    if ctx.author.guild_permissions.administrator:
-        return True
-        
-    has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
-    if has_role:
+    if is_admin_or_owner(ctx):
         return True
     
     embed = discord.Embed(
-        title="⚠️ | وين يا الذيب؟ الصلاحيات ما تكفي",
-        description="هالأمر مصمم خصيصاً للمطانيخ والإداريين، ما تقدر تستخدمه.",
+        title="⚠️ | وين رايح يا الذيب؟ الصلاحيات ما تكفي",
+        description="هالأوامر والأنظمة مخصصة للأدمنستريتر (Administrator) وطاقم الإدارة المعتمد فقط.",
         color=discord.Color.from_rgb(200, 30, 30)
     )
     await ctx.send(embed=embed, delete_after=5)
@@ -163,10 +166,10 @@ async def check_permissions(ctx):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(title="⚠️ | ناقصتك تفاصيل يا الغالي", description="تأكد من كتابة الأمر بشكل كامل وصحيح.", color=discord.Color.from_rgb(220, 150, 20))
+        embed = discord.Embed(title="⚠️ | ناقصتك تفاصيل يا الكفو", description="امسح الأمر واكتبه كامل ومضبوط.", color=discord.Color.from_rgb(220, 150, 20))
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | لخبطة في المدخلات", description="تأكد إنك كتبت اسم العضو أو الرتبة بالشكل السليم.", color=discord.Color.from_rgb(220, 150, 20))
+        embed = discord.Embed(title="⚠️ | لخبطة في المدخلات", description="تأكد من كتابة اسم العضو أو البيانات بالشكل السليم.", color=discord.Color.from_rgb(220, 150, 20))
         await ctx.send(embed=embed, delete_after=5)
 
 # دوال الحفظ والقراءة الآمنة
@@ -392,7 +395,6 @@ async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove:
     except Exception as e:
         print(f"خطأ في إزالة التحذير التلقائي: {e}")
 
-# نموذج التحذيرات الخارق
 class WarnModal(discord.ui.Modal, title="⚠ | لوحة توثيق التحذير الإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
     duration_input = discord.ui.TextInput(label="المدة (مثال: 3 ايام / 5 دقائق)", placeholder="راح يزول التحذير تلقائياً بعدها", required=True)
@@ -471,7 +473,6 @@ class WarnModal(discord.ui.Modal, title="⚠ | لوحة توثيق التحذي�
         if assigned_warn_role:
             bot.loop.create_task(auto_remove_warn(guild, member.id, assigned_warn_role, duration_sec))
 
-# نموذج التايم أوت الخارق
 class TimeoutModal(discord.ui.Modal, title="🔇 | لوحة توثيق التايم أوت (الميوت)"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
     minutes_input = discord.ui.TextInput(label="المدة بالدقائق", placeholder="مثال: 60 (يعني ساعة)", required=True)
@@ -531,7 +532,6 @@ class TimeoutModal(discord.ui.Modal, title="🔇 | لوحة توثيق التا�
         except Exception as e:
             await interaction.response.send_message(f"❌ عذراً، حصل خطأ أثناء التايم أوت: {e}", ephemeral=True)
 
-# نموذج الحرمان الخارق
 class BanModal(discord.ui.Modal, title="🚫 | لوحة توثيق حرمان الرول"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
     duration_input = discord.ui.TextInput(label="المدة (مثال: اسبوع / 3 ايام)", required=True)
@@ -611,7 +611,84 @@ class PenaltiesView(discord.ui.View):
         await interaction.response.send_modal(BanModal())
 
 # ----------------------------------------------------
-# 3. نظام قراءة لوق التكتات وإضافة النقاط تلقائياً للمستلم 🎟️
+# 3. داشبورد الحاكم ريان التفاعلية (لوحة التحكم الخاصة) 🎛️
+# ----------------------------------------------------
+class OwnerDashboardView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="تفعيل دبل النقاط (x2)", style=discord.ButtonStyle.success, emoji="🔥", custom_id="dash_double_pts")
+    async def dash_double(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global double_points_end_time
+        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ هذا الزر مخصص للأدمنستريتر فقط!", ephemeral=True)
+            return
+        double_points_end_time = time.time() + 3600
+        await interaction.response.send_message("🔥 **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة عبر الداشبورد!**", ephemeral=True)
+        await send_unified_log(interaction.guild, "🔥 | تفعيل دبل النقاط", f"قام {interaction.user.mention} بتفعيل دبل النقاط لمدة ساعة عبر لوحة التحكم.", discord.Color.from_rgb(241, 196, 15))
+
+    @discord.ui.button(label="نشر بانل التقديم", style=discord.ButtonStyle.primary, emoji="📋", custom_id="dash_panel_apply")
+    async def dash_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ هذا الزر مخصص للأدمنستريتر فقط!", ephemeral=True)
+            return
+        embed = discord.Embed(
+            title="📋 | نظام تقديم الهوية الرسمي",
+            description="تبي تطلع الهوية وتفعل حسابك بالسيرفر؟ اضغط على الزر تحت وبيجيك البوت في الخاص مباشرة يدردش معك ويأخذ بياناتك بكل سهولة.",
+            color=discord.Color.from_rgb(52, 152, 219)
+        )
+        embed.set_footer(text="منتدى النظيم | قيادة السيرفر العليا")
+        view = ApplyButtonView()
+        await interaction.channel.send(embed=embed, view=view)
+        await interaction.response.send_message("✅ **تم إرسال بانل التقديم في هذا الروم بنجاح!**", ephemeral=True)
+
+    @discord.ui.button(label="لوحة الشرف (التوب)", style=discord.ButtonStyle.secondary, emoji="🏆", custom_id="dash_top")
+    async def dash_top(self, interaction: discord.Interaction, button: discord.ui.Button):
+        data = load_data()
+        if not data:
+            await interaction.response.send_message("📊 لا توجد بيانات كافية حتى الآن.", ephemeral=True)
+            return
+        sorted_users = []
+        for user_id, info in data.items():
+            pts = info["points"] if isinstance(info, dict) else info
+            sorted_users.append((int(user_id), pts))
+        sorted_users.sort(key=lambda x: x[1], reverse=True)
+
+        embed = discord.Embed(title="🏆 | لوحة الشرف وصدارة المطانيخ", color=discord.Color.from_rgb(241, 196, 15))
+        description = ""
+        for index, (uid, pts) in enumerate(sorted_users[:10], start=1):
+            medal = "🥇" if index == 1 else "🥈" if index == 2 else "🥉" if index == 3 else f"`#{index}`"
+            description += f"{medal} <@{uid}> — **{pts}** نقطة\n"
+        embed.description = description
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.command(name="لوحة", aliases=["dashboard", "owner_panel"])
+async def owner_dashboard(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للحاكم ريان فقط!", delete_after=5)
+        return
+    
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+    embed = discord.Embed(
+        title="🎛️ | لوحة تحكم الحاكم ريان الخارقة (Dashboard)",
+        description="أهلاً بك يا الحاكم في لوحتك الخاصة المخصصة لإدارة العمليات والأنظمة بضغطة زر واحدة:\n\n"
+                    "🔥 **تفعيل الدبل:** تفعيل مضاعفة نقاط الإداريين لمدة ساعة.\n"
+                    "📋 **نشر البانل:** إرسال بانل تقديم الهويات في الروم الحالي.\n"
+                    "🏆 **لوحة الشرف:** عرض قائمة المتصدرين بشكل سريع.",
+        color=discord.Color.from_rgb(155, 89, 182)
+    )
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    embed.set_footer(text="منتدى النظيم | لوحة التحكم السيادية")
+    
+    view = OwnerDashboardView()
+    await ctx.send(embed=embed, view=view)
+
+# ----------------------------------------------------
+# 4. نظام قراءة لوق التكتات وإضافة النقاط تلقائياً للمستلم 🎟️
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
@@ -686,7 +763,7 @@ async def on_message(message):
             )
 
 # ----------------------------------------------------
-# 4. نظام التقديم الخارق بالزر
+# 5. نظام التقديم الخارق بالزر
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -700,7 +777,7 @@ class ApplyReviewView(discord.ui.View):
 
     @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v12")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+        if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
             return
 
@@ -746,7 +823,7 @@ class ApplyReviewView(discord.ui.View):
 
     @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v12")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+        if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
             return
 
@@ -869,10 +946,6 @@ class ApplyButtonView(discord.ui.View):
 
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
 async def panel_apply(ctx):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("الامر هاذا خاص في الحاكم ريان و شكرا")
-        return
-    
     try:
         await ctx.message.delete()
     except Exception:
@@ -889,7 +962,7 @@ async def panel_apply(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 5. الأوامر الأساسية والأمر الشامل (.عقوبات)
+# 6. الأوامر الأساسية والأمر الشامل (.عقوبات)
 # ----------------------------------------------------
 
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
@@ -911,7 +984,7 @@ async def penalties_cmd(ctx):
 @bot.command(name="حذف", aliases=["delete", "del"])
 async def delete_channel_cmd(ctx):
     if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("الامر هاذا خاص في الحاكم ريان و شكرا")
+        await ctx.send("❌ عذراً يا الحبيب، أمر الحذف مخصص للحاكم ريان فقط ولا يحق لأي إداري استخدامه!")
         return
 
     try:
@@ -925,6 +998,7 @@ async def delete_channel_cmd(ctx):
 async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(PenaltiesView())
+    bot.add_view(OwnerDashboardView())
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
@@ -945,10 +1019,10 @@ async def help_command(ctx):
             "▫️ `.نقاط [@العضو]` ↞ استعلام عن رصيد النقاط.\n"
             "▫️ `.بروفايل [@العضو]` ↞ كشف حساب إداري متكامل (تكتات، هويات، عقوبات).\n"
             "▫️ `.توب` ↞ قائمة صدارة المطانيخ بالإدارة.\n"
-            "▫️ `.إضافة_نقاط [@العضو] [العدد]` ↞ إضافة نقاط *(الحاكم ريان)*.\n"
-            "▫️ `.خصم_نقاط [@العضو] [العدد]` ↞ خصم نقاط *(الحاكم ريان)*.\n"
-            "▫️ `.تصفير_نقاط [@العضو]` ↞ تصفير السجل *(الحاكم ريان)*.\n"
-            "▫️ `.دبل_نقاط` ↞ تفعيل دبل النقاط (x2) لمدة ساعة *(الحاكم ريان)*."
+            "▫️ `.إضافة_نقاط [@العضو] [العدد]` ↞ إضافة نقاط *(للأدمنستريتر)*.\n"
+            "▫️ `.خصم_نقاط [@العضو] [العدد]` ↞ خصم نقاط *(للأدمنستريتر)*.\n"
+            "▫️ `.تصفير_نقاط [@العضو]` ↞ تصفير السجل *(للأدمنستريتر)*.\n"
+            "▫️ `.دبل_نقاط` ↞ تفعيل دبل النقاط (x2) لمدة ساعة *(للأدمنستريتر)*."
         ),
         inline=False
     )
@@ -957,6 +1031,7 @@ async def help_command(ctx):
         name="🛡️ ┋ لوحة العقوبات والحزم",
         value=(
             "▫️ `.عقوبات` ↞ فتح لوحة الأزرار والنماذج (تحذير، تايم، حرمان).\n"
+            "▫️ `.لوحة` ↞ لوحة تحكم الداشبورد الخاصة *(الحاكم ريان)*.\n"
             "▫️ `.إغلاق` ↞ تنبيه بأن الإغلاق عن طريق زر التكت فقط."
         ),
         inline=False
@@ -967,33 +1042,29 @@ async def help_command(ctx):
         value=(
             "▫️ `.رتبة [@العضو] [الرتبة]` ↞ إعطاء رتبة مع حماية الرتب الأعلى.\n"
             "▫️ `.سحب_رتبة [@العضو] [الرتبة]` ↞ سحب رتبة محددة.\n"
-            "▫️ `.بانل_تقديم` ↞ تنزيل بانل التقديم التفاعلي *(الحاكم ريان)*.\n"
-            "▫️ `.حذف` ↞ حذف الروم الحالي *(الحاكم ريان)*."
+            "▫️ `.بانل_تقديم` ↞ تنزيل بانل التقديم التفاعلي *(للأدمنستريتر)*.\n"
+            "▫️ `.حذف` ↞ حذف الروم الحالي *(الحاكم ريان حصرياً)*."
         ),
         inline=False
     )
 
     embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else ctx.author.display_avatar.url)
-    embed.set_footer(text=f"طلب بواسطة الحاكم: {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+    embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
 
     await ctx.send(embed=embed)
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
     global double_points_end_time
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("الامر هاذا خاص في الحاكم ريان و شكرا")
-        return
-
     double_points_end_time = time.time() + 3600
 
     embed = discord.Embed(
         title="🔥 | ولّعت! تم تفعيل دبل النقاط (Double Points)",
-        description=f"بأمر الحاكم ريان {ctx.author.mention}\n⏳ **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة (60 دقيقة)! شدوا حيلكم يا أبطال.**",
+        description=f"بواسطة الإداري {ctx.author.mention}\n⏳ **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة (60 دقيقة)! شدوا حيلكم يا أبطال.**",
         color=discord.Color.from_rgb(241, 196, 15)
     )
     await ctx.send(embed=embed)
-    await send_unified_log(ctx.guild, "🔥 | تفعيل دبل النقاط", f"قام الحاكم ريان {ctx.author.mention} بتفعيل دبل النقاط لمدة ساعة.", discord.Color.from_rgb(241, 196, 15))
+    await send_unified_log(ctx.guild, "🔥 | تفعيل دبل النقاط", f"قام الإداري {ctx.author.mention} بتفعيل دبل النقاط لمدة ساعة.", discord.Color.from_rgb(241, 196, 15))
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
@@ -1076,20 +1147,17 @@ async def points(ctx, member: discord.Member = None):
 
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("الامر هاذا خاص في الحاكم ريان و شكرا")
-        return
     data = load_data()
     user_id = str(member.id)
     if user_id not in data or not isinstance(data[user_id], dict):
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
     data[user_id]["points"] += amount
     save_data(data, ctx.guild)
-    await ctx.send(f"✨ أبشر يا الحاكم، تم إضافة `{amount}` نقطة لـ {member.mention}")
+    await ctx.send(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention} بواسطة {ctx.author.mention}.")
     
     await send_unified_log(
         ctx.guild, "✨ | إضافة نقاط إدارية", 
-        f"بأمر الحاكم ريان {ctx.author.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}",
+        f"بواسطة الإداري {ctx.author.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}",
         discord.Color.from_rgb(46, 204, 113)
     )
     
@@ -1097,19 +1165,16 @@ async def addpoints(ctx, member: discord.Member, amount: int):
 
 @bot.command(name="خصم_نقاط", aliases=["removepoints"])
 async def removepoints(ctx, member: discord.Member, amount: int):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("الامر هاذا خاص في الحاكم ريان و شكرا")
-        return
     data = load_data()
     user_id = str(member.id)
     if user_id in data and isinstance(data[user_id], dict):
         data[user_id]["points"] = max(0, data[user_id]["points"] - amount)
         save_data(data, ctx.guild)
-        await ctx.send(f"📉 تم خصم `{amount}` نقطة من {member.mention}.")
+        await ctx.send(f"📉 تم خصم `{amount}` نقطة من {member.mention} بواسطة {ctx.author.mention}.")
         
         await send_unified_log(
             ctx.guild, "📉 | خصم نقاط إدارية", 
-            f"بأمر الحاكم ريان {ctx.author.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}",
+            f"بواسطة الإداري {ctx.author.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}",
             discord.Color.from_rgb(230, 126, 34)
         )
     else:
@@ -1117,19 +1182,16 @@ async def removepoints(ctx, member: discord.Member, amount: int):
 
 @bot.command(name="تصفير_نقاط", aliases=["resetpoints"])
 async def resetpoints(ctx, member: discord.Member):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("الامر هاذا خاص في الحاكم ريان و شكرا")
-        return
     data = load_data()
     user_id = str(member.id)
     if user_id in data:
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
         save_data(data, ctx.guild)
-        await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention} بنجاح.")
+        await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention} بنجاح بواسطة {ctx.author.mention}.")
         
         await send_unified_log(
             ctx.guild, "🔄 | تصفير نقاط إداري", 
-            f"بأمر الحاكم ريان {ctx.author.mention} تم تصفير نقاط الإداري {member.mention}",
+            f"بواسطة الإداري {ctx.author.mention} تم تصفير نقاط الإداري {member.mention}",
             discord.Color.from_rgb(231, 76, 60)
         )
 
