@@ -101,12 +101,13 @@ double_points_end_time = 0
 # ----------------------------------------------------
 # دالة فحص صلاحيات الأدمنستريتر والمطانيخ
 # ----------------------------------------------------
-def is_admin_or_owner(ctx):
-    if ctx.author.id == BOT_OWNER_ID:
+def is_admin_or_owner(ctx_or_interaction):
+    author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
+    if author.id == BOT_OWNER_ID:
         return True
-    if ctx.author.guild_permissions.administrator:
+    if author.guild_permissions.administrator:
         return True
-    return any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
+    return any(role.id in ALLOWED_ROLE_IDS for role in getattr(author, 'roles', []))
 
 # ----------------------------------------------------
 # دالة البحث عن العضو بالاسم أو اليوزر نيم
@@ -371,8 +372,82 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. النماذج والأزرار الخارقة لأمر (.عقوبات) 🛡️
+# 2. النماذج والأزرار الخارقة للداشبورد والعقوبات
 # ----------------------------------------------------
+
+# نماذج تعديل النقاط من الداشبورد
+class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
+    amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        member = await find_member_by_name(guild, self.user_input.value.strip())
+        if not member:
+            await interaction.response.send_message("❌ ما لقينا العضو بالسيرفر بهذا الاسم.", ephemeral=True)
+            return
+        try:
+            amount = int(self.amount_input.value.strip())
+        except:
+            await.response.send_message("❌ تأكد إنك كتبت رقماً صحيحاً للنقاط.", ephemeral=True)
+            return
+
+        data = load_data()
+        user_id = str(member.id)
+        if user_id not in data or not isinstance(data[user_id], dict):
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[user_id]["points"] += amount
+        save_data(data, guild)
+
+        await interaction.response.send_message(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention} بنجاح!", ephemeral=True)
+        await send_unified_log(guild, "✨ | إضافة نقاط إدارية", f"بواسطة {interaction.user.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}", discord.Color.from_rgb(46, 204, 113))
+        await check_and_promote(guild, member, data[user_id]["points"])
+
+class RemovePointsModal(discord.ui.Modal, title="📉 | خصم نقاط من الإداري"):
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
+    amount_input = discord.ui.TextInput(label="عدد النقاط المراد خصمها", placeholder="مثال: 20", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        member = await find_member_by_name(guild, self.user_input.value.strip())
+        if not member:
+            await interaction.response.send_message("❌ ما لقينا العضو بالسيرفر بهذا الاسم.", ephemeral=True)
+            return
+        try:
+            amount = int(self.amount_input.value.strip())
+        except:
+            await interaction.response.send_message("❌ تأكد إنك كتبت رقماً صحيحاً.", ephemeral=True)
+            return
+
+        data = load_data()
+        user_id = str(member.id)
+        if user_id in data and isinstance(data[user_id], dict):
+            data[user_id]["points"] = max(0, data[user_id]["points"] - amount)
+            save_data(data, guild)
+            await interaction.response.send_message(f"📉 تم خصم `{amount}` نقطة من {member.mention} بنجاح.", ephemeral=True)
+            await send_unified_log(guild, "📉 | خصم نقاط إدارية", f"بواسطة {interaction.user.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}", discord.Color.from_rgb(230, 126, 34))
+        else:
+            await interaction.response.send_message("❌ هذا العضو ليس لديه نقاط مسجلة.", ephemeral=True)
+
+class ResetPointsModal(discord.ui.Modal, title="🔄 | تصفير نقاط إداري"):
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا لتصفير نقاطه...", required=True)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        member = await find_member_by_name(guild, self.user_input.value.strip())
+        if not member:
+            await interaction.response.send_message("❌ ما لقينا العضو بالسيرفر بهذا الاسم.", ephemeral=True)
+            return
+
+        data = load_data()
+        user_id = str(member.id)
+        if user_id in data:
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            save_data(data, guild)
+            await interaction.response.send_message(f"🔄 تم تصفير نقاط {member.mention} بالكامل بنجاح!", ephemeral=True)
+            await send_unified_log(guild, "🔄 | تصفير نقاط إداري", f"بواسطة {interaction.user.mention} تم تصفير نقاط الإداري {member.mention}", discord.Color.from_rgb(231, 76, 60))
+        else:
+            await interaction.response.send_message("❌ العضو ليس لديه سجل نقاط.", ephemeral=True)
 
 async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove: discord.Role, duration_seconds: int):
     await asyncio.sleep(duration_seconds)
@@ -611,17 +686,38 @@ class PenaltiesView(discord.ui.View):
         await interaction.response.send_modal(BanModal())
 
 # ----------------------------------------------------
-# 3. داشبورد الحاكم ريان التفاعلية (لوحة التحكم الخاصة) 🎛️
+# 3. داشبورد الإدارة الخارقة الشاملة (لوحة التحكم التفاعلية) 🎛️
 # ----------------------------------------------------
 class OwnerDashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
+    @discord.ui.button(label="إضافة نقاط", style=discord.ButtonStyle.success, emoji="✨", custom_id="dash_add_pts")
+    async def dash_add(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
+            return
+        await interaction.response.send_modal(AddPointsModal())
+
+    @discord.ui.button(label="خصم نقاط", style=discord.ButtonStyle.danger, emoji="📉", custom_id="dash_remove_pts")
+    async def dash_rem(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
+            return
+        await interaction.response.send_modal(RemovePointsModal())
+
+    @discord.ui.button(label="تصفير نقاط", style=discord.ButtonStyle.secondary, emoji="🔄", custom_id="dash_reset_pts")
+    async def dash_res(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
+            return
+        await interaction.response.send_modal(ResetPointsModal())
+
     @discord.ui.button(label="تفعيل دبل النقاط (x2)", style=discord.ButtonStyle.success, emoji="🔥", custom_id="dash_double_pts")
     async def dash_double(self, interaction: discord.Interaction, button: discord.ui.Button):
         global double_points_end_time
-        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ هذا الزر مخصص للأدمنستريتر فقط!", ephemeral=True)
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
             return
         double_points_end_time = time.time() + 3600
         await interaction.response.send_message("🔥 **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة عبر الداشبورد!**", ephemeral=True)
@@ -629,8 +725,8 @@ class OwnerDashboardView(discord.ui.View):
 
     @discord.ui.button(label="نشر بانل التقديم", style=discord.ButtonStyle.primary, emoji="📋", custom_id="dash_panel_apply")
     async def dash_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ هذا الزر مخصص للأدمنستريتر فقط!", ephemeral=True)
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
             return
         embed = discord.Embed(
             title="📋 | نظام تقديم الهوية الرسمي",
@@ -664,8 +760,8 @@ class OwnerDashboardView(discord.ui.View):
 
 @bot.command(name="لوحة", aliases=["dashboard", "owner_panel"])
 async def owner_dashboard(ctx):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للحاكم ريان فقط!", delete_after=5)
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر فقط!", delete_after=5)
         return
     
     try:
@@ -674,11 +770,14 @@ async def owner_dashboard(ctx):
         pass
 
     embed = discord.Embed(
-        title="🎛️ | لوحة تحكم الحاكم ريان الخارقة (Dashboard)",
-        description="أهلاً بك يا الحاكم في لوحتك الخاصة المخصصة لإدارة العمليات والأنظمة بضغطة زر واحدة:\n\n"
+        title="🎛️ | لوحة تحكم الإدارة الشاملة (Dashboard)",
+        description="أهلاً بك يا المطنوخ في لوحتك السيادية المخصصة لإدارة العمليات والأنظمة والنقاط بضغطة زر وبدون تعقيد:\n\n"
+                    "✨ **إضافة نقاط:** لإيداع نقاط في رصيد أي إداري فوراً.\n"
+                    "📉 **خصم نقاط:** لخصم النقاط عند المخالفة.\n"
+                    "🔄 **تصفير نقاط:** لتصفير السجل وإرجاعه صفر.\n"
                     "🔥 **تفعيل الدبل:** تفعيل مضاعفة نقاط الإداريين لمدة ساعة.\n"
-                    "📋 **نشر البانل:** إرسال بانل تقديم الهويات في الروم الحالي.\n"
-                    "🏆 **لوحة الشرف:** عرض قائمة المتصدرين بشكل سريع.",
+                    "📋 **نشر البانل:** إرسال بانل تقديم الهويات في الروم.\n"
+                    "🏆 **لوحة الشرف:** عرض قائمة المتصدرين بشكل فوري.",
         color=discord.Color.from_rgb(155, 89, 182)
     )
     embed.set_thumbnail(url=ctx.author.display_avatar.url)
@@ -1028,10 +1127,10 @@ async def help_command(ctx):
     )
 
     embed.add_field(
-        name="🛡️ ┋ لوحة العقوبات والحزم",
+        name="🛡️ ┋ لوحة العقوبات والحزم الداشبورد",
         value=(
             "▫️ `.عقوبات` ↞ فتح لوحة الأزرار والنماذج (تحذير، تايم، حرمان).\n"
-            "▫️ `.لوحة` ↞ لوحة تحكم الداشبورد الخاصة *(الحاكم ريان)*.\n"
+            "▫️ `.لوحة` ↞ فتح لوحة تحكم الداشبورد التفاعلية الشاملة للأدمنستريتر.\n"
             "▫️ `.إغلاق` ↞ تنبيه بأن الإغلاق عن طريق زر التكت فقط."
         ),
         inline=False
