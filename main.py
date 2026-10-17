@@ -389,7 +389,7 @@ class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإد
         try:
             amount = int(self.amount_input.value.strip())
         except:
-            await.response.send_message("❌ تأكد إنك كتبت رقماً صحيحاً للنقاط.", ephemeral=True)
+            await interaction.response.send_message("❌ تأكد إنك كتبت رقماً صحيحاً للنقاط.", ephemeral=True)
             return
 
         data = load_data()
