@@ -154,7 +154,7 @@ async def check_permissions(ctx):
     
     embed = discord.Embed(
         title="🚫 | الصلاحيات ما تكفي يا الغالي",
-        description="معليش، ما عندك صلاحية لاستخدام هذا الأمر الإداري.",
+        description="يا بعدي، ما عندك صلاحية تستخدم هالأمر الإداري.",
         color=discord.Color.red()
     )
     await ctx.send(embed=embed, delete_after=5)
@@ -163,10 +163,10 @@ async def check_permissions(ctx):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(title="⚠️ | خانك التعبير أو ناقصك بيانات", description="يا بعدي امسح الأمر واكتبه كامل ومضبوط.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️ | ناقصة بيانات يا الذيب", description="امسح الأمر واكتبه مضبوط وكامل.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
     elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | فيه خطأ بالمدخلات", description="تأكد إنك مسوي منشن للعضو أو للرتبة بالشكل الصحيح.", color=discord.Color.gold())
+        embed = discord.Embed(title="⚠️ | فيه لخبطة بالمدخلات", description="تأكد من منشن العضو أو كتابة الاسم بالشكل الصحيح.", color=discord.Color.gold())
         await ctx.send(embed=embed, delete_after=5)
 
 # دوال الحفظ والقراءة الآمنة
@@ -324,7 +324,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 role_ping_str = notif_role.mention if notif_role else ""
                 msg = (
                     f"{role_ping_str} 🎉 **كفو يا المطنوخ! ترقية مستحقة وتصفير نقاط:**\n"
-                    f"ما شاء الله، المطنوخ {member.mention} تقفّل عنده `{required_points}` نقطة وتمت ترقيته لـ `{target_role.name}` ضمن **{role_category_name}**!\n"
+                    f"ما شاء الله، الكفو {member.mention} تقفّل عنده `{required_points}` نقطة وتمت ترقيته لـ `{target_role.name}` ضمن **{role_category_name}**!\n"
                     f"🔄 **ملاحظة:** تم سحب رتبته القديمة وتصفير نقاطه للتحدي الجديد."
                 )
                 log_channel = guild.get_channel(LOG_CHANNEL_ID)
@@ -361,7 +361,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await send_unified_log(
         guild, 
         "📊 | تسجيل وتوثيق نقاط", 
-        f"تم نزول `{actual_points}` نقطة في رصيد {staff.mention}{double_text}\n📌 **الإنجاز:** {action_name}\n📈 **مجموع نقاطه الحالي:** `{current_pts}` نقطة",
+        f"نزلت `{actual_points}` نقطة في رصيد المطنوخ {staff.mention}{double_text}\n📌 **السبب:** {action_name}\n📈 **مجموع نقاطه الحالية:** `{current_pts}` نقطة",
         discord.Color.green() if not is_double_active else discord.Color.gold()
     )
     
@@ -387,17 +387,17 @@ async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove:
 
     try:
         if role_to_remove in member.roles:
-            await member.remove_roles(role_to_remove, reason="انتهاء مدة التحذير المحددة")
-            await send_unified_log(guild, "🟢 | انتهاء مدة التحذير", f"تم إزالة `{role_to_remove.name}` تلقائياً عن العضو {member.mention} لانتهاء المدة.", discord.Color.green())
+            await member.remove_roles(role_to_remove, reason="انتهت مدة التحذير المحددة")
+            await send_unified_log(guild, "🟢 | انتهاء مدة التحذير", f"تم بحمد الله إزالة `{role_to_remove.name}` تلقائياً عن العضو {member.mention} لانتهاء مدته.", discord.Color.green())
     except Exception as e:
         print(f"خطأ في سحب التحذير تلقائياً: {e}")
 
 # نموذج التحذيرات
 class WarnModal(discord.ui.Modal, title="⚠ | تطبيق تحذير إداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
-    duration_input = discord.ui.TextInput(label="المدة (مثال: 3 ايام / 5 دقائق)", placeholder="سوف يزول التحذير بعدها تلقائياً", required=True)
-    reason_input = discord.ui.TextInput(label="سبب التحذير", style=discord.TextStyle.paragraph, placeholder="اكتب السبب بالتفصيل هنا...", required=True)
-    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط صورة أو فيديو للدليل...", required=False)
+    duration_input = discord.ui.TextInput(label="المدة (مثال: 3 ايام / 5 دقائق)", placeholder="راح يزول التحذير تلقائياً بعدها", required=True)
+    reason_input = discord.ui.TextInput(label="سبب التحذير", style=discord.TextStyle.paragraph, placeholder="اكتب السبب هنا...", required=True)
+    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط صورة أو فيديو...", required=False)
 
     async def on_submit(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -405,7 +405,7 @@ class WarnModal(discord.ui.Modal, title="⚠ | تطبيق تحذير إداري"
         member = await find_member_by_name(guild, query)
 
         if not member:
-            await interaction.response.send_message(f"❌ **خطأ:** ما حصلت عضو بهذا الاسم (`{query}`). تأكد من كتابة اسمه الصحيح بالسيرفر.", ephemeral=True)
+            await interaction.response.send_message(f"❌ **يا الغالي:** ما حصلت عضو بهذا الاسم (`{query}`). تأكد من كتابة اسمه بالشكل الصحيح.", ephemeral=True)
             return
 
         r_warn1 = guild.get_role(WARN_1_ID)
@@ -466,7 +466,7 @@ class WarnModal(discord.ui.Modal, title="⚠ | تطبيق تحذير إداري"
         save_data(data, guild)
 
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"إعطاء {assigned_warn_name}")
-        await interaction.response.send_message(f"✅ **تم تطبيق {assigned_warn_name} على {member.mention} بنجاح وحساب النقاط في رصيدك!**", ephemeral=True)
+        await interaction.response.send_message(f"✅ **أبشر! تم تطبيق {assigned_warn_name} على {member.mention} ونزلت نقاطك في الرصيد!**", ephemeral=True)
 
         if assigned_warn_role:
             bot.loop.create_task(auto_remove_warn(guild, member.id, assigned_warn_role, duration_sec))
@@ -484,13 +484,13 @@ class TimeoutModal(discord.ui.Modal, title="🔇 | تطبيق تايم أوت / 
         member = await find_member_by_name(guild, query)
 
         if not member:
-            await interaction.response.send_message(f"❌ **خطأ:** ما حصلت عضو بهذا الاسم (`{query}`).", ephemeral=True)
+            await interaction.response.send_message(f"❌ **ما حصلت:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`).", ephemeral=True)
             return
 
         try:
             minutes = int(self.minutes_input.value.strip())
         except:
-            await interaction.response.send_message("❌ **خطأ:** تأكد من إدخال رقم صحيح للمقدار بالدقائق.", ephemeral=True)
+            await interaction.response.send_message("❌ **خطأ:** تأكد إنك كتبت رقم صحيح للمقدار بالدقائق.", ephemeral=True)
             return
 
         reason = self.reason_input.value.strip()
@@ -527,9 +527,9 @@ class TimeoutModal(discord.ui.Modal, title="🔇 | تطبيق تايم أوت / 
             save_data(data, guild)
 
             await add_points_direct(guild, interaction.user, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
-            await interaction.response.send_message(f"✅ **تم تطبيق الميوت على {member.mention} لمدة {minutes} دقيقة بنجاح!**", ephemeral=True)
+            await interaction.response.send_message(f"✅ **تم كتم العضو {member.mention} لمدة {minutes} دقيقة بنجاح!**", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❌ حدث خطأ أثناء تنفيذ التايم أوت: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ عذراً، صار خطأ أثناء تنفيذ الميوت: {e}", ephemeral=True)
 
 # نموذج الحرمان
 class BanModal(discord.ui.Modal, title="🚫 | تطبيق عقوبة حرمان رول"):
@@ -544,12 +544,12 @@ class BanModal(discord.ui.Modal, title="🚫 | تطبيق عقوبة حرمان 
         member = await find_member_by_name(guild, query)
 
         if not member:
-            await interaction.response.send_message(f"❌ **خطأ:** ما حصلت عضو بهذا الاسم (`{query}`).", ephemeral=True)
+            await interaction.response.send_message(f"❌ **ما حصلت:** ما فيه عضو بهذا الاسم (`{query}`).", ephemeral=True)
             return
 
         ban_role = guild.get_role(BAN_ROLE_ID)
         if not ban_role:
-            await interaction.response.send_message("❌ رتبة الحرمان غير موجودة بالسيرفر.", ephemeral=True)
+            await interaction.response.send_message("❌ رتبة الحرمان مش موجودة بالسيرفر.", ephemeral=True)
             return
 
         duration = self.duration_input.value.strip()
@@ -590,9 +590,9 @@ class BanModal(discord.ui.Modal, title="🚫 | تطبيق عقوبة حرمان 
             save_data(data, guild)
 
             await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
-            await interaction.response.send_message(f"✅ **تم تنفيذ الحرمان على {member.mention} وإرسال النموذج بنجاح!**", ephemeral=True)
+            await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على العضو {member.mention} وتوثيق السجل!**", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❌ حدث خطأ أثناء تنفيذ الحرمان: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ عذراً، حصل خطأ بتنفيذ الحرمان: {e}", ephemeral=True)
 
 class PenaltiesView(discord.ui.View):
     def __init__(self):
@@ -638,7 +638,7 @@ async def on_message(message):
                 if role_to_add and role_to_add not in member.roles:
                     await member.add_roles(role_to_add, reason="منح رتبة اسم الحساب تلقائياً")
                 try:
-                    await member.send(f"✅ **تم تغيير اسمك بالسيرفر لـ:** `{new_nickname}` ونزلت لك الرتبة.")
+                    await member.send(f"✅ **أبشر يا الغالي! تم تغيير اسمك بالسيرفر إلى:** `{new_nickname}` ونزلت لك الرتبة.")
                 except Exception:
                     pass
             except Exception as e:
@@ -686,7 +686,7 @@ async def on_message(message):
             )
 
 # ----------------------------------------------------
-# 4. نظام التقديم بالزر
+# 4. نظام التقديم بالزر (تم تصحيح الإملاء بالكامل وتعديل رسالة التنبيه)
 # ----------------------------------------------------
 class ApplyReviewView(discord.ui.View):
     def __init__(self, applicant: discord.Member, guild: discord.Guild):
@@ -701,11 +701,11 @@ class ApplyReviewView(discord.ui.View):
     @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v12")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ ما عندك صلاحية قبول التقديمات يا الغالي.", ephemeral=True)
+            await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
             return
 
         if self.is_completed:
-            await interaction.response.send_message("⚠️ سبك أحد الإداريين وحسم الطلب خلاص!", ephemeral=True)
+            await interaction.response.send_message("⚠️ سبق أحد الإداريين وحسم الطلب خلاص!", ephemeral=True)
             return
 
         self.is_completed = True
@@ -730,12 +730,12 @@ class ApplyReviewView(discord.ui.View):
             print(f"خطأ في تعديل رتب التقديم: {e}")
 
         try:
-            await self.applicant.send(f"🎉 **مبروك يا المطنوخ!** تم قبول تقديمك في سيرفر **{self.guild.name}** وجاتك رتبة الهوية.")
+            await self.applicant.send(f"🎉 **مبروك يا المطنوخ!** تم قبول تقديمك في سيرفر **{self.guild.name}** ونزلت رتبة الهوية.")
         except:
             pass
 
         await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية العضو ({self.applicant.name})", target_type="identity")
-        await interaction.response.send_message(f"✅ **كفو! تم قبول التقديم بواسطة الإداري {staff.mention} ونزلت النقاط برصيده!**")
+        await interaction.response.send_message(f"✅ **كفو! تم قبول التقديم بواسطة المطنوخ {staff.mention} ونزلت النقاط في رصيده!**")
 
         try:
             embed = interaction.message.embeds[0]
@@ -747,11 +747,11 @@ class ApplyReviewView(discord.ui.View):
     @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v12")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != BOT_OWNER_ID and not interaction.user.guild_permissions.administrator and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
-            await interaction.response.send_message("❌ ما عندك صلاحية رفض التقديمات.", ephemeral=True)
+            await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
             return
 
         if self.is_completed:
-            await interaction.response.send_message("⚠️ سبك أحد الإداريين وحسم الطلب خلاص!", ephemeral=True)
+            await interaction.response.send_message("⚠️ سبق أحد الإداريين وحسم الطلب خلاص!", ephemeral=True)
             return
 
         self.is_completed = True
@@ -770,7 +770,7 @@ class ApplyReviewView(discord.ui.View):
         
         embed = discord.Embed(
             title="❌ | رفض تقديم",
-            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة {staff.mention}.\n⏳ **تطبق عليه وقت انتظار 10 دقائق قبل يرجع يطقطق أو يقدم.**",
+            description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة {staff.mention}.\n⏳ **طبقنا عليه فترة انتظار 10 دقائق قبل يقدر يرجع يقدم.**",
             color=discord.Color.red()
         )
         await interaction.channel.send(embed=embed)
@@ -794,7 +794,7 @@ class ApplyButtonView(discord.ui.View):
                 remaining = int(600 - elapsed)
                 mins = remaining // 60
                 secs = remaining % 60
-                await interaction.response.send_message(f"⏳ **يا الحبيب اركد!** ما يمديك تقدم الحين، انتظر باقي معك `{mins} دقيقة و {secs} ثانية` عشان تقدم ثانية.", ephemeral=True)
+                await interaction.response.send_message(f"⏳ **يا الحبيب اركد شوي!** ما يمديك تقدم الحين، انتظر باقي معك `{mins} دقيقة و {secs} ثانية` عشان تقدم ثانية.", ephemeral=True)
                 return
 
         cooldowns[user_id] = time.time()
@@ -803,9 +803,9 @@ class ApplyButtonView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         
         try:
-            await interaction.user.send("✨ **يا هلا بك بنظام التقديم الرسمي!** أجب على الأسئلة الجاية بالترتيب وناخذك خطوة بخطوة.")
+            await interaction.user.send("✨ **يا هلا بك في نظام التقديم الرسمي!** رد على الأسئلة بالترتيب وناخذك خطوة بخطوة يا الذيب.")
         except discord.Forbidden:
-            await interaction.followup.send("❌ **افتح الخاص حقك أول (DM)** عشان اقدر أرسل لك أسئلة التقديم يا الغالي!", ephemeral=True)
+            await interaction.followup.send("❌ **افتح الخاص حقك أول (DM)** عشان اقدر أرسل لك أسئلة التقديم!", ephemeral=True)
             return
 
         questions = [
@@ -826,7 +826,7 @@ class ApplyButtonView(discord.ui.View):
                 msg = await bot.wait_for('message', timeout=120.0, check=check)
                 answers.append(msg.content)
             except Exception:
-                await interaction.user.send("⌛ تأخرت بالرد والوقت قفل. اضغط زر التقديم بالسيرفر وارجع حاول من جديد.")
+                await interaction.user.send("⌛ تأخرت بالرد والوقت خلص. اضغط زر التقديم بالسيرفر وارجع حاول من جديد.")
                 return
 
         review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
@@ -858,14 +858,14 @@ class ApplyButtonView(discord.ui.View):
                         child.disabled = False
                     try:
                         emb = msg.embeds[0]
-                        emb.description = "✅ **الأزرار اتفعلت! ارجع راجع وقرر (أول إداري يتصرف بياخذ النقاط ويحسم الطلب).**"
+                        emb.description = "✅ **اتفتحت الأزرار! راجع وقرر (أول إداري يتصرف بياخذ النقاط ويحسم الطلب).**"
                         await msg.edit(embed=emb, view=v)
                     except Exception:
                         pass
 
             bot.loop.create_task(enable_buttons_after_delay(sent_message, view))
         
-        await interaction.user.send("✅ **وصلت إجاباتك للإدارة بنجاح!** أول ما يراجعونها بيوصلك العلم.")
+        await interaction.user.send("✅ **وصلت إجاباتك للإدارة بنجاح!** أول ما يراجعونها بيجيك العلم.")
 
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
 async def panel_apply(ctx):
@@ -880,7 +880,7 @@ async def panel_apply(ctx):
 
     embed = discord.Embed(
         title="📋 | نظام تقديم الهوية الرسمي",
-        description="إذا تبي تطلع الهوية وتفعل حسابك بالسيرفر، اضغط على الزر تحت وبيجيك البوت في الخاص مباشرة يدردش معك ويأخذ بياناتك.",
+        description="تبي تطلع الهوية وتفعل حسابك بالسيرفر؟ اضغط على الزر تحت وبيجيك البوت في الخاص مباشرة يدردش معك ويأخذ بياناتك.",
         color=discord.Color.blue()
     )
     embed.set_footer(text="منتدى النظيم | قيادة السيرفر")
@@ -897,10 +897,10 @@ async def penalties_cmd(ctx):
     embed = discord.Embed(
         title="⚖️ | لوحة إدارة العقوبات والحزم الإداري",
         description=(
-            "أهلاً بك عزيزي الإداري. اختر نوع العقوبة المناسبة من الأزرار بالأسفل، وسيفتح لك نموذج لتعبئة التفاصيل:\n\n"
-            "⚠️ **[ تحذير إداري ]** ↞ تطبيق رتب التحذيرات التدريجية (أول، ثاني، ثالث) مع إزالة تلقائية عند انتهاء المدة المحددة.\n"
-            "🔇 **[ تايم أوت / ميوت ]** ↞ كتم العضو ومدمج مع نشر نموذج التايم في الروم المخصص.\n"
-            "🚫 **[ حرمان رول ]** ↞ سحب كافة رتب العضو وتطبيق رتبة الحرمان وتوثيق السجل."
+            "يا هلا بك يا المطنوخ. اختر نوع العقوبة المطلوبة من الأزرار تحت، وراح يفتح لك نموذج سريع تعبي فيه التفاصيل:\n\n"
+            "⚠️ **[ تحذير إداري ]** ↞ يعطي رتب التحذير بالترتيب (أول، ثاني، ثالث) ويزول تلقائياً بعد انتهاء مدته.\n"
+            "🔇 **[ تايم أوت / ميوت ]** ↞ يكتم العضو ويوثق نموذج التايم بالروم المخصص.\n"
+            "🚫 **[ حرمان رول ]** ↞ يسحب رتب العضو ويعطيه رتبة الحرمان مع حفظ السجل."
         ),
         color=discord.Color.red()
     )
@@ -915,11 +915,24 @@ async def delete_channel_cmd(ctx):
         return
 
     try:
-        await ctx.send("💥 جاري حذف الروم بنجاح...")
+        await ctx.send("💥 جاري حذف الروم يا طويل العمر...")
         await asyncio.sleep(1)
-        await ctx.channel.delete(reason=f"حذف الروم بطلب من الحاكم ريان ({ctx.author.name})")
+        await ctx.channel.delete(reason=f"حذف الروم بأمر الحاكم ريان ({ctx.author.name})")
     except Exception as e:
-        await ctx.send(f"❌ حدث خطأ أثناء حذف الروم: {e}")
+        await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
+
+# 🚀 ميزة جبارة إضافية: نداء الطاقم السريع (.نداء)
+@bot.command(name="نداء", aliases=["staff_call", "طاقم"])
+async def staff_call(ctx):
+    admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
+    embed = discord.Embed(
+        title="🚨 | نداء إداري عاجل",
+        description=f"يا طاقم الإدارة! نداء عاجل من المطنوخ {ctx.author.mention} في روم {ctx.channel.mention}.\nالرجاء التوجه الفوري ومباشرة الوضع!",
+        color=discord.Color.gold(),
+        timestamp=discord.utils.utcnow()
+    )
+    await ctx.message.delete()
+    await ctx.send(content=f"🔔 {admin_role_mention}", embed=embed)
 
 @bot.event
 async def on_ready():
@@ -928,13 +941,13 @@ async def on_ready():
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
-    print(f"🚀 [مطنوخ الحدود شغال] جاهزين ولابسين المحزم باسم: {bot.user}")
+    print(f"🚀 [بوت منتدى النظيم الخارق شغال بنجاح] باسم: {bot.user}")
 
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
 async def help_command(ctx):
     embed = discord.Embed(
-        title="⚔️ | لوحة التحكم وأوامر منتدى النظيم",
-        description="يا هلا بالأسد! هذه قائمة كامل الأوامر والأنظمة المعمدة بالسيرفر وشغالة تحت خدمتك:",
+        title="⚔️ | لوحة التحكم وأوامر منتدى النظيم الخارقة",
+        description="يا هلا ومرحبابك يا ريس! هذي قائمة الأوامر والأنظمة كاملة ومضبوطة بلهجتنا:",
         color=discord.Color.gold(),
         timestamp=discord.utils.utcnow()
     )
@@ -942,13 +955,13 @@ async def help_command(ctx):
     embed.add_field(
         name="📊 ┋ أوامر النقاط والبروفايلات",
         value=(
-            "▫️ `.نقاط [@العضو]` ↞ استعلام سريع عن رصيد النقاط.\n"
+            "▫️ `.نقاط [@العضو]` ↞ استعلام عن رصيد النقاط.\n"
             "▫️ `.بروفايل [@العضو]` ↞ كشف حساب إداري متكامل (تكتات، هويات، عقوبات).\n"
-            "▫️ `.توب` ↞ قائمة المتصدرين والمطانيخ بالإدارة.\n"
-            "▫️ `.إضافة_نقاط [@العضو] [العدد]` ↞ إضافة نقاط مستحقة *(الحاكم ريان)*.\n"
-            "▫️ `.خصم_نقاط [@العضو] [العدد]` ↞ الخصم المباشر من النقاط *(الحاكم ريان)*.\n"
-            "▫️ `.تصفير_نقاط [@العضو]` ↞ تصفير السجل بالنادي *(الحاكم ريان)*.\n"
-            "▫️ `.دبل_نقاط` ↞ تفعيل الدبل (x2) لكافة الإداريين لمدة ساعة *(الحاكم ريان)*."
+            "▫️ `.توب` ↞ قائمة صدارة المطانيخ بالإدارة.\n"
+            "▫️ `.إضافة_نقاط [@العضو] [العدد]` ↞ إضافة نقاط *(الحاكم ريان)*.\n"
+            "▫️ `.خصم_نقاط [@العضو] [العدد]` ↞ خصم نقاط *(الحاكم ريان)*.\n"
+            "▫️ `.تصفير_نقاط [@العضو]` ↞ تصفير السجل *(الحاكم ريان)*.\n"
+            "▫️ `.دبل_نقاط` ↞ تفعيل دبل النقاط (x2) لمدة ساعة *(الحاكم ريان)*."
         ),
         inline=False
     )
@@ -956,8 +969,9 @@ async def help_command(ctx):
     embed.add_field(
         name="🛡️ ┋ لوحة العقوبات والحزم",
         value=(
-            "▫️ `.عقوبات` ↞ فتح لوحة الأزرار والنماذج لإجراء (تحذير، تايم، حرمان).\n"
-            "▫️ `.إغلاق` ↞ التنبيه بأن الإغلاق عن طريق زر التكت فقط."
+            "▫️ `.عقوبات` ↞ فتح لوحة الأزرار والنماذج (تحذير، تايم، حرمان).\n"
+            "▫️ `.نداء` ↞ استدعاء طاقم الإدارة بشكل عاجل.\n"
+            "▫️ `.إغلاق` ↞ تنبيه بأن الإغلاق عن طريق زر التكت فقط."
         ),
         inline=False
     )
@@ -965,17 +979,16 @@ async def help_command(ctx):
     embed.add_field(
         name="⚙️ ┋ إدارة الرتب والفعاليات",
         value=(
-            "▫️ `.رتبة [@العضو] [الرتبة]` ↞ إعطاء رتبة مباشرة مع حماية الرتب الأعلى.\n"
-            "▫️ `.سحب_رتبة [@العضو] [الرتبة]` ↞ سحب رتبة محددة من العضو.\n"
-            "▫️ `.بانل_تقديم` ↞ تنزيل بانل التقديم التفاعلي لـ روم التفعيل *(الحاكم ريان)*.\n"
-            "▫️ `.حذف` ↞ حذف الروم الحالي مباشرة *(الحاكم ريان)*.\n"
-            "▫️ `.رول` ↞ نداء رسمي لبداية فعالية الرول بلاي."
+            "▫️ `.رتبة [@العضو] [الرتبة]` ↞ إعطاء رتبة مع حماية الرتب الأعلى.\n"
+            "▫️ `.سحب_رتبة [@العضو] [الرتبة]` ↞ سحب رتبة محددة.\n"
+            "▫️ `.بانل_تقديم` ↞ تنزيل بانل التقديم التفاعلي *(الحاكم ريان)*.\n"
+            "▫️ `.حذف` ↞ حذف الروم الحالي *(الحاكم ريان)*."
         ),
         inline=False
     )
 
     embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else ctx.author.display_avatar.url)
-    embed.set_footer(text=f"طلب بواسطة المطنوخ: {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
+    embed.set_footer(text=f"طلب بواسطة الحاكم: {ctx.author.name}", icon_url=ctx.author.display_avatar.url)
 
     await ctx.send(embed=embed)
 
@@ -989,33 +1002,33 @@ async def double_points(ctx):
     double_points_end_time = time.time() + 3600
 
     embed = discord.Embed(
-        title="🔥 | اشتعلت! تفعيل دبل النقاط (Double Points)",
-        description=f"بواسطة الحاكم ريان: {ctx.author.mention}\n⏳ **تم تفعيل مضاعفة النقاط (x2) لجميع الإداريين لمدة ساعة كاملة (60 دقيقة)! شدوا حيلكم.**",
+        title="🔥 | ولّعت! تم تفعيل دبل النقاط (Double Points)",
+        description=f"بأمر الحاكم ريان {ctx.author.mention}\n⏳ **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة (60 دقيقة)! شدوا حيلكم.**",
         color=discord.Color.gold()
     )
     await ctx.send(embed=embed)
-    await send_unified_log(ctx.guild, "🔥 | تفعيل دبل النقاط", f"قام الحاكم ريان {ctx.author.mention} بتفعيل دبل النقاط لمدة ساعة كاملة.", discord.Color.gold())
+    await send_unified_log(ctx.guild, "🔥 | تفعيل دبل النقاط", f"قام الحاكم ريان {ctx.author.mention} بتفعيل دبل النقاط لمدة ساعة.", discord.Color.gold())
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
     if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         if ctx.author.top_role <= role:
-            await ctx.send("❌ **حماية:** ما يمديك تعطي رتبة أعلى من رتبتك أو تساويها!", delete_after=6)
+            await ctx.send("❌ **يا الحبيب:** ما يمديك تعطي رتبة أعلى من رتبتك أو تساويها!", delete_after=6)
             return
 
     try:
         await member.add_roles(role)
-        embed = discord.Embed(title="✅ | تسليم وتعيين رتبة", description=f"تم إعطاء رتبة {role.mention} للمطنوخ {member.mention} بنجاح.", color=discord.Color.green())
+        embed = discord.Embed(title="✅ | تعيين رتبة", description=f"تم إعطاء رتبة {role.mention} للكفو {member.mention} بنجاح.", color=discord.Color.green())
         await ctx.send(embed=embed)
-        await send_unified_log(ctx.guild, "🛡️ | تعديل رتبة", f"الإداري {ctx.author.mention} أعطى رتبة {role.mention} للعضو {member.mention}")
+        await send_unified_log(ctx.guild, "🛡️ | تعديل رتبة", f"الإداري {ctx.author.mention} عطى رتبة {role.mention} للعضو {member.mention}")
     except discord.Forbidden:
-        await ctx.send("❌ البوت ما عنده صلاحية تعديل رتب هذا الشخص.")
+        await ctx.send("❌ البوت ما عنده صلاحية يعدل رتب هذا الشخص.")
 
 @bot.command(name="سحب_رتبة", aliases=["removerole"])
 async def remove_role(ctx, member: discord.Member, role: discord.Role):
     if ctx.author.id != BOT_OWNER_ID and not ctx.author.guild_permissions.administrator:
         if ctx.author.top_role <= role:
-            await ctx.send("❌ **حماية:** ما يمديك تسحب رتبة أعلى من رتبتك أو تساويها!", delete_after=6)
+            await ctx.send("❌ **يا الحبيب:** ما يمديك تسحب رتبة أعلى من رتبتك أو تساويها!", delete_after=6)
             return
 
     try:
@@ -1024,18 +1037,18 @@ async def remove_role(ctx, member: discord.Member, role: discord.Role):
         await ctx.send(embed=embed)
         await send_unified_log(ctx.guild, "🛡️ | تعديل رتبة", f"الإداري {ctx.author.mention} سحب رتبة {role.mention} من العضو {member.mention}")
     except discord.Forbidden:
-        await ctx.send("❌ البوت ما عنده صلاحية تعديل رتب هذا الشخص.")
+        await ctx.send("❌ البوت ما عنده صلاحية يعدل رتب هذا الشخص.")
 
 @bot.command(name="إغلاق", aliases=["اغلاق", "close"])
 async def close(ctx):
     channel_name = ctx.channel.name.lower()
     if not any(k in channel_name for k in ["ticket", "تكت", "الدعم", "support"]):
-        await ctx.send("⚠ **حماية:** الأمر هذا مخصص لـ رومات التكت فقط!")
+        await ctx.send("⚠ **تنبيه:** الأمر هذا مخصص لرومات التكت فقط!")
         return
 
     embed = discord.Embed(
         title="⚠️ | تنبيه إغلاق التكت",
-        description="**الإغلاق عن طريق زر التكت فقط!**\n*(جاتك النقاط في وقت استلامك للتذكرة)*",
+        description="**الإغلاق يكون عن طريق زر التكت فقط يا الذيب!**\n*(ونزلَت نقاطك بوقت استلامك للتذكرة)*",
         color=discord.Color.gold()
     )
     await ctx.send(embed=embed)
@@ -1055,7 +1068,7 @@ async def profile(ctx, member: discord.Member = None):
     bans = user_info.get("bans", 0)
     identities = user_info.get("identities", 0)
 
-    embed = discord.Embed(title=f"🛡️ | السجل الإداري: {target.name}", color=discord.Color.blurple())
+    embed = discord.Embed(title=f"🛡️ | السجل الإداري للمطنوخ: {target.name}", color=discord.Color.blurple())
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="📊 النقاط الحالية", value=f"`{pts}` نقطة", inline=True)
     embed.add_field(name="🎫 التكتات المنجزة", value=f"`{tickets}` تكت", inline=True)
@@ -1071,7 +1084,7 @@ async def points(ctx, member: discord.Member = None):
     data = load_data()
     user_info = data.get(str(target.id), 0)
     pts = user_info["points"] if isinstance(user_info, dict) else user_info
-    embed = discord.Embed(title="📊 | استعلام النقاط", description=f"نقاط الإداري {target.mention} الحالية هي: **{pts}** نقطة.", color=discord.Color.blue())
+    embed = discord.Embed(title="📊 | استعلام النقاط", description=f"رصيد نقاط المطنوخ {target.mention} الحالي هو: **{pts}** نقطة.", color=discord.Color.blue())
     embed.set_thumbnail(url=target.display_avatar.url)
     await ctx.send(embed=embed)
 
@@ -1086,11 +1099,11 @@ async def addpoints(ctx, member: discord.Member, amount: int):
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
     data[user_id]["points"] += amount
     save_data(data, ctx.guild)
-    await ctx.send(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention}")
+    await ctx.send(f"✨ أبشر، تم إضافة `{amount}` نقطة لـ {member.mention}")
     
     await send_unified_log(
         ctx.guild, "✨ | إضافة نقاط إدارية", 
-        f"بواسطة الحاكم ريان {ctx.author.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}",
+        f"بأمر الحاكم ريان {ctx.author.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}",
         discord.Color.green()
     )
     
@@ -1110,7 +1123,7 @@ async def removepoints(ctx, member: discord.Member, amount: int):
         
         await send_unified_log(
             ctx.guild, "📉 | خصم نقاط إدارية", 
-            f"بواسطة الحاكم ريان {ctx.author.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}",
+            f"بأمر الحاكم ريان {ctx.author.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}",
             discord.Color.orange()
         )
     else:
@@ -1126,11 +1139,11 @@ async def resetpoints(ctx, member: discord.Member):
     if user_id in data:
         data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
         save_data(data, ctx.guild)
-        await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention}.")
+        await ctx.send(f"🔄 تم تصفير نقاط الإداري {member.mention} بنجاح.")
         
         await send_unified_log(
             ctx.guild, "🔄 | تصفير نقاط إداري", 
-            f"بواسطة الحاكم ريان {ctx.author.mention} تم تصفير نقاط الإداري {member.mention}",
+            f"بأمر الحاكم ريان {ctx.author.mention} تم تصفير نقاط الإداري {member.mention}",
             discord.Color.red()
         )
 
@@ -1138,7 +1151,7 @@ async def resetpoints(ctx, member: discord.Member):
 async def leaderboard(ctx):
     data = load_data()
     if not data:
-        await ctx.send("📊 لا توجد بيانات كافية.")
+        await ctx.send("📊 لا توجد بيانات كافية حتى الآن.")
         return
 
     sorted_users = []
