@@ -598,7 +598,7 @@ class TimeoutModal(discord.ui.Modal, title="🔇 | لوحة توثيق التا�
             await add_points_direct(guild, interaction.user, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
             await interaction.response.send_message(f"✅ **تم كتم العضو {member.mention} لمدة {minutes} دقيقة بنجاح تام!**", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❌ عذراً، حصل خطأ أثناء التايم أوت: {e}", ephemeral=True)
+            await interaction.response.send_message(f"❌ عذراً،حصل خطأ أثناء التايم أوت: {e}", ephemeral=True)
 
 class BanModal(discord.ui.Modal, title="🚫 | لوحة توثيق حرمان الرول"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
@@ -783,7 +783,7 @@ async def owner_dashboard(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 4. نظام قراءة لوق التكتات (يقرأ الرسالة القصيرة فقط ولا يقرا النموذج الطويل) 🎟️
+# 4. نظام قراءة لوق التكتات (قراءة إشعار الاستلام فقط ومنع التكرار) 🎟️
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
@@ -816,30 +816,51 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # قراءة لوق التكتات (الرسالة القصيرة للاستلام فقط - وتجاهل الإيمبد أو النموذج الطويل)
+    # قراءة لوق التكتات المخصص لإشعار الاستلام فقط
     if message.channel.id == TICKET_LOG_CHANNEL_ID and message.author.bot:
-        # إذا كانت الرسالة تحتوي على إيمبد (النموذج الطويل)، نتجاهلها تماماً ولا نحسب نقاط
-        if message.embeds:
+        is_claim_embed = False
+        full_text = message.content or ""
+
+        for embed in message.embeds:
+            title_text = embed.title or ""
+            desc_text = embed.description or ""
+            
+            # التحقق الجازم من أن هذا الإيمبد هو "إشعار استلام تذكرة جديد" المخصص للاستلام فقط
+            if "إشعار استلام" in title_text or "استلام تذكرة جديد" in title_text or "إشعار استلام" in desc_text:
+                is_claim_embed = True
+
+            full_text += f"\n{title_text}\n{desc_text}"
+            for field in embed.fields:
+                full_text += f"\n{field.name}: {field.value}"
+
+        # إذا لم يكن إشعار استلام صريح (مثلاً كان إيمبد إغلاق أو تفاصيل التكت)، يتجاهله فوراً
+        if not is_claim_embed:
             return
 
-        content = message.content or ""
-        # نتأكد أن الرسالة تخص استلام التكت وليست أي إشعار آخر
-        if "بإستلام التكت" in content or "استلام التكت" in content:
-            staff_member = None
-            
-            # استخراج العضو من المينشن داخل الرسالة القصيرة
-            user_ids = re.findall(r'<@!?(\d+)>', content)
-            if user_ids:
-                staff_member = message.guild.get_member(int(user_ids[0]))
+        staff_member = None
+        
+        # استخراج مينشن الإداري المستلم
+        user_ids = re.findall(r'<@!?(\d+)>', full_text)
+        if user_ids:
+            staff_member = message.guild.get_member(int(user_ids[0]))
 
-            if staff_member:
-                await add_points_direct(
-                    message.guild, 
-                    staff_member, 
-                    POINTS_CONFIG["ticket"], 
-                    "استلام تذكرة", 
-                    target_type="ticket"
-                )
+        # في حال عدم وجود المينشن الصريح، نبحث عن آيدي الحساب المباشر
+        if not staff_member:
+            all_numbers = re.findall(r'(\d{17,19})', full_text)
+            for num in all_numbers:
+                possible_member = message.guild.get_member(int(num))
+                if possible_member and not possible_member.bot:
+                    staff_member = possible_member
+                    break
+
+        if staff_member:
+            await add_points_direct(
+                message.guild, 
+                staff_member, 
+                POINTS_CONFIG["ticket"], 
+                "استلام تذكرة (إشعار الاستلام)", 
+                target_type="ticket"
+            )
 
 # ----------------------------------------------------
 # 5. نظام التقديم الخارق بالزر
