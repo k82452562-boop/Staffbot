@@ -146,9 +146,6 @@ def parse_duration_to_seconds(duration_str: str) -> int:
         return val * 86400 * 30
     return val * 86400
 
-# ----------------------------------------------------
-# فحص الصلاحيات التلقائي العام
-# ----------------------------------------------------
 @bot.check
 async def check_permissions(ctx):
     if is_admin_or_owner(ctx):
@@ -186,7 +183,6 @@ async def fetch_points_from_discord():
                 for att in message.attachments:
                     if att.filename == "points_backup.json":
                         await att.save(DATA_FILE)
-                        print("☁️ [استرجاع سحابي خارق] تم سحب قاعدة البيانات من ديسكورد بنجاح!")
                         return
     except Exception as e:
         print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية: {e}")
@@ -253,9 +249,6 @@ async def send_unified_log(guild, title, description, color=discord.Color.from_r
                 embed.add_field(name=name, value=value, inline=inline)
         await log_channel.send(embed=embed)
 
-# ----------------------------------------------------
-# دالة الترقية التلقائية الخارقة
-# ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
@@ -374,10 +367,8 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 2. النماذج والأزرار الخارقة للداشبورد والعقوبات
+# النماذج والأزرار
 # ----------------------------------------------------
-
-# نماذج تعديل النقاط من الداشبورد
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
@@ -792,7 +783,7 @@ async def owner_dashboard(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 4. نظام قراءة لوق التكتات وإضافة النقاط تلقائياً للمستلم 🎟️
+# 4. نظام قراءة لوق التكتات وإضافة النقاط تلقائياً للمستلم 🎟️ (محدث حسب شكل الرسالة الجديد)
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
@@ -825,44 +816,37 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
+    # قراءة لوق التكتات بناءً على الشكل الجديد (النص أو الإيمبد)
     if message.channel.id == TICKET_LOG_CHANNEL_ID and message.author.bot:
         staff_member = None
+        full_text = message.content or ""
+        
+        for embed in message.embeds:
+            if embed.description:
+                full_text += "\n" + embed.description
+            if embed.title:
+                full_text += "\n" + embed.title
 
-        if "تم استلام التكت بواسطة" in message.content:
-            user_ids = re.findall(r'<@!?(\d+)>', message.content)
-            if user_ids:
-                staff_member = message.guild.get_member(int(user_ids[0]))
+        # استخراج الأيدي من المينشن (مثال: <@123456789>)
+        user_ids = re.findall(r'<@!?(\d+)>', full_text)
+        if user_ids:
+            staff_member = message.guild.get_member(int(user_ids[0]))
 
-        if not staff_member and message.embeds:
-            for embed in message.embeds:
-                embed_title = embed.title or ""
-                embed_desc = embed.description or ""
-                
-                if "استلام تكت" in embed_title or "Claim Ticket" in embed_title or "تم استلام التكت" in embed_desc:
-                    for field in embed.fields:
-                        if "المستلم" in field.name or "استلام" in field.name:
-                            user_ids = re.findall(r'(\d{17,19})', field.value)
-                            if user_ids:
-                                staff_member = message.guild.get_member(int(user_ids[0]))
-                                break
-                    
-                    if not staff_member:
-                        user_ids = re.findall(r'(\d{17,19})', embed_desc)
-                        if user_ids:
-                            staff_member = message.guild.get_member(int(user_ids[0]))
+        # إذا ما حصل المينشن، نبحث عن أي أيدي إداري بارز في النص
+        if not staff_member:
+            all_numbers = re.findall(r'(\d{17,19})', full_text)
+            for num in all_numbers:
+                possible_member = message.guild.get_member(int(num))
+                if possible_member and not possible_member.bot:
+                    staff_member = possible_member
+                    break
 
         if staff_member:
-            ticket_name = "تكت جديدة"
-            if message.embeds:
-                for field in message.embeds[0].fields:
-                    if "التكت" in field.name:
-                        ticket_name = field.value
-            
             await add_points_direct(
                 message.guild, 
                 staff_member, 
                 POINTS_CONFIG["ticket"], 
-                f"استلام تكت ({ticket_name}) عبر اللوق تلقائياً", 
+                "استلام تذكرة (عبر لوق التكتات)", 
                 target_type="ticket"
             )
 
