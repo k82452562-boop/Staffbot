@@ -783,7 +783,7 @@ async def owner_dashboard(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# 4. نظام قراءة لوق التكتات وإضافة النقاط تلقائياً للمستلم 🎟️ (محدث حسب شكل الرسالة الجديد)
+# 4. نظام قراءة لوق التكتات (يقرأ الرسالة القصيرة فقط ولا يقرا النموذج الطويل) 🎟️
 # ----------------------------------------------------
 @bot.event
 async def on_message(message):
@@ -816,39 +816,30 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # قراءة لوق التكتات بناءً على الشكل الجديد (النص أو الإيمبد)
+    # قراءة لوق التكتات (الرسالة القصيرة للاستلام فقط - وتجاهل الإيمبد أو النموذج الطويل)
     if message.channel.id == TICKET_LOG_CHANNEL_ID and message.author.bot:
-        staff_member = None
-        full_text = message.content or ""
-        
-        for embed in message.embeds:
-            if embed.description:
-                full_text += "\n" + embed.description
-            if embed.title:
-                full_text += "\n" + embed.title
+        # إذا كانت الرسالة تحتوي على إيمبد (النموذج الطويل)، نتجاهلها تماماً ولا نحسب نقاط
+        if message.embeds:
+            return
 
-        # استخراج الأيدي من المينشن (مثال: <@123456789>)
-        user_ids = re.findall(r'<@!?(\d+)>', full_text)
-        if user_ids:
-            staff_member = message.guild.get_member(int(user_ids[0]))
+        content = message.content or ""
+        # نتأكد أن الرسالة تخص استلام التكت وليست أي إشعار آخر
+        if "بإستلام التكت" in content or "استلام التكت" in content:
+            staff_member = None
+            
+            # استخراج العضو من المينشن داخل الرسالة القصيرة
+            user_ids = re.findall(r'<@!?(\d+)>', content)
+            if user_ids:
+                staff_member = message.guild.get_member(int(user_ids[0]))
 
-        # إذا ما حصل المينشن، نبحث عن أي أيدي إداري بارز في النص
-        if not staff_member:
-            all_numbers = re.findall(r'(\d{17,19})', full_text)
-            for num in all_numbers:
-                possible_member = message.guild.get_member(int(num))
-                if possible_member and not possible_member.bot:
-                    staff_member = possible_member
-                    break
-
-        if staff_member:
-            await add_points_direct(
-                message.guild, 
-                staff_member, 
-                POINTS_CONFIG["ticket"], 
-                "استلام تذكرة (عبر لوق التكتات)", 
-                target_type="ticket"
-            )
+            if staff_member:
+                await add_points_direct(
+                    message.guild, 
+                    staff_member, 
+                    POINTS_CONFIG["ticket"], 
+                    "استلام تذكرة", 
+                    target_type="ticket"
+                )
 
 # ----------------------------------------------------
 # 5. نظام التقديم الخارق بالزر
