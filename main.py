@@ -15,9 +15,12 @@ import requests
 # ----------------------------------------------------
 app = Flask(__name__)
 
+# [تعديل هنا]: توجيه الصفحة الرئيسية مباشرة للوحة التحكم لحل مشكلة Not Found
 @app.route('/')
 def home():
-    return "Dashboard Online!"
+    if "user" not in session:
+        return redirect("/login")
+    return redirect("/dashboard")
 
 app.secret_key = os.getenv("SESSION_SECRET", "super-secret-key-nz-2026")
 
@@ -273,7 +276,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@app.route("/")
+@app.route("/dashboard")
 def dash_index():
     if "user" not in session: return redirect("/login")
     user_id = session["user"]["id"]
@@ -303,7 +306,7 @@ def dash_update_points():
     save_json_dash("points.json", points_data)
 
     add_dash_log(POINTS_LOGS_FILE, {"admin_name": admin_name, "target_id": target_id, "amount": amount, "reason": reason})
-    return redirect("/")
+    return redirect("/dashboard")
 
 @app.route("/send_embed", methods=["POST"])
 def dash_send_embed():
@@ -316,7 +319,7 @@ def dash_send_embed():
     headers = {"Authorization": f"Bot {DASHBOARD_BOT_TOKEN}", "Content-Type": "application/json"}
     payload = {"embeds": [{"title": title, "description": desc, "color": color, "footer": {"text": f"تم الإرسال بواسطة الموقع: {session['user']['username']}"}}]}
     requests.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", json=payload, headers=headers)
-    return redirect("/")
+    return redirect("/dashboard")
 
 @app.route("/grant_access", methods=["POST"])
 def dash_grant_access():
@@ -326,7 +329,7 @@ def dash_grant_access():
     if new_admin_id not in authorized_users:
         authorized_users.append(new_admin_id)
         save_json_dash(AUTHORIZED_USERS_FILE, authorized_users)
-    return redirect("/")
+    return redirect("/dashboard")
 
 @app.route("/revoke_access", methods=["POST"])
 def dash_revoke_access():
@@ -336,7 +339,7 @@ def dash_revoke_access():
     if remove_id in authorized_users and remove_id != DASHBOARD_OWNER_ID:
         authorized_users.remove(remove_id)
         save_json_dash(AUTHORIZED_USERS_FILE, authorized_users)
-    return redirect("/")
+    return redirect("/dashboard")
 
 @app.route("/login")
 def dash_login():
@@ -350,7 +353,7 @@ def dash_callback():
     access_token = r.json().get('access_token')
     user_req = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {access_token}'})
     session["user"] = user_req.json()
-    return redirect("/")
+    return redirect("/dashboard")
 
 @app.route("/logout")
 def dash_logout():
