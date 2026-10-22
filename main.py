@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 
 # ----------------------------------------------------
-# 1. كود بوت ديسكورد الأصلي كاملاً (بدون أي نقصان)
+# 1. إعدادات بوت ديسكورد الأساسية
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
@@ -357,7 +357,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار الأصلية
+# النماذج والأزرار الأصلية كاملة بدون نقص
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
@@ -659,22 +659,6 @@ class BanModal(discord.ui.Modal, title="🚫 | لوحة توثيق حرمان ا
             await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على {member.mention} وتوثيق السجل بكل فخر!**", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ عذراً، صار خطأ بتنفيذ الحرمان: {e}", ephemeral=True)
-
-class PenaltiesView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="تحذير إداري", style=discord.ButtonStyle.secondary, emoji="⚠️", custom_id="btn_warn_penalties_v1")
-    async def btn_warn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(WarnModal())
-
-    @discord.ui.button(label="تايم أوت / ميوت", style=discord.ButtonStyle.secondary, emoji="🔇", custom_id="btn_timeout_penalties_v1")
-    async def btn_timeout(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(TimeoutModal())
-
-    @discord.ui.button(label="حرمان رول", style=discord.ButtonStyle.danger, emoji="🚫", custom_id="btn_ban_penalties_v1")
-    async def btn_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(BanModal())
 
 class OwnerDashboardView(discord.ui.View):
     def __init__(self):
@@ -1034,15 +1018,28 @@ async def panel_apply(ctx):
     embed.set_footer(text="منتدى النظيم | قيادة السيرفر العليا")
     await ctx.send(embed=embed, view=ApplyButtonView())
 
+# تعديل أمر .عقوبات لإرشاد الإداريين لاستخدام أوامر السلاش (/)
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
     embed = discord.Embed(
-        title="⚖️ | لوحة إدارة العقوبات والحزم الإداري",
-        description="يا هلا ومرحبابك يا المطنوخ. اختر نوع العقوبة المطلوبة من الأزرار تحت:",
-        color=discord.Color.from_rgb(231, 76, 60)
+        title="⚠️ | تنبيه نظام الإدارة",
+        description=(
+            "يا هلا ومرحبابك يا المطنوخ.\n\n"
+            "تم إلغاء الأوامر القديمة للعقوبات، وصار تنفيذ العقوبات **حصرياً عبر أوامر السلاش (Slash Commands)** لتكون أسرع وأسهل!\n\n"
+            "🔹 **الأوامر المتاحة الآن:**\n"
+            "👉 `/تحذير` - لتطبيق تحذير إداري وتوثيقه تلقائياً.\n"
+            "👉 `/تايم_أوت` - لكتم العضو بالمدة المطلوبة.\n"
+            "👉 `/حرمان` - لتطبيق رتبة الحرمان وسحب الرتب.\n\n"
+            "فقط اكتب علامة `/` في الشات واختر الأمر المناسب يا وحش! 🚀"
+        ),
+        color=discord.Color.from_rgb(241, 196, 15)
     )
     embed.set_footer(text="منتدى النظيم | النظام الإداري الموحد")
-    await ctx.send(embed=embed, view=PenaltiesView())
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+    await ctx.send(embed=embed, delete_after=15)
 
 @bot.command(name="حذف", aliases=["delete", "del"])
 async def delete_channel_cmd(ctx):
@@ -1063,7 +1060,6 @@ async def delete_channel_cmd(ctx):
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    bot.add_view(PenaltiesView())
     bot.add_view(OwnerDashboardView())
     for guild in bot.guilds:
         await fetch_points_from_discord()
@@ -1345,7 +1341,7 @@ async def resetpoints(ctx, member: discord.Member):
         await ctx.send(f"🔄 تم تصفير نقاط {member.mention}.")
 
 @bot.command(name="توب", aliases=["leaderboard", "top"])
-async def leaderboard(ctx):
+async def leaderboard(ctx: commands.Context):
     data = load_data()
     if not data: return await ctx.send("📊 لا توجد بيانات.")
     sorted_users = sorted([(int(uid), info["points"] if isinstance(info, dict) else info) for uid, info in data.items()], key=lambda x: x[1], reverse=True)
