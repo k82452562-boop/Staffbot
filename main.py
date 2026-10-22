@@ -14,6 +14,11 @@ import requests
 # 1. إعدادات لوحة التحكم (Flask Dashboard) المتكاملة
 # ----------------------------------------------------
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Dashboard Online!"
+
 app.secret_key = os.getenv("SESSION_SECRET", "super-secret-key-nz-2026")
 
 DASHBOARD_OWNER_ID = "917414299184533515"
