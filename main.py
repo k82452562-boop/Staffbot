@@ -15,12 +15,12 @@ import requests
 # ----------------------------------------------------
 app = Flask(__name__)
 
-# [تعديل هنا]: توجيه الصفحة الرئيسية مباشرة للوحة التحكم لحل مشكلة Not Found
 @app.route('/')
 def home():
     if "user" not in session:
         return redirect("/login")
     return redirect("/dashboard")
+
 
 app.secret_key = os.getenv("SESSION_SECRET", "super-secret-key-nz-2026")
 
