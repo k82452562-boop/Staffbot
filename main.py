@@ -105,6 +105,7 @@ DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
 BANS_FILE = "active_bans.json"
 TEAMS_RESET_FILE = "teams_reset.json"
+TEAM_BONUS_FILE = "team_bonuses.json"
 
 double_points_end_time = 0
 processed_tickets = set()
@@ -114,6 +115,10 @@ def is_admin_or_owner(ctx_or_interaction):
     if author.id == BOT_OWNER_ID:
         return True
     return author.guild_permissions.administrator
+
+def is_bot_owner(ctx_or_interaction):
+    author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
+    return author.id == BOT_OWNER_ID
 
 def can_manage_points(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
@@ -247,6 +252,12 @@ def load_teams_reset():
 def save_teams_reset(data):
     save_json(TEAMS_RESET_FILE, data)
 
+def load_team_bonuses():
+    return load_json(TEAM_BONUS_FILE)
+
+def save_team_bonuses(data):
+    save_json(TEAM_BONUS_FILE, data)
+
 def load_cooldowns():
     return load_json(COOLDOWN_FILE)
 
@@ -297,7 +308,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
     return required_points, remaining, progress_percent, bar
 
 # ----------------------------------------------------
-# 🧠 دالة الترقية الذكية باستخدام الآيديات المباشرة (آمنة 100%)
+# 🧠 دالة الترقية الذكية (تصفر نقاط العضو الشخصية فقط وتحافظ على نقاط التيم)
 # ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
@@ -328,7 +339,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
         required_points = 70 if is_middle else 40
         
         if current_pts >= required_points:
-            # 1. البحث في رتب الإدارة الصغرى
             current_idx = -1
             master_list = JUNIOR_ROLES_LIST
             
@@ -338,7 +348,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                     master_list = JUNIOR_ROLES_LIST
                     break
             
-            # 2. إذا ما لقيتها في الصغرى، ندور في الوسطى
             if current_idx == -1:
                 for idx, rid in enumerate(MIDDLE_ROLES_LIST):
                     if any(r.id == rid for r in member.roles):
@@ -346,30 +355,28 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                         master_list = MIDDLE_ROLES_LIST
                         break
             
-            # تحديد الرتبة التالية في اللستة بدقة تامة
             if current_idx != -1 and current_idx < len(master_list) - 1:
                 next_role_id = master_list[current_idx + 1]
                 target_role = guild.get_role(next_role_id)
                 role_category_name = "الإدارة الصغرى / الوسطى"
             
-            # لو العضو ما عنده أي رتبة من لستة الصغرى، نعطيه أول رتبة صغرى كبداية
             if not target_role and not is_middle and JUNIOR_ROLES_LIST:
                 target_role = guild.get_role(JUNIOR_ROLES_LIST[0])
                 role_category_name = "الإدارة الصغرى"
 
     if target_role and target_role not in member.roles:
         try:
-            # سحب الرتب الإدارية القديمة المذكورة في اللستات حصرياً (لن تقرب الحصانة أو الأعضاء أبداً)
             all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
             roles_to_remove = [
                 r for r in member.roles 
                 if r.id in all_managed_ids and r.id != target_role.id
             ]
             if roles_to_remove:
-                await member.remove_roles(*roles_to_remove, reason="ترقية ذكية دقيقة بالآيديات: سحب الرتبة الإدارية القديمة")
+                await member.remove_roles(*roles_to_remove, reason="ترقية ذكية: سحب الرتبة الإدارية القديمة")
             
-            await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة بالآيديات")
+            await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
             
+            # ملاحظة هامة: يتم تصفير نقاط الشخص نفسه فقط، ونقاط التيم لا تُمس نهائياً
             data = load_data()
             user_id = str(member.id)
             if user_id in data and isinstance(data[user_id], dict):
@@ -379,15 +386,15 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
 
             role_ping_str = notif_role.mention if notif_role else ""
             msg = (
-                f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية ذكية وتصفير نقاط:**\n"
+                f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية ذكية وتصفير نقاط شخصية:**\n"
                 f"ما شاء الله، المطنوخ {member.mention} وصل `{required_points}` نقطة وتمت ترقيته تلقائياً إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
-                f"🔄 **ملاحظة:** تم سحب رتبتك الإدارية القديمة وتصفير النقاط لانطلاق تحدٍ جديد."
+                f"🔄 **ملاحظة:** تم تصفير نقاطك الشخصية فقط لانطلاق تحدٍ جديد، ونقاط فريقك (التيم) محفوظة بالكامل."
             )
             log_channel = guild.get_channel(LOG_CHANNEL_ID)
             if log_channel:
                 await log_channel.send(msg)
         except Exception as e:
-            print(f"خطأ أثناء الترقية الدقيقة: {e}")
+            print(f"خطأ أثناء الترقية: {e}")
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
     global double_points_end_time
@@ -424,11 +431,12 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 📊 دالة تحليل أداء وتنافس الفرق
+# 📊 دالة تحليل أداء وتنافس الفرق (مع دعم بونص أو خصم النقاط اليدوي من الحاكم)
 # ----------------------------------------------------
 async def calculate_teams_performance(guild: discord.Guild):
     data = load_data()
     reset_data = load_teams_reset()
+    bonuses = load_team_bonuses()
     
     guild_id_str = str(guild.id)
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
@@ -465,6 +473,11 @@ async def calculate_teams_performance(guild: discord.Guild):
             t2_identities += u_info.get("identities", 0)
         elif isinstance(u_info, int):
             t2_points += u_info
+
+    # إضافة/خصم التعديلات اليدوية الخاصة بالتيمات التي أضافها الحاكم ريان
+    guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
+    t1_points += guild_bonus.get("t1_extra", 0)
+    t2_points += guild_bonus.get("t2_extra", 0)
 
     reset_info = reset_data.get(guild_id_str, {"t1_base": 0, "t2_base": 0, "time": 0})
     if isinstance(reset_info, dict):
@@ -525,7 +538,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v6")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v7")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -533,6 +546,7 @@ class TeamsResetView(discord.ui.View):
 
         guild = interaction.guild
         data = load_data()
+        bonuses = load_team_bonuses()
         team_1_role = guild.get_role(TEAM_1_ROLE_ID)
         team_2_role = guild.get_role(TEAM_2_ROLE_ID)
         
@@ -550,16 +564,21 @@ class TeamsResetView(discord.ui.View):
                     u_info = data.get(str(m.id), {})
                     t2_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
 
+        guild_id_str = str(guild.id)
+        guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
+        t1_base += guild_bonus.get("t1_extra", 0)
+        t2_base += guild_bonus.get("t2_extra", 0)
+
         reset_data = load_teams_reset()
-        reset_data[str(guild.id)] = {
+        reset_data[guild_id_str] = {
             "t1_base": t1_base,
             "t2_base": t2_base,
             "time": time.time()
         }
         save_teams_reset(reset_data)
 
-        await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق في أمر الأداء بنجاح!**\n*(ملاحظة: نقاط الإداريين الشخصية ومحافظهم وترقياتهم في أمان ولم تُمس نهائياً).* 🎉", ephemeral=True)
-        await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام الأدمن {interaction.user.mention} بتصفير المجموع التنافسي الأسبوعي للفرق لبدء جولة جديدة.", discord.Color.from_rgb(231, 76, 60))
+        await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق بنجاح!**\n*(ملاحظة: نقاط الإداريين وفريقهم ومحافظهم الشخصية في أمان تام).* 🎉", ephemeral=True)
+        await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام الأدمن {interaction.user.mention} بتصفير المجموع التنافسي الأسبوعي للفرق.", discord.Color.from_rgb(231, 76, 60))
 
 @bot.event
 async def on_message(message):
@@ -942,6 +961,84 @@ async def performance_slash(interaction: discord.Interaction):
     view = TeamsResetView() if is_admin_or_owner(interaction) else None
     await interaction.followup.send(embed=embed, view=view)
 
+@bot.tree.command(name="إضافة_نقاط_تيم", description="[خاص بالحاكم ريان] إضافة نقاط تكتيكية إضافية لأحد التيمات")
+@app_commands.describe(team_choice="اختر التيم", amount="عدد النقاط")
+@app_commands.choices(team_choice=[
+    app_commands.Choice(name="التيم الأول (Team 1)", value=1),
+    app_commands.Choice(name="التيم الثاني (Team 2)", value=2)
+])
+async def add_team_points_slash(interaction: discord.Interaction, team_choice: int, amount: int):
+    if not is_bot_owner(interaction):
+        return await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط!", ephemeral=True)
+    
+    guild = interaction.guild
+    guild_id_str = str(guild.id)
+    bonuses = load_team_bonuses()
+    if guild_id_str not in bonuses:
+        bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
+    
+    if team_choice == 1:
+        bonuses[guild_id_str]["t1_extra"] += amount
+        t_name = "التيم الأول"
+    else:
+        bonuses[guild_id_str]["t2_extra"] += amount
+        t_name = "التيم الثاني"
+        
+    save_team_bonuses(bonuses)
+    await interaction.response.send_message(f"✨ تم إضافة `{amount}` نقطة تكتيكية إلى **{t_name}** بنجاح يا طويل العمر!")
+
+@bot.tree.command(name="خصم_نقاط_تيم", description="[خاص بالحاكم ريان] خصم نقاط من أحد التيمات")
+@app_commands.describe(team_choice="اختر التيم", amount="عدد النقاط المراد خصمها")
+@app_commands.choices(team_choice=[
+    app_commands.Choice(name="التيم الأول (Team 1)", value=1),
+    app_commands.Choice(name="التيم الثاني (Team 2)", value=2)
+])
+async def remove_team_points_slash(interaction: discord.Interaction, team_choice: int, amount: int):
+    if not is_bot_owner(interaction):
+        return await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط!", ephemeral=True)
+    
+    guild = interaction.guild
+    guild_id_str = str(guild.id)
+    bonuses = load_team_bonuses()
+    if guild_id_str not in bonuses:
+        bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
+    
+    if team_choice == 1:
+        bonuses[guild_id_str]["t1_extra"] -= amount
+        t_name = "التيم الأول"
+    else:
+        bonuses[guild_id_str]["t2_extra"] -= amount
+        t_name = "التيم الثاني"
+        
+    save_team_bonuses(bonuses)
+    await interaction.response.send_message(f"📉 تم خصم `{amount}` نقطة من **{t_name}** بنجاح يا طويل العمر!")
+
+@bot.tree.command(name="تصفير_تيم", description="[خاص بالحاكم ريان] تصفير وتعديل رصيد النقاط الإضافي لأحد التيمات")
+@app_commands.describe(team_choice="اختر التيم")
+@app_commands.choices(team_choice=[
+    app_commands.Choice(name="التيم الأول (Team 1)", value=1),
+    app_commands.Choice(name="التيم الثاني (Team 2)", value=2)
+])
+async def reset_team_points_slash(interaction: discord.Interaction, team_choice: int):
+    if not is_bot_owner(interaction):
+        return await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط!", ephemeral=True)
+    
+    guild = interaction.guild
+    guild_id_str = str(guild.id)
+    bonuses = load_team_bonuses()
+    if guild_id_str not in bonuses:
+        bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
+    
+    if team_choice == 1:
+        bonuses[guild_id_str]["t1_extra"] = 0
+        t_name = "التيم الأول"
+    else:
+        bonuses[guild_id_str]["t2_extra"] = 0
+        t_name = "التيم الثاني"
+        
+    save_team_bonuses(bonuses)
+    await interaction.response.send_message(f"🔄 تم تصفير وإرجاع نقاط **{t_name}** الإضافية للصفر بنجاح يا طويل العمر!")
+
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري رسمي على عضو")
 @app_commands.describe(member="العضو المخالف", duration="المدة (مثال: 3 ايام)", reason="سبب التحذير", proof="رابط الدليل (اختياري)")
 async def warn_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
@@ -1280,6 +1377,7 @@ async def reset_teams_cmd(ctx):
     
     guild = ctx.guild
     data = load_data()
+    bonuses = load_team_bonuses()
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
     
@@ -1297,15 +1395,20 @@ async def reset_teams_cmd(ctx):
                 u_info = data.get(str(m.id), {})
                 t2_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
 
+    guild_id_str = str(guild.id)
+    guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
+    t1_base += guild_bonus.get("t1_extra", 0)
+    t2_base += guild_bonus.get("t2_extra", 0)
+
     reset_data = load_teams_reset()
-    reset_data[str(guild.id)] = {
+    reset_data[guild_id_str] = {
         "t1_base": t1_base,
         "t2_base": t2_base,
         "time": time.time()
     }
     save_teams_reset(reset_data)
 
-    await ctx.send("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق في أمر الأداء بنجاح!** *(نقاط الإداريين الشخصية محفوظة بالكامل ولم تُمس).* 🚀")
+    await ctx.send("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق بنجاح!** *(نقاط الإداريين الشخصية وفرقهم محفوظة بالكامل).* 🚀")
     await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام {ctx.author.mention} بتصفير المجموع التنافسي الأسبوعي للفرق.", discord.Color.from_rgb(231, 76, 60))
 
 if __name__ == "__main__":
