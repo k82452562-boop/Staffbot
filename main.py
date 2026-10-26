@@ -6,17 +6,368 @@ import os
 import time
 import asyncio
 import re
+import threading
+from flask import Flask, render_template_string, request, redirect, session, url_for
 from datetime import datetime, timedelta
+import requests
 
 # ----------------------------------------------------
-# 1. إعدادات بوت ديسكورد الأساسية
+# 1. إعدادات لوحة التحكم (Flask Dashboard) المتكاملة
+# ----------------------------------------------------
+app = Flask(__name__)
+app.secret_key = os.getenv("SESSION_SECRET", "super-secret-key-nz-2026")
+
+DASHBOARD_OWNER_ID = "917414299184533515"
+CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
+CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+DASHBOARD_BOT_TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("DISCORD_BOT_TOKEN")
+
+AUTHORIZED_USERS_FILE = "authorized_users.json"
+POINTS_LOGS_FILE = "points_logs.json"
+PENALTY_LOGS_FILE = "penalty_logs.json"
+
+def load_json_dash(filepath, default):
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return default
+    return default
+
+def save_json_dash(filepath, data):
+    try:
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"❌ خطأ بالحفظ في اللوحة: {e}")
+
+def add_dash_log(filepath, log_entry):
+    logs = load_json_dash(filepath, [])
+    log_entry["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    logs.insert(0, log_entry)
+    save_json_dash(filepath, logs)
+
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم منتدى النظيم | Admin Panel</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #151c2c;
+            --card-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-primary); color: var(--text-main); margin: 0; display: flex; min-height: 100vh; }
+        .sidebar { width: 260px; background-color: var(--bg-secondary); padding: 20px; display: flex; flex-direction: column; border-left: 1px solid #334155; }
+        .sidebar h2 { color: var(--accent-color); font-size: 1.2rem; text-align: center; margin-bottom: 30px; }
+        .nav-link { color: var(--text-muted); text-decoration: none; padding: 12px 15px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; transition: 0.3s; }
+        .nav-link:hover, .nav-link.active { background-color: #0284c7; color: #fff; }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #334155; }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--accent-color); }
+        .card { background-color: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .card h3 { color: var(--accent-color); margin-top: 0; display: flex; align-items: center; gap: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-muted); }
+        input, select, textarea, button { width: 100%; padding: 10px 12px; background-color: var(--bg-primary); border: 1px solid #334155; border-radius: 6px; color: #fff; box-sizing: border-box; }
+        button { background-color: #0284c7; font-weight: bold; cursor: pointer; border: none; transition: 0.2s; margin-top: 10px; }
+        button:hover { background-color: #0369a1; }
+        .btn-danger { background-color: var(--danger); }
+        .btn-danger:hover { background-color: #dc2626; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 12px; text-align: right; border-bottom: 1px solid #334155; }
+        th { background-color: var(--bg-secondary); color: var(--accent-color); }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+        .badge-warn { background-color: var(--warning); color: #000; }
+        .badge-timeout { background-color: #eab308; color: #000; }
+        .badge-ban { background-color: var(--danger); color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>🛡️ لوحة النظيم</h2>
+        <a href="#" class="nav-link active" onclick="switchTab('points')"><i class="fa-solid fa-chart-line"></i> إدارة النقاط</a>
+        <a href="#" class="nav-link" onclick="switchTab('embed')"><i class="fa-solid fa-pen-to-square"></i> صانع الإمبايد</a>
+        <a href="#" class="nav-link" onclick="switchTab('logs')"><i class="fa-solid fa-list-check"></i> لوقات النقاط</a>
+        <a href="#" class="nav-link" onclick="switchTab('penalties')"><i class="fa-solid fa-gavel"></i> لوق الحرمانات</a>
+        {% if is_owner %}
+        <a href="#" class="nav-link" onclick="switchTab('permissions')"><i class="fa-solid fa-user-shield"></i> إعطاء الصلاحيات</a>
+        {% endif %}
+        <a href="/logout" class="nav-link" style="margin-top: auto; color: var(--danger);"><i class="fa-solid fa-right-from-bracket"></i> تسجيل الخروج</a>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <h1>تحكم البوت الرئيسي</h1>
+            <div class="user-info">
+                <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" alt="Avatar">
+                <div>
+                    <strong>{{ user.username }}</strong>
+                    <div style="font-size:0.8rem; color: var(--text-muted);">
+                        {% if is_owner %}مالك البوت{% else %}عضو مصرح له{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="points" class="tab-content active">
+            <div class="card">
+                <h3><i class="fa-solid fa-coins"></i> تعديل إضافة نقاط الأعضاء</h3>
+                <form action="/update_points" method="POST">
+                    <div class="form-group">
+                        <label>ID العضو / الإداري</label>
+                        <input type="text" name="target_user_id" placeholder="مثال: 917414299184533515" required>
+                    </div>
+                    <div class="form-group">
+                        <label>عدد النقاط (موجب للإضافة / سالب للخصم)</label>
+                        <input type="number" name="points_amount" placeholder="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label>سبب التعديل</label>
+                        <input type="text" name="reason" placeholder="تعديل عبر الموقع" required>
+                    </div>
+                    <button type="submit">تحديث النقاط 🚀</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h3><i class="fa-solid fa-users"></i> قائمة النقاط الحالية</h3>
+                <table>
+                    <tr><th>معرف العضو (ID)</th><th>النقاط الحالية</th></tr>
+                    {% for u_id, info in points_data.items() %}
+                    <tr>
+                        <td>{{ u_id }}</td>
+                        <td><strong>{{ info.points if info is mapping else info }}</strong> نقطة</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+
+        <div id="embed" class="tab-content">
+            <div class="card">
+                <h3><i class="fa-solid fa-paper-plane"></i> إرسال Embed مخصص</h3>
+                <form action="/send_embed" method="POST">
+                    <div class="form-group">
+                        <label>ID الروم في الديسكورد</label>
+                        <input type="text" name="channel_id" placeholder="123456789012345678" required>
+                    </div>
+                    <div class="form-group">
+                        <label>عنوان الإمبايد</label>
+                        <input type="text" name="embed_title" placeholder="أخبار وتحديثات السيرفر" required>
+                    </div>
+                    <div class="form-group">
+                        <label>محتوى الرسالة / الوصف</label>
+                        <textarea name="embed_desc" rows="5" placeholder="اكتب التفاصيل هنا..." required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>لون الإمبايد</label>
+                        <input type="color" name="embed_color" value="#38bdf8" style="height:45px; cursor:pointer;">
+                    </div>
+                    <button type="submit">إرسال فوراً للديسكورد 📤</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="logs" class="tab-content">
+            <div class="card">
+                <h3><i class="fa-solid fa-history"></i> سجل عمليات النقاط</h3>
+                <table>
+                    <tr><th>الوقت</th><th>المسؤول</th><th>العضو</th><th>التغيير</th><th>السبب</th></tr>
+                    {% for log in points_logs %}
+                    <tr>
+                        <td>{{ log.timestamp }}</td>
+                        <td>{{ log.admin_name }}</td>
+                        <td>{{ log.target_id }}</td>
+                        <td><strong style="color: {% if log.amount > 0 %}var(--success){% else %}var(--danger){% endif %};">{{ log.amount }}</strong></td>
+                        <td>{{ log.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+
+        <div id="penalties" class="tab-content">
+            <div class="card">
+                <h3><i class="fa-solid fa-gavel"></i> سجل الحرمانات والعقوبات</h3>
+                <table>
+                    <tr><th>الوقت</th><th>نوع العقوبة</th><th>العضو المخالف</th><th>الاداري المنفذ</th><th>السبب</th></tr>
+                    {% for pen in penalty_logs %}
+                    <tr>
+                        <td>{{ pen.timestamp }}</td>
+                        <td><span class="badge badge-{{ pen.type }}">{{ pen.type|upper }}</span></td>
+                        <td>{{ pen.target_id }}</td>
+                        <td>{{ pen.admin_name }}</td>
+                        <td>{{ pen.reason }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+
+        {% if is_owner %}
+        <div id="permissions" class="tab-content">
+            <div class="card">
+                <h3><i class="fa-solid fa-user-plus"></i> إعطاء صلاحية دخول الموقع لإداري</h3>
+                <form action="/grant_access" method="POST">
+                    <div class="form-group">
+                        <label>ID الإداري المراد إعطاؤه الصلاحية</label>
+                        <input type="text" name="new_admin_id" placeholder="ID العضو" required>
+                    </div>
+                    <button type="submit">إضافة للقائمة 🔑</button>
+                </form>
+            </div>
+            <div class="card">
+                <h3><i class="fa-solid fa-users-gear"></i> الأعضاء المصرح لهم حالياً</h3>
+                <table>
+                    <tr><th>ID الإداري</th><th>إجراء</th></tr>
+                    {% for admin_id in authorized_users %}
+                    <tr>
+                        <td>{{ admin_id }}</td>
+                        <td>
+                            {% if admin_id != '917414299184533515' %}
+                            <form action="/revoke_access" method="POST" style="margin:0;">
+                                <input type="hidden" name="remove_id" value="{{ admin_id }}">
+                                <button type="submit" class="btn-danger" style="padding: 5px 10px; margin:0; width:auto;">سحب الصلاحية ❌</button>
+                            </form>
+                            {% else %}
+                            <span>المالك الأساسي</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route("/")
+def dash_index():
+    if "user" not in session: return redirect("/login")
+    user_id = session["user"]["id"]
+    authorized_users = load_json_dash(AUTHORIZED_USERS_FILE, [DASHBOARD_OWNER_ID])
+    if user_id != DASHBOARD_OWNER_ID and user_id not in authorized_users:
+        return f'<div style="text-align:center; padding:50px; background:#0b0f19; color:#fff;"><h2>❌ ليس لديك صلاحية لدخول لوحة التحكم!</h2><a href="/logout" style="color:#38bdf8;">تسجيل الخروج</a></div>'
+
+    is_owner = (user_id == DASHBOARD_OWNER_ID)
+    points_data = load_json_dash("points.json", {})
+    points_logs = load_json_dash(POINTS_LOGS_FILE, [])
+    penalty_logs = load_json_dash(PENALTY_LOGS_FILE, [])
+
+    return render_template_string(HTML_TEMPLATE, user=session["user"], is_owner=is_owner, points_data=points_data, points_logs=points_logs, penalty_logs=penalty_logs, authorized_users=authorized_users)
+
+@app.route("/update_points", methods=["POST"])
+def dash_update_points():
+    if "user" not in session: return redirect("/login")
+    admin_name = session["user"]["username"]
+    target_id = request.form.get("target_user_id")
+    amount = int(request.form.get("points_amount", 0))
+    reason = request.form.get("reason", "تعديل عبر الموقع")
+
+    points_data = load_json_dash("points.json", {})
+    if target_id not in points_data or not isinstance(points_data[target_id], dict):
+        points_data[target_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+    points_data[target_id]["points"] += amount
+    save_json_dash("points.json", points_data)
+
+    add_dash_log(POINTS_LOGS_FILE, {"admin_name": admin_name, "target_id": target_id, "amount": amount, "reason": reason})
+    return redirect("/")
+
+@app.route("/send_embed", methods=["POST"])
+def dash_send_embed():
+    if "user" not in session: return redirect("/login")
+    channel_id = request.form.get("channel_id")
+    title = request.form.get("embed_title")
+    desc = request.form.get("embed_desc")
+    color = int(request.form.get("embed_color", "#38bdf8").replace("#", ""), 16)
+
+    headers = {"Authorization": f"Bot {DASHBOARD_BOT_TOKEN}", "Content-Type": "application/json"}
+    payload = {"embeds": [{"title": title, "description": desc, "color": color, "footer": {"text": f"تم الإرسال بواسطة الموقع: {session['user']['username']}"}}]}
+    requests.post(f"https://discord.com/api/v10/channels/{channel_id}/messages", json=payload, headers=headers)
+    return redirect("/")
+
+@app.route("/grant_access", methods=["POST"])
+def dash_grant_access():
+    if session.get("user", {}).get("id") != DASHBOARD_OWNER_ID: return "غير مصرح", 403
+    new_admin_id = request.form.get("new_admin_id")
+    authorized_users = load_json_dash(AUTHORIZED_USERS_FILE, [DASHBOARD_OWNER_ID])
+    if new_admin_id not in authorized_users:
+        authorized_users.append(new_admin_id)
+        save_json_dash(AUTHORIZED_USERS_FILE, authorized_users)
+    return redirect("/")
+
+@app.route("/revoke_access", methods=["POST"])
+def dash_revoke_access():
+    if session.get("user", {}).get("id") != DASHBOARD_OWNER_ID: return "غير مصرح", 403
+    remove_id = request.form.get("remove_id")
+    authorized_users = load_json_dash(AUTHORIZED_USERS_FILE, [DASHBOARD_OWNER_ID])
+    if remove_id in authorized_users and remove_id != DASHBOARD_OWNER_ID:
+        authorized_users.remove(remove_id)
+        save_json_dash(AUTHORIZED_USERS_FILE, authorized_users)
+    return redirect("/")
+
+@app.route("/login")
+def dash_login():
+    return redirect(f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify")
+
+@app.route("/callback")
+def dash_callback():
+    code = request.args.get("code")
+    data = {'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET, 'grant_type': 'authorization_code', 'code': code, 'redirect_uri': REDIRECT_URI}
+    r = requests.post('https://discord.com/api/v10/oauth2/token', data=data, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+    access_token = r.json().get('access_token')
+    user_req = requests.get('https://discord.com/api/v10/users/@me', headers={'Authorization': f'Bearer {access_token}'})
+    session["user"] = user_req.json()
+    return redirect("/")
+
+@app.route("/logout")
+def dash_logout():
+    session.clear()
+    return redirect("/login")
+
+def run_web_dashboard():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+# تشغيل لوحة التحكم في الخلفية تلقائياً
+threading.Thread(target=run_web_dashboard, daemon=True).start()
+
+
+# ----------------------------------------------------
+# 2. كود بوت ديسكورد الأصلي كاملاً (مع التحديثات الأخيرة)
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
 
 BOT_OWNER_ID = 917414299184533515
-
-# الرتبة القيادية المصرح لها بالتحكم الكامل في النقاط
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
 
 ALLOWED_ROLE_IDS = [
@@ -82,7 +433,6 @@ MIDDLE_ROLES = [
     1555325627647791215
 ]
 
-# 👑 ترقيات الإدارة العليا الخاصة بالنقاط التي طلبتها بدقة
 SENIOR_HIGHER_ROLES = [
     {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
     {"role_id": 1545544984638267452, "points": 300, "name": "الرتبة الثانية (إدارة عليا)"},
@@ -423,7 +773,6 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار كاملة مع حماية منع إعطاء النقاط للنفس
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
@@ -532,36 +881,266 @@ async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove:
     except Exception as e:
         print(f"خطأ في إزالة التحذير التلقائي: {e}")
 
+class WarnModal(discord.ui.Modal, title="⚠ | لوحة توثيق التحذير الإداري"):
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
+    duration_input = discord.ui.TextInput(label="المدة (مثال: 3 ايام / 5 دقائق)", placeholder="راح يزول التحذير تلقائياً بعدها", required=True)
+    reason_input = discord.ui.TextInput(label="سبب التحذير بالتفصيل", style=discord.TextStyle.paragraph, placeholder="اكتب التفاصيل هنا...", required=True)
+    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط صورة أو فيديو...", required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        query = self.user_input.value.strip()
+        member = await find_member_by_name(guild, query)
+
+        if not member:
+            await interaction.response.send_message(f"❌ **ما لقيته يا الغالي:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`). تأكد منه زين.", ephemeral=True)
+            return
+
+        r_warn1 = guild.get_role(WARN_1_ID)
+        r_warn2 = guild.get_role(WARN_2_ID)
+        r_warn3 = guild.get_role(WARN_3_ID)
+
+        assigned_warn_role = r_warn1
+        assigned_warn_name = "تحذير أول"
+        try:
+            if r_warn2 and r_warn2 in member.roles:
+                if r_warn2: await member.remove_roles(r_warn2)
+                if r_warn3: await member.add_roles(r_warn3)
+                assigned_warn_role = r_warn3
+                assigned_warn_name = "تحذير ثالث"
+            elif r_warn1 and r_warn1 in member.roles:
+                if r_warn1: await member.remove_roles(r_warn1)
+                if r_warn2: await member.add_roles(r_warn2)
+                assigned_warn_role = r_warn2
+                assigned_warn_name = "تحذير ثاني"
+            else:
+                if r_warn1: await member.add_roles(r_warn1)
+                assigned_warn_role = r_warn1
+                assigned_warn_name = "تحذير أول"
+        except Exception as e:
+            print(f"خطأ في منح رتبة التحذير: {e}")
+
+        proof = self.proof_input.value.strip() if self.proof_input.value else "لا يوجد"
+        reason = self.reason_input.value.strip()
+        duration_text = self.duration_input.value.strip()
+        duration_sec = parse_duration_to_seconds(duration_text)
+
+        warn_channel = guild.get_channel(WARN_CHANNEL_ID)
+        if warn_channel:
+            warning_msg = (
+                f"__**\n"
+                f"`سجل التحذيرات الرسمي`\n\n"
+                f"- اسـم الإداري : {interaction.user.mention}\n\n"
+                f"- اســم العضو : {member.mention}\n\n"
+                f"- نـوع التـحـذيـر : {assigned_warn_name}\n\n"
+                f"- الـمـده : {duration_text}\n\n"
+                f"- الـسـبـب: {reason}\n\n"
+                f"- الـدليـل : {proof}\n"
+                f"**__"
+            )
+            await warn_channel.send(warning_msg)
+
+        await send_unified_log(
+            guild, "⚠️ | تحذير إداري صارم", 
+            f"**الإداري:** {interaction.user.mention}\n**العضو المخالف:** {member.mention}\n**التصنيف:** {assigned_warn_name}\n**المدة:** {duration_text}\n**السبب:** {reason}", 
+            discord.Color.from_rgb(231, 76, 60)
+        )
+
+        data = load_data()
+        user_id = str(interaction.user.id)
+        if user_id not in data or not isinstance(data[user_id], dict):
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[user_id]["warns"] += 1
+        save_data(data, guild)
+
+        await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"تطبيق {assigned_warn_name}")
+        await interaction.response.send_message(f"✅ **يا كفو! تم تطبيق {assigned_warn_name} على {member.mention} ونزلت نقاطك في الرصيد بنجاح!**", ephemeral=True)
+
+        if assigned_warn_role:
+            bot.loop.create_task(auto_remove_warn(guild, member.id, assigned_warn_role, duration_sec))
+
+class TimeoutModal(discord.ui.Modal, title="🔇 | لوحة توثيق التايم أوت (الميوت)"):
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
+    minutes_input = discord.ui.TextInput(label="المدة بالدقائق", placeholder="مثال: 60 (يعني ساعة)", required=True)
+    reason_input = discord.ui.TextInput(label="سبب الإسكات", style=discord.TextStyle.paragraph, required=True)
+    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط الدليل...", required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        query = self.user_input.value.strip()
+        member = await find_member_by_name(guild, query)
+
+        if not member:
+            await interaction.response.send_message(f"❌ **ما لقيته:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`).", ephemeral=True)
+            return
+
+        try:
+            minutes = int(self.minutes_input.value.strip())
+        except:
+            await interaction.response.send_message("❌ **خطأ:** تأكد إنك كتبت رقماً صحيحاً للمدة بالدقائق.", ephemeral=True)
+            return
+
+        reason = self.reason_input.value.strip()
+        proof = self.proof_input.value.strip() if self.proof_input.value else "لا يوجد"
+        duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
+
+        try:
+            await member.timeout(duration_delta, reason=reason)
+            timeout_model_channel = guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
+            timeout_model_msg = (
+                f"**\n"
+                f"`سجل التايم أوت الرسمي`\n\n"
+                f" اسـم الإداري : {interaction.user.mention}\n\n"
+                f" اسـم العضو : {member.mention}\n\n"
+                f"الـمـده : {minutes} دقيقة\n\n"
+                f"الـسـبـب: {reason}\n\n"
+                f"الـدليـل : {proof}\n"
+                f"**"
+            )
+            if timeout_model_channel:
+                await timeout_model_channel.send(timeout_model_msg)
+
+            await send_unified_log(
+                guild, "🔇 | عقوبة إسكات (تايم أوت)", 
+                f"**الإداري:** {interaction.user.mention}\n**العضو:** {member.mention}\n**المدة:** {minutes} دقيقة\n**السبب:** {reason}", 
+                discord.Color.from_rgb(230, 126, 34)
+            )
+
+            data = load_data()
+            user_id = str(interaction.user.id)
+            if user_id not in data or not isinstance(data[user_id], dict):
+                data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            data[user_id]["timeouts"] += 1
+            save_data(data, guild)
+
+            await add_points_direct(guild, interaction.user, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
+            await interaction.response.send_message(f"✅ **تم كتم العضو {member.mention} لمدة {minutes} دقيقة بنجاح تام!**", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ عذراً، حصل خطأ أثناء التايم أوت: {e}", ephemeral=True)
+
+class BanModal(discord.ui.Modal, title="🚫 | لوحة توثيق حرمان الرول"):
+    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
+    duration_input = discord.ui.TextInput(label="المدة (مثال: اسبوع / 3 ايام)", required=True)
+    reason_input = discord.ui.TextInput(label="سبب الحرمان", style=discord.TextStyle.paragraph, required=True)
+    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط الدليل...", required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        query = self.user_input.value.strip()
+        member = await find_member_by_name(guild, query)
+
+        if not member:
+            await interaction.response.send_message(f"❌ **ما لقيته:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`).", ephemeral=True)
+            return
+
+        ban_role = guild.get_role(BAN_ROLE_ID)
+        if not ban_role:
+            await interaction.response.send_message("❌ رتبة الحرمان مش موجودة بالسيرفر يا الحبيب.", ephemeral=True)
+            return
+
+        duration = self.duration_input.value.strip()
+        reason = self.reason_input.value.strip()
+        proof = self.proof_input.value.strip() if self.proof_input.value else "لا يوجد"
+
+        try:
+            saved_roles = [r.id for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
+            roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
+            if roles_to_remove:
+                await member.remove_roles(*roles_to_remove, reason=f"عقوبة حرمان بواسطة {interaction.user.name}")
+            await member.add_roles(ban_role, reason=f"تطبيق عقوبة الحرمان بواسطة {interaction.user.name}")
+
+            duration_seconds = parse_duration_to_seconds(duration)
+            expires_at = time.time() + duration_seconds
+            
+            bans_data = load_bans()
+            guild_id_str = str(guild.id)
+            if guild_id_str not in bans_data:
+                bans_data[guild_id_str] = {}
+                
+            bans_data[guild_id_str][str(member.id)] = {
+                "saved_roles": saved_roles,
+                "expires_at": expires_at
+            }
+            save_bans(bans_data)
+
+            ban_model_channel = guild.get_channel(BAN_MODEL_CHANNEL_ID)
+            ban_model_msg = (
+                f"__**\n"
+                f"`سجل حرمان الرول الرسمي`\n\n"
+                f"- اسـم الإداري : {interaction.user.mention}\n\n"
+                f"- اسـم العضو : {member.mention}\n\n"
+                f"- الـسـبـب : {reason}\n\n"
+                f"- الـمـده : {duration}\n\n"
+                f"- الـدليـل : {proof}\n"
+                f"**__"
+            )
+            if ban_model_channel:
+                await ban_model_channel.send(ban_model_msg)
+
+            await send_unified_log(
+                guild, "🚫 | عقوبة حرمان رول قاسية", 
+                f"**الإداري:** {interaction.user.mention}\n**العضو:** {member.mention}\n**المدة:** {duration}\n**السبب:** {reason}", 
+                discord.Color.from_rgb(142, 68, 173)
+            )
+
+            data = load_data()
+            user_id = str(interaction.user.id)
+            if user_id not in data or not isinstance(data[user_id], dict):
+                data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            data[user_id]["bans"] += 1
+            save_data(data, guild)
+
+            await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
+            await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على {member.mention} وتوثيق السجل بكل فخر!**", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ عذراً، صار خطأ بتنفيذ الحرمان: {e}", ephemeral=True)
+
+class PenaltiesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="تحذير إداري", style=discord.ButtonStyle.secondary, emoji="⚠️", custom_id="btn_warn_penalties_v1")
+    async def btn_warn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(WarnModal())
+
+    @discord.ui.button(label="تايم أوت / ميوت", style=discord.ButtonStyle.secondary, emoji="🔇", custom_id="btn_timeout_penalties_v1")
+    async def btn_timeout(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TimeoutModal())
+
+    @discord.ui.button(label="حرمان رول", style=discord.ButtonStyle.danger, emoji="🚫", custom_id="btn_ban_penalties_v1")
+    async def btn_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(BanModal())
+
 class OwnerDashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
     @discord.ui.button(label="إضافة نقاط", style=discord.ButtonStyle.success, emoji="✨", custom_id="dash_add_pts")
     async def dash_add(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(AddPointsModal())
 
     @discord.ui.button(label="خصم نقاط", style=discord.ButtonStyle.danger, emoji="📉", custom_id="dash_remove_pts")
     async def dash_rem(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(RemovePointsModal())
 
     @discord.ui.button(label="تصفير نقاط", style=discord.ButtonStyle.secondary, emoji="🔄", custom_id="dash_reset_pts")
     async def dash_res(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(ResetPointsModal())
 
     @discord.ui.button(label="تفعيل دبل النقاط (x2)", style=discord.ButtonStyle.success, emoji="🔥", custom_id="dash_double_pts")
     async def dash_double(self, interaction: discord.Interaction, button: discord.ui.Button):
         global double_points_end_time
-        if not is_admin_or_owner(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان والأدمن فقط!", ephemeral=True)
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
             return
         double_points_end_time = time.time() + 3600
         await interaction.response.send_message("🔥 **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة عبر الداشبورد!**", ephemeral=True)
@@ -569,8 +1148,8 @@ class OwnerDashboardView(discord.ui.View):
 
     @discord.ui.button(label="نشر بانل التقديم", style=discord.ButtonStyle.primary, emoji="📋", custom_id="dash_panel_apply")
     async def dash_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not is_admin_or_owner(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان والأدمن فقط!", ephemeral=True)
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
             return
         embed = discord.Embed(
             title="📋 | نظام تقديم الهوية الرسمي",
@@ -584,8 +1163,8 @@ class OwnerDashboardView(discord.ui.View):
 
     @discord.ui.button(label="لوحة الشرف (التوب)", style=discord.ButtonStyle.secondary, emoji="🏆", custom_id="dash_top")
     async def dash_top(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not is_admin_or_owner(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان والأدمن فقط!", ephemeral=True)
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
             return
         data = load_data()
         if not data:
@@ -607,10 +1186,9 @@ class OwnerDashboardView(discord.ui.View):
 
 @bot.command(name="لوحة", aliases=["dashboard", "owner_panel"])
 async def owner_dashboard(ctx):
-    if not is_admin_or_owner(ctx):
-        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للحاكم ريان والأدمن فقط!", delete_after=5)
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("❌ عذراً يا الحبيب، أمر الحذف مخصص للحاكم ريان فقط!", delete_after=5)
         return
-    
     try:
         await ctx.message.delete()
     except:
@@ -893,24 +1471,12 @@ async def panel_apply(ctx):
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
     embed = discord.Embed(
-        title="⚠️ | تنبيه نظام الإدارة",
-        description=(
-            "يا هلا ومرحبابك يا المطنوخ.\n\n"
-            "تم إلغاء الأوامر القديمة للعقوبات، وصار تنفيذ العقوبات **حصرياً عبر أوامر السلاش (Slash Commands)** لتكون أسرع وأسهل!\n\n"
-            "🔹 **الأوامر المتاحة الآن:**\n"
-            "👉 `/تحذير` - لتطبيق تحذير إداري وتوثيقه تلقائياً.\n"
-            "👉 `/تايم_أوت` - لكتم العضو بالمدة المطلوبة.\n"
-            "👉 `/حرمان` - لتطبيق رتبة الحرمان وسحب الرتب.\n\n"
-            "فقط اكتب علامة `/` في الشات واختر الأمر المناسب يا وحش! 🚀"
-        ),
-        color=discord.Color.from_rgb(241, 196, 15)
+        title="⚖️ | لوحة إدارة العقوبات والحزم الإداري",
+        description="يا هلا ومرحبابك يا المطنوخ. اختر نوع العقوبة المطلوبة من الأزرار تحت:",
+        color=discord.Color.from_rgb(231, 76, 60)
     )
     embed.set_footer(text="منتدى النظيم | النظام الإداري الموحد")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-    await ctx.send(embed=embed, delete_after=15)
+    await ctx.send(embed=embed, view=PenaltiesView())
 
 @bot.command(name="حذف", aliases=["delete", "del"])
 async def delete_channel_cmd(ctx):
@@ -924,23 +1490,17 @@ async def delete_channel_cmd(ctx):
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
-# ----------------------------------------------------
-# ⏰ مهمة خلفية تلقائية لفحص انتهاء الحرمان وإعادة الرتب
-# ----------------------------------------------------
 @tasks.loop(minutes=1)
 async def check_expired_bans():
     bans_data = load_bans()
     if not bans_data:
         return
-    
     current_time = time.time()
     updated = False
-    
     for guild_id_str, members_dict in list(bans_data.items()):
         guild = bot.get_guild(int(guild_id_str))
         if not guild:
             continue
-            
         ban_role = guild.get_role(BAN_ROLE_ID)
         for member_id_str, ban_info in list(members_dict.items()):
             if current_time >= ban_info["expires_at"]:
@@ -949,42 +1509,32 @@ async def check_expired_bans():
                     try:
                         if ban_role and ban_role in member.roles:
                             await member.remove_roles(ban_role, reason="انتهت مدة الحرمان - إرجاع الرتب")
-                        
                         roles_to_restore = []
                         for rid in ban_info["saved_roles"]:
                             r = guild.get_role(rid)
                             if r and r <= guild.me.top_role and not r.is_default():
                                 roles_to_restore.append(r)
-                                
                         if roles_to_restore:
                             await member.add_roles(*roles_to_restore, reason="انتهاء الحرمان وإرجاع الرتب السابقة تلقائياً")
-                            
                         log_ch = guild.get_channel(LOG_CHANNEL_ID)
                         if log_ch:
                             await log_ch.send(embed=discord.Embed(title="♻️ | انتهاء الحرمان وإرجاع الرتب", description=f"العضو {member.mention} انتهت فترة حرمانه وتم استرجاع رتبه السابقة تلقائياً.", color=discord.Color.green()))
                     except Exception as e:
                         print(f"خطأ في إرجاع رتب العضو بعد انتهاء الحرمان: {e}")
-                
                 del members_dict[member_id_str]
                 updated = True
-                
         if not members_dict:
             del bans_data[guild_id_str]
-            
     if updated:
         save_bans(bans_data)
-
-# ----------------------------------------------------
-# 2. أوامر السلاش العربية المضافة (Slash Commands)
-# ----------------------------------------------------
 
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
+    bot.add_view(PenaltiesView())
     bot.add_view(OwnerDashboardView())
     if not check_expired_bans.is_running():
         check_expired_bans.start()
-        
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
@@ -993,7 +1543,7 @@ async def on_ready():
         print(f"✅ تم مزامنة {len(synced)} أمر سلاش عربي بنجاح!")
     except Exception as e:
         print(f"❌ خطأ في مزامنة أوامر السلاش: {e}")
-    print(f"🚀 [بوت منتدى النظيم شغّال بنجاح تام] باسم: {bot.user}")
+    print(f"🚀 [بوت منتدى النظيم + لوحة التحكم شغّالان بنجاح تام] باسم: {bot.user}")
 
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري رسمي على عضو")
 @app_commands.describe(member="العضو المخالف", duration="المدة (مثال: 3 ايام)", reason="سبب التحذير", proof="رابط الدليل (اختياري)")
@@ -1065,7 +1615,6 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
 
     try:
         saved_roles = [r.id for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
-        
         roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
         if roles_to_remove: 
             await member.remove_roles(*roles_to_remove, reason=f"حرمان بواسطة {interaction.user.name}")
@@ -1107,7 +1656,6 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
 async def addpoints_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
     if not can_manage_points(interaction):
         return await interaction.response.send_message("❌ هذا الأمر مخصص للرتب القيادية المصرح لها فقط!", ephemeral=True)
-        
     if member.id == interaction.user.id and any(role.id == POINTS_CONTROL_ROLE_ID for role in interaction.user.roles):
         await interaction.response.send_message(f"❌ {interaction.user.mention} ماتقدر تعطي نفسك نقاط يالوح", ephemeral=False)
         return
@@ -1185,10 +1733,6 @@ async def editembed_slash(interaction: discord.Interaction, channel_id: str, mes
     except Exception as e:
         await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
 
-# ----------------------------------------------------
-# 3. الأوامر النصية العادية بالبادئة (.) مع البروفايل والنقاط المطورة
-# ----------------------------------------------------
-
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
 async def help_command(ctx):
     embed = discord.Embed(
@@ -1199,25 +1743,11 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والبروفايلات",
-        value="▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`\n▫️ `.تعديل_امبايد`",
+        value="▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
     await ctx.send(embed=embed)
-
-@bot.command(name="تعديل_امبايد", aliases=["editembed"])
-async def edit_embed_cmd(ctx, channel_id: int, message_id: int, new_title: str, *, new_desc: str):
-    if not is_admin_or_owner(ctx): return
-    try:
-        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
-        msg = await channel.fetch_message(message_id)
-        embed = msg.embeds[0] if msg.embeds else discord.Embed()
-        embed.title = new_title
-        embed.description = new_desc
-        await msg.edit(embed=embed)
-        await ctx.send("✅ تم تعديل الإمبايد بنجاح!", delete_after=5)
-    except Exception as e:
-        await ctx.send(f"❌ تعذر تعديل الإمبايد: {e}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -1308,7 +1838,6 @@ async def points(ctx, member: discord.Member = None):
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
     if not can_manage_points(ctx): return await ctx.send("❌ مخصص للرتب القيادية فقط!")
-    
     if member.id == ctx.author.id and any(role.id == POINTS_CONTROL_ROLE_ID for role in ctx.author.roles):
         await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك نقاط يالوح")
         return
@@ -1342,7 +1871,7 @@ async def resetpoints(ctx, member: discord.Member):
         await ctx.send(f"🔄 تم تصفير نقاط {member.mention}.")
 
 @bot.command(name="توب", aliases=["leaderboard", "top"])
-async def leaderboard(ctx: commands.Context):
+async def leaderboard(ctx):
     data = load_data()
     if not data: return await ctx.send("📊 لا توجد بيانات.")
     sorted_users = sorted([(int(uid), info["points"] if isinstance(info, dict) else info) for uid, info in data.items()], key=lambda x: x[1], reverse=True)
@@ -1353,4 +1882,4 @@ if __name__ == "__main__":
     if TOKEN:
         bot.run(TOKEN)
     else:
-        print("❌ خطأ: يرجى وضع متغير DISCORD_TOKEN.")
+        print("❌ خطأ: يرجى وضع متغير DISCORD_TOKEN في إعدادات Railway (Variables).")
