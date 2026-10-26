@@ -103,6 +103,7 @@ COOLDOWN_FILE = "cooldowns.json"
 BANS_FILE = "active_bans.json"
 TEAMS_RESET_FILE = "teams_reset.json"
 TEAM_BONUS_FILE = "team_bonuses.json"
+TEAM_PERSISTENT_FILE = "team_persistent_scores.json"
 
 double_points_end_time = 0
 processed_tickets = set()
@@ -162,6 +163,12 @@ def load_team_bonuses():
 
 def save_team_bonuses(data):
     save_json(TEAM_BONUS_FILE, data)
+
+def load_team_persistent():
+    return load_json(TEAM_PERSISTENT_FILE)
+
+def save_team_persistent(data):
+    save_json(TEAM_PERSISTENT_FILE, data)
 
 def load_cooldowns():
     return load_json(COOLDOWN_FILE)
@@ -311,6 +318,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             
             await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
             
+            # تصفير نقاط الشخص فقط، ونقاط التيم لا تتأثر نهائياً
             data = load_data()
             user_id = str(member.id)
             if user_id in data and isinstance(data[user_id], dict):
@@ -353,6 +361,21 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
         user_data["identities"] = user_data.get("identities", 0) + 1
 
     save_data(data, guild)
+
+    # 🛡️ تراكم نقاط التيم بشكل مستقل وثابت حتى لو حصلت ترقية وتصفرت نقاط الشخص
+    guild_id_str = str(guild.id)
+    persistent = load_team_persistent()
+    if guild_id_str not in persistent:
+        persistent[guild_id_str] = {"t1_total": 0, "t2_total": 0}
+
+    team_1_role = guild.get_role(TEAM_1_ROLE_ID)
+    team_2_role = guild.get_role(TEAM_2_ROLE_ID)
+
+    if team_1_role and team_1_role in staff.roles:
+        persistent[guild_id_str]["t1_total"] = persistent[guild_id_str].get("t1_total", 0) + actual_points
+    elif team_2_role and team_2_role in staff.roles:
+        persistent[guild_id_str]["t2_total"] = persistent[guild_id_str].get("t2_total", 0) + actual_points
+    save_team_persistent(persistent)
     
     double_text = " 🔥 **(الدبل شغال x2 يا وحش!)**" if is_double_active else ""
     await send_unified_log(
@@ -365,46 +388,41 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 async def calculate_teams_performance(guild: discord.Guild):
-    data = load_data()
     reset_data = load_teams_reset()
     bonuses = load_team_bonuses()
+    persistent = load_team_persistent()
     
     guild_id_str = str(guild.id)
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
     
     t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
-    t1_points = 0
-    t1_promotions = 0
-    t1_tickets = 0
-    t1_identities = 0
-    
+    t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
+
+    # جلب النقاط التراكمية المستقلة للتيمات لضمان عدم تأثرها بترقيات الأعضاء أو تصفيرهم
+    guild_persistent = persistent.get(guild_id_str, {"t1_total": 0, "t2_total": 0})
+    t1_points = guild_persistent.get("t1_total", 0)
+    t2_points = guild_persistent.get("t2_total", 0)
+
+    # حساب التكتات والترقيات للإحصائيات
+    data = load_data()
+    t1_promotions = t1_tickets = t1_identities = 0
     for m in t1_members:
         u_info = data.get(str(m.id), {})
         if isinstance(u_info, dict):
-            t1_points += u_info.get("points", 0)
             t1_promotions += u_info.get("total_promotions", 0)
             t1_tickets += u_info.get("tickets", 0)
             t1_identities += u_info.get("identities", 0)
-        elif isinstance(u_info, int):
-            t1_points += u_info
 
-    t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
-    t2_points = 0
-    t2_promotions = 0
-    t2_tickets = 0
-    t2_identities = 0
-    
+    t2_promotions = t2_tickets = t2_identities = 0
     for m in t2_members:
         u_info = data.get(str(m.id), {})
         if isinstance(u_info, dict):
-            t2_points += u_info.get("points", 0)
             t2_promotions += u_info.get("total_promotions", 0)
             t2_tickets += u_info.get("tickets", 0)
             t2_identities += u_info.get("identities", 0)
-        elif isinstance(u_info, int):
-            t2_points += u_info
 
+    # إضافة/خصم التعديلات اليدوية الخاصة بالحاكم
     guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
     t1_points += guild_bonus.get("t1_extra", 0)
     t2_points += guild_bonus.get("t2_extra", 0)
@@ -462,7 +480,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🎛️ نافذة الأزرار التفاعلية لقائمة التيمات (خاصة بالحاكم ريان حصرياً)
+# 🎛️ نافذة الأزرار والتفاعل للتحكم بالتيمات (خاصة بالحاكم ريان حصرياً)
 # ----------------------------------------------------
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
@@ -519,22 +537,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    # --- أزرار التيم الأول ---
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v1")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v2")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v1")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v2")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v1")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v2")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -548,22 +565,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    # --- أزرار التيم الثاني ---
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v1")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v2")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v1")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v2")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v1")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v2")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -581,33 +597,21 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v8")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v9")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
             return
 
         guild = interaction.guild
-        data = load_data()
-        bonuses = load_team_bonuses()
-        team_1_role = guild.get_role(TEAM_1_ROLE_ID)
-        team_2_role = guild.get_role(TEAM_2_ROLE_ID)
-        
-        t1_base = 0
-        if team_1_role:
-            for m in guild.members:
-                if team_1_role in m.roles:
-                    u_info = data.get(str(m.id), {})
-                    t1_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
-
-        t2_base = 0
-        if team_2_role:
-            for m in guild.members:
-                if team_2_role in m.roles:
-                    u_info = data.get(str(m.id), {})
-                    t2_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
-
         guild_id_str = str(guild.id)
+        bonuses = load_team_bonuses()
+        persistent = load_team_persistent()
+        
+        guild_persistent = persistent.get(guild_id_str, {"t1_total": 0, "t2_total": 0})
+        t1_base = guild_persistent.get("t1_total", 0)
+        t2_base = guild_persistent.get("t2_total", 0)
+
         guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
         t1_base += guild_bonus.get("t1_extra", 0)
         t2_base += guild_bonus.get("t2_extra", 0)
@@ -1368,26 +1372,14 @@ async def reset_teams_cmd(ctx):
         return
     
     guild = ctx.guild
-    data = load_data()
-    bonuses = load_team_bonuses()
-    team_1_role = guild.get_role(TEAM_1_ROLE_ID)
-    team_2_role = guild.get_role(TEAM_2_ROLE_ID)
-    
-    t1_base = 0
-    if team_1_role:
-        for m in guild.members:
-            if team_1_role in m.roles:
-                u_info = data.get(str(m.id), {})
-                t1_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
-
-    t2_base = 0
-    if team_2_role:
-        for m in guild.members:
-            if team_2_role in m.roles:
-                u_info = data.get(str(m.id), {})
-                t2_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
-
     guild_id_str = str(guild.id)
+    bonuses = load_team_bonuses()
+    persistent = load_team_persistent()
+    
+    guild_persistent = persistent.get(guild_id_str, {"t1_total": 0, "t2_total": 0})
+    t1_base = guild_persistent.get("t1_total", 0)
+    t2_base = guild_persistent.get("t2_total", 0)
+
     guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
     t1_base += guild_bonus.get("t1_extra", 0)
     t2_base += guild_bonus.get("t2_extra", 0)
