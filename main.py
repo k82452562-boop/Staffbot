@@ -80,6 +80,14 @@ MIDDLE_ROLES = [
     1555325627647791215
 ]
 
+# 👑 ترقيات الإدارة العليا الخاصة (الرتبة والهدف المطلوب)
+SENIOR_HIGHER_ROLES = [
+    {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
+    {"role_id": 1545544984638267452, "points": 300, "name": "الرتبة الثانية (إدارة عليا)"},
+    {"role_id": 1545545930885828669, "points": 450, "name": "الرتبة الثالثة (إدارة عليا)"},
+    {"role_id": 1561308212832116796, "points": 600, "name": "الرتبة الرابعة (إدارة عليا)"},
+]
+
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -230,14 +238,29 @@ async def send_unified_log(guild, title, description, color=discord.Color.from_r
         await log_channel.send(embed=embed)
 
 async def get_promotion_progress(member: discord.Member, current_pts: int):
-    middle_index = -1
-    for idx, r_id in enumerate(MIDDLE_ROLES):
-        if any(r.id == r_id for r in member.roles):
-            middle_index = idx
-            break
+    is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
+    
+    if is_senior_higher:
+        current_senior_idx = -1
+        for idx, s_info in enumerate(SENIOR_HIGHER_ROLES):
+            if any(r.id == s_info["role_id"] for r in member.roles):
+                current_senior_idx = idx
+                break
+        
+        if current_senior_idx < len(SENIOR_HIGHER_ROLES) - 1:
+            target_info = SENIOR_HIGHER_ROLES[current_senior_idx + 1]
+            required_points = target_info["points"]
+        else:
+            required_points = SENIOR_HIGHER_ROLES[-1]["points"]
+    else:
+        middle_index = -1
+        for idx, r_id in enumerate(MIDDLE_ROLES):
+            if any(r.id == r_id for r in member.roles):
+                middle_index = idx
+                break
 
-    is_middle = (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles))
-    required_points = 70 if is_middle else 40
+        is_middle = (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles))
+        required_points = 70 if is_middle else 40
     
     remaining = max(0, required_points - current_pts)
     progress_percent = min(100, int((current_pts / required_points) * 100)) if required_points > 0 else 100
@@ -251,60 +274,79 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     
-    if member.id == BOT_OWNER_ID or member.guild_permissions.administrator or any(role.id == POINTS_CONTROL_ROLE_ID for role in member.roles):
+    if member.id == BOT_OWNER_ID or member.guild_permissions.administrator:
         return
 
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
     target_role_id = None
     role_category_name = ""
+    required_points = 40
 
-    middle_index = -1
-    for idx, r_id in enumerate(MIDDLE_ROLES):
-        if any(r.id == r_id for r in member.roles):
-            middle_index = idx
-            break
+    is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
 
-    required_points = 70 if (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)) else 40
-    if current_pts < required_points:
-        return
+    if is_senior_higher:
+        current_senior_idx = -1
+        for idx, s_info in enumerate(SENIOR_HIGHER_ROLES):
+            if any(r.id == s_info["role_id"] for r in member.roles):
+                current_senior_idx = idx
+                break
+        
+        next_idx = current_senior_idx + 1
+        if next_idx < len(SENIOR_HIGHER_ROLES):
+            target_info = SENIOR_HIGHER_ROLES[next_idx]
+            required_points = target_info["points"]
+            if current_pts >= required_points:
+                target_role_id = target_info["role_id"]
+                role_category_name = "الإدارة العليا المتقدمة"
+    else:
+        middle_index = -1
+        for idx, r_id in enumerate(MIDDLE_ROLES):
+            if any(r.id == r_id for r in member.roles):
+                middle_index = idx
+                break
 
-    junior_index = -1
-    for idx, r_id in enumerate(JUNIOR_ROLES):
-        if any(r.id == r_id for r in member.roles):
-            junior_index = idx
-            break
+        required_points = 70 if (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)) else 40
+        if current_pts < required_points:
+            return
 
-    has_junior_base = any(r.id == JUNIOR_BASE_ROLE_ID for r in member.roles)
-    has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
+        junior_index = -1
+        for idx, r_id in enumerate(JUNIOR_ROLES):
+            if any(r.id == r_id for r in member.roles):
+                junior_index = idx
+                break
 
-    if middle_index != -1 or has_middle_base:
-        if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
-            target_role_id = MIDDLE_ROLES[middle_index + 1]
-            role_category_name = "الإدارة الوسطى / العليا"
-        elif middle_index == -1 and has_middle_base:
-            target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
-            role_category_name = "الإدارة الوسطى / العليا"
-    elif junior_index != -1 or has_junior_base:
-        if junior_index != -1:
-            if junior_index < len(JUNIOR_ROLES) - 1:
-                target_role_id = JUNIOR_ROLES[junior_index + 1]
+        has_junior_base = any(r.id == JUNIOR_BASE_ROLE_ID for r in member.roles)
+        has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
+
+        if middle_index != -1 or has_middle_base:
+            if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
+                target_role_id = MIDDLE_ROLES[middle_index + 1]
+                role_category_name = "الإدارة الوسطى / العليا"
+            elif middle_index == -1 and has_middle_base:
+                target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
+                role_category_name = "الإدارة الوسطى / العليا"
+        elif junior_index != -1 or has_junior_base:
+            if junior_index != -1:
+                if junior_index < len(JUNIOR_ROLES) - 1:
+                    target_role_id = JUNIOR_ROLES[junior_index + 1]
+                    role_category_name = "الإدارة الصغرى"
+                else:
+                    target_role_id = MIDDLE_ROLES[0]
+                    role_category_name = "الإدارة الوسطى"
+            elif has_junior_base:
+                target_role_id = JUNIOR_ROLES[0]
                 role_category_name = "الإدارة الصغرى"
-            else:
-                target_role_id = MIDDLE_ROLES[0]
-                role_category_name = "الإدارة الوسطى"
-        elif has_junior_base:
+        elif current_pts >= 40:
             target_role_id = JUNIOR_ROLES[0]
             role_category_name = "الإدارة الصغرى"
-    elif current_pts >= 40:
-        target_role_id = JUNIOR_ROLES[0]
-        role_category_name = "الإدارة الصغرى"
 
     if target_role_id:
         target_role = guild.get_role(target_role_id)
         if target_role and target_role not in member.roles:
             try:
+                all_managed_roles = JUNIOR_ROLES + MIDDLE_ROLES + [s["role_id"] for s in SENIOR_HIGHER_ROLES]
                 roles_to_remove = [
-                    guild.get_role(rid) for rid in JUNIOR_ROLES + MIDDLE_ROLES 
+                    guild.get_role(rid) for rid in all_managed_roles 
                     if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id and rid != SPECIAL_PROMOTION_ROLE_ID
                 ]
                 if roles_to_remove:
@@ -782,7 +824,7 @@ async def on_ready():
     print(f"🚀 [بوت منتدى النظيم شغّال] باسم: {bot.user}")
 
 # ----------------------------------------------------
-# ⚠️ نظام العقوبات والتحذيرات المتسلسل (1 إلى 3) مع المدة والتوقيت
+# ⚠️ نظام العقوبات والتحذيرات المتسلسل (1 إلى 3)
 # ----------------------------------------------------
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري متسلسل")
 @app_commands.describe(member="العضو", duration="المدة (مثال: 3 أيام)", reason="السبب", proof="الدليل")
@@ -906,7 +948,7 @@ async def resetpoints_slash(interaction: discord.Interaction, member: discord.Me
         await interaction.response.send_message(f"🔄 تم تصفير نقاط {member.mention}")
 
 # ----------------------------------------------------
-# 🌟 البروفايل والنقاط المطورة (الفخمة والجديدة)
+# 🌟 البروفايل والنقاط المطورة
 # ----------------------------------------------------
 
 @bot.command(name="بروفايل", aliases=["profile", "stats"])
@@ -1000,7 +1042,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والبروفايلات",
-        value="▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`\n▫️ `.تعديل_امبايد`",
+        value="▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
