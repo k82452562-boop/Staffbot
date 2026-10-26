@@ -27,7 +27,7 @@ ALLOWED_ROLE_IDS = [
 
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   
-TICKET_LOG_CHANNEL_ID = 1543094678038257784  
+TICKET_LOG_CHANNEL_ID = 1559469613509640233  # تم تحديث آيدي روم لوق التكتات الجديد
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
 APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
@@ -48,7 +48,7 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
-# تعديل نقاط الإنجازات (بدون أصفار: نقاط مباشرة)
+# نقاط الإنجازات (بدون أصفار: نقاط مباشرة)
 POINTS_CONFIG = {
     "ticket": 1,
     "warn": 1,
@@ -792,26 +792,30 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    if message.channel.id == TICKET_LOG_CHANNEL_ID and message.author.bot:
-        is_claim_embed = False
+    # قراءة لوق التكتات الجديد وإعطاء النقطة للمستلم تلقائياً
+    if message.channel.id == TICKET_LOG_CHANNEL_ID:
         full_text = message.content or ""
-
         for embed in message.embeds:
             title_text = embed.title or ""
             desc_text = embed.description or ""
-            if "إشعار استلام" in title_text or "استلام تذكرة جديد" in title_text or "إشعار استلام" in desc_text:
-                is_claim_embed = True
             full_text += f"\n{title_text}\n{desc_text}"
             for field in embed.fields:
                 full_text += f"\n{field.name}: {field.value}"
 
-        if not is_claim_embed:
-            return
-
         staff_member = None
         user_ids = re.findall(r'<@!?(\d+)>', full_text)
-        if user_ids:
-            staff_member = message.guild.get_member(int(user_ids[0]))
+        
+        # في الإمبايد الجديد، صاحب التكت غالباً الأول والمستلم الثاني أو يتم البحث عن الآيدي الرقمي تحت خانة المستلم
+        if len(user_ids) >= 2:
+            # غالباً آيدي المستلم هو الثاني في الإمبايد أو يتم فحصه عبر الأرقام
+            staff_member = message.guild.get_member(int(user_ids[1]))
+        
+        if not staff_member and user_ids:
+            for uid in user_ids:
+                possible = message.guild.get_member(int(uid))
+                if possible and not possible.bot and possible.id != int(user_ids[0]):
+                    staff_member = possible
+                    break
 
         if not staff_member:
             all_numbers = re.findall(r'(\d{17,19})', full_text)
@@ -826,7 +830,7 @@ async def on_message(message):
                 message.guild, 
                 staff_member, 
                 POINTS_CONFIG["ticket"], 
-                "استلام تذكرة (إشعار الاستلام)", 
+                "استلام تذكرة (اللوق الجديد)", 
                 target_type="ticket"
             )
 
