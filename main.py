@@ -102,7 +102,7 @@ COOLDOWN_FILE = "cooldowns.json"
 BANS_FILE = "active_bans.json"
 
 double_points_end_time = 0
-processed_tickets = set()  # لمنع تكرار حساب نفس التكت مرتين
+processed_tickets = set()
 
 def is_admin_or_owner(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
@@ -426,6 +426,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
+# النماذج والأزرار
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
@@ -514,7 +515,7 @@ class ResetPointsModal(discord.ui.Modal, title="🔄 | تصفير نقاط إد�
             await interaction.response.send_message("❌ العضو ليس لديه سجل نقاط.", ephemeral=True)
 
 # ----------------------------------------------------
-# 📊 دالة تحليل أداء الفرق
+# 📊 دالة تحليل أداء وتنافس الفرق
 # ----------------------------------------------------
 async def calculate_teams_performance(guild: discord.Guild):
     data = load_data()
@@ -555,15 +556,15 @@ async def calculate_teams_performance(guild: discord.Guild):
             t2_points += u_info
 
     if t1_points > t2_points:
-        best_team = f"🏆 التيم الأول ({team_1_role.name if team_1_role else 'فريق 1'}) متصدر!"
+        best_team = f"🏆 التيم الأول ({team_1_role.name if team_1_role else 'فريق 1'}) متصدر المنافسة الأسبوعية!"
     elif t2_points > t1_points:
-        best_team = f"🏆 التيم الثاني ({team_2_role.name if team_2_role else 'فريق 2'}) متصدر!"
+        best_team = f"🏆 التيم الثاني ({team_2_role.name if team_2_role else 'فريق 2'}) متصدر المنافسة الأسبوعية!"
     else:
-        best_team = "🤝 تعادل تام بين الفريقين في النقاط!"
+        best_team = "🤝 تعادل تام بين الفريقين في النقاط الأسبوعية!"
 
     embed = discord.Embed(
-        title="⚔️ | تقرير أداء الفرق والمقارنة السيادية",
-        description=f"إليك تفاصيل أداء ومقارنة الفريقين داخل سيرفر منتدى النظيم:\n\n{best_team}",
+        title="⚔️ | تقرير أداء الفرق ومقارنة المنافسة الأسبوعية",
+        description=f"إليك تفاصيل أداء ومقارنة الفريقين:\n\n{best_team}",
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
@@ -572,7 +573,7 @@ async def calculate_teams_performance(guild: discord.Guild):
         name=f"🛡️ التيم الأول: {team_1_role.name if team_1_role else 'غير موجودة'}",
         value=(
             f"👥 **عدد الأعضاء:** `{len(t1_members)}` عضواً\n"
-            f"💳 **مجموع النقاط:** `{t1_points}` نقطة\n"
+            f"💳 **مجموع النقاط الأسبوعي:** `{t1_points}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t1_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t1_tickets}`\n"
             f"🪪 **الهويات المفعلة:** `{t1_identities}`"
@@ -584,7 +585,7 @@ async def calculate_teams_performance(guild: discord.Guild):
         name=f"🛡️ التيم الثاني: {team_2_role.name if team_2_role else 'غير موجودة'}",
         value=(
             f"👥 **عدد الأعضاء:** `{len(t2_members)}` عضواً\n"
-            f"💳 **مجموع النقاط:** `{t2_points}` نقطة\n"
+            f"💳 **مجموع النقاط الأسبوعي:** `{t2_points}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
             f"🪪 **الهويات المفعلة:** `{t2_identities}`"
@@ -594,6 +595,38 @@ async def calculate_teams_performance(guild: discord.Guild):
     
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الموحد")
     return embed
+
+# ----------------------------------------------------
+# 🔄 زر تصفير تنافس الفرق الأسبوعي (مع الحفاظ على رتب الأعضاء)
+# ----------------------------------------------------
+class TeamsResetView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_btn_v3")
+    async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        data = load_data()
+        
+        team_1_role = guild.get_role(TEAM_1_ROLE_ID)
+        team_2_role = guild.get_role(TEAM_2_ROLE_ID)
+        
+        count_reset = 0
+        for member in guild.members:
+            if (team_1_role and team_1_role in member.roles) or (team_2_role and team_2_role in member.roles):
+                uid = str(member.id)
+                if uid in data and isinstance(data[uid], dict):
+                    data[uid]["points"] = 0
+                    count_reset += 1
+
+        save_data(data, guild)
+
+        await interaction.response.send_message(f"🔄 **تم بنجاح تصفير نقاط التنافس الأسبوعي لـ {count_reset} إداري في الفريقين!**\n*(ملاحظة: رتب الأعضاء الفردية وترقياتهم وسجلاتهم محفوظة بالكامل).* 🎉", ephemeral=True)
+        await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام الأدمن {interaction.user.mention} بتصفير نقاط التنافس الأسبوعية للفرق لبدء جولة جديدة.", discord.Color.from_rgb(231, 76, 60))
 
 @bot.event
 async def on_message(message):
@@ -626,10 +659,9 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # مراقبة روم لوق التكتات ومنع التكرار نهائياً عبر معرف الرسالة
     if message.channel.id == TICKET_LOG_CHANNEL_ID:
         if message.id in processed_tickets:
-            return  # تم معالجة هذه الرسالة مسبقاً، تجاهل التكرار فوراً!
+            return
 
         staff_member = None
         full_text = ""
@@ -662,8 +694,7 @@ async def on_message(message):
                         staff_member = possible_staff
 
         if staff_member:
-            processed_tickets.add(message.id)  # تسجيل المعرف لمنع تكراره
-            # تنظيف الذاكرة لو زادت المعرفات عن 1000 رسالة
+            processed_tickets.add(message.id)
             if len(processed_tickets) > 1000:
                 processed_tickets.pop()
 
@@ -952,6 +983,7 @@ async def check_expired_bans():
 
 @bot.event
 async def on_ready():
+    bot.add_view(TeamsResetView())
     bot.add_view(ApplyButtonView())
     if not check_expired_bans.is_running():
         check_expired_bans.start()
@@ -974,7 +1006,8 @@ async def on_ready():
 async def performance_slash(interaction: discord.Interaction):
     await interaction.response.defer()
     embed = await calculate_teams_performance(interaction.guild)
-    await interaction.followup.send(embed=embed)
+    view = TeamsResetView() if is_admin_or_owner(interaction) else None
+    await interaction.followup.send(embed=embed, view=view)
 
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري رسمي على عضو")
 @app_commands.describe(member="العضو المخالف", duration="المدة (مثال: 3 ايام)", reason="سبب التحذير", proof="رابط الدليل (اختياري)")
@@ -1157,7 +1190,8 @@ async def points_slash(interaction: discord.Interaction, member: discord.Member 
 @bot.command(name="أداء", aliases=["performance", "teams"])
 async def performance_cmd(ctx):
     embed = await calculate_teams_performance(ctx.guild)
-    await ctx.send(embed=embed)
+    view = TeamsResetView() if is_admin_or_owner(ctx) else None
+    await ctx.send(embed=embed, view=view)
 
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
 async def help_command(ctx):
@@ -1169,7 +1203,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
-        value="▫️ `.أداء` (لعرض مقارنة وإحصائيات الفريقين)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`",
+        value="▫️ `.أداء` (لعرض مقارنة وإحصائيات الفريقين وزر التصفير)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
@@ -1304,6 +1338,29 @@ async def leaderboard(ctx: commands.Context):
     sorted_users = sorted([(int(uid), info["points"] if isinstance(info, dict) else info) for uid, info in data.items()], key=lambda x: x[1], reverse=True)
     desc = "".join([f"`#{i}` <@{uid}> — **{pts}** نقطة\n" for i, (uid, pts) in enumerate(sorted_users[:10], 1)])
     await ctx.send(embed=discord.Embed(title="🏆 | لوحة الشرف", description=desc, color=discord.Color.from_rgb(241, 196, 15)))
+
+@bot.command(name="تصفير_الفرق", aliases=["reset_teams"])
+async def reset_teams_cmd(ctx):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ مخصص للأدمنستريتر فقط!")
+        return
+    
+    guild = ctx.guild
+    data = load_data()
+    team_1_role = guild.get_role(TEAM_1_ROLE_ID)
+    team_2_role = guild.get_role(TEAM_2_ROLE_ID)
+    
+    count_reset = 0
+    for member in guild.members:
+        if (team_1_role and team_1_role in member.roles) or (team_2_role and team_2_role in member.roles):
+            uid = str(member.id)
+            if uid in data and isinstance(data[uid], dict):
+                data[uid]["points"] = 0
+                count_reset += 1
+
+    save_data(data, guild)
+    await ctx.send(f"🔄 **تم تصفير نقاط التنافس لـ {count_reset} عضو في الفريقين بنجاح! وانطلق أسبوع جديد!** 🚀")
+    await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام {ctx.author.mention} بتصفير نقاط التنافس الأسبوعية للفرق.", discord.Color.from_rgb(231, 76, 60))
 
 if __name__ == "__main__":
     if TOKEN:
