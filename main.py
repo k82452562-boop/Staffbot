@@ -60,9 +60,6 @@ POINTS_CONFIG = {
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
 
-# ----------------------------------------------------
-# 📋 رتب الإدارة الصغرى والوسطى بالترتيب المباشر (بالآيديات)
-# ----------------------------------------------------
 JUNIOR_ROLES_LIST = [
     1548407040014155806,
     1548407479396991047,
@@ -126,98 +123,6 @@ def can_manage_points(ctx_or_interaction):
         return True
     return any(role.id == POINTS_CONTROL_ROLE_ID for role in getattr(author, 'roles', []))
 
-async def find_member_by_name(guild: discord.Guild, query: str):
-    query = query.strip().lower()
-    if query.isdigit():
-        member = guild.get_member(int(query))
-        if member:
-            return member
-        try:
-            return await guild.fetch_member(int(query))
-        except:
-            pass
-
-    for member in guild.members:
-        if query in member.name.lower() or (member.nick and query in member.nick.lower()):
-            return member
-    return None
-
-def parse_duration_to_seconds(duration_str: str) -> int:
-    duration_str = duration_str.strip().lower()
-    numbers = re.findall(r'\d+', duration_str)
-    if not numbers:
-        return 86400
-    
-    val = int(numbers[0])
-    if "دقيقة" in duration_str or "دقائق" in duration_str or "m" in duration_str:
-        return val * 60
-    elif "ساعة" in duration_str or "ساعات" in duration_str or "h" in duration_str:
-        return val * 3600
-    elif "يوم" in duration_str or "ايام" in duration_str or "أيام" in duration_str or "d" in duration_str:
-        return val * 86400
-    elif "شهر" in duration_str or "اشهر" in duration_str:
-        return val * 86400 * 30
-    return val * 86400
-
-@bot.check
-async def check_permissions(ctx):
-    if is_admin_or_owner(ctx):
-        return True
-    
-    has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
-    if has_role:
-        return True
-
-    embed = discord.Embed(
-        title="⚠️ | وين رايح يا الذيب؟ الصلاحيات ما تكفي",
-        description="هالأوامر والأنظمة مخصصة للطاقم الإداري المصرح له فقط.",
-        color=discord.Color.from_rgb(200, 30, 30)
-    )
-    await ctx.send(embed=embed, delete_after=5)
-    return False
-
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingRequiredArgument):
-        embed = discord.Embed(title="⚠️ | ناقصتك تفاصيل يا الكفو", description="امسح الأمر واكتبه كامل ومضبوط.", color=discord.Color.from_rgb(220, 150, 20))
-        await ctx.send(embed=embed, delete_after=5)
-    elif isinstance(error, commands.BadArgument):
-        embed = discord.Embed(title="⚠️ | لخبطة في المدخلات", description="تأكد من كتابة اسم العضو أو البيانات بالشكل السليم.", color=discord.Color.from_rgb(220, 150, 20))
-        await ctx.send(embed=embed, delete_after=5)
-
-async def fetch_points_from_discord():
-    try:
-        channel = bot.get_channel(BACKUP_CHANNEL_ID)
-        if not channel:
-            return
-        async for message in channel.history(limit=30):
-            if message.attachments:
-                for att in message.attachments:
-                    if att.filename == "points_backup.json":
-                        await att.save(DATA_FILE)
-                        return
-    except Exception as e:
-        print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية: {e}")
-
-async def save_points_to_discord(guild):
-    try:
-        channel = guild.get_channel(BACKUP_CHANNEL_ID)
-        if not channel:
-            return
-        if os.path.exists(DATA_FILE):
-            async for message in channel.history(limit=15):
-                if message.author == bot.user and message.attachments:
-                    for att in message.attachments:
-                        if att.filename == "points_backup.json":
-                            try:
-                                await message.delete()
-                            except:
-                                pass
-            file = discord.File(DATA_FILE, filename="points_backup.json")
-            await channel.send("💾 **[حفظ سحابي فوري] تم تأمين نسخة النقاط:**", file=file)
-    except Exception as e:
-        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية: {e}")
-
 def load_json(filename):
     if os.path.exists(filename):
         try:
@@ -270,6 +175,39 @@ def load_bans():
 def save_bans(data):
     save_json(BANS_FILE, data)
 
+async def fetch_points_from_discord():
+    try:
+        channel = bot.get_channel(BACKUP_CHANNEL_ID)
+        if not channel:
+            return
+        async for message in channel.history(limit=30):
+            if message.attachments:
+                for att in message.attachments:
+                    if att.filename == "points_backup.json":
+                        await att.save(DATA_FILE)
+                        return
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية: {e}")
+
+async def save_points_to_discord(guild):
+    try:
+        channel = guild.get_channel(BACKUP_CHANNEL_ID)
+        if not channel:
+            return
+        if os.path.exists(DATA_FILE):
+            async for message in channel.history(limit=15):
+                if message.author == bot.user and message.attachments:
+                    for att in message.attachments:
+                        if att.filename == "points_backup.json":
+                            try:
+                                await message.delete()
+                            except:
+                                pass
+            file = discord.File(DATA_FILE, filename="points_backup.json")
+            await channel.send("💾 **[حفظ سحابي فوري] تم تأمين نسخة النقاط:**", file=file)
+    except Exception as e:
+        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية: {e}")
+
 async def send_unified_log(guild, title, description, color=discord.Color.from_rgb(30, 144, 255), fields=None):
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
     if log_channel:
@@ -307,9 +245,6 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
     
     return required_points, remaining, progress_percent, bar
 
-# ----------------------------------------------------
-# 🧠 دالة الترقية الذكية (تصفر نقاط العضو الشخصية فقط وتحافظ على نقاط التيم)
-# ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
@@ -376,7 +311,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             
             await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
             
-            # ملاحظة هامة: يتم تصفير نقاط الشخص نفسه فقط، ونقاط التيم لا تُمس نهائياً
             data = load_data()
             user_id = str(member.id)
             if user_id in data and isinstance(data[user_id], dict):
@@ -430,9 +364,6 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# ----------------------------------------------------
-# 📊 دالة تحليل أداء وتنافس الفرق (مع دعم بونص أو خصم النقاط اليدوي من الحاكم)
-# ----------------------------------------------------
 async def calculate_teams_performance(guild: discord.Guild):
     data = load_data()
     reset_data = load_teams_reset()
@@ -474,7 +405,6 @@ async def calculate_teams_performance(guild: discord.Guild):
         elif isinstance(u_info, int):
             t2_points += u_info
 
-    # إضافة/خصم التعديلات اليدوية الخاصة بالتيمات التي أضافها الحاكم ريان
     guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
     t1_points += guild_bonus.get("t1_extra", 0)
     t2_points += guild_bonus.get("t2_extra", 0)
@@ -532,13 +462,126 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🔄 زر تصفير المجموع التنافسي للفرق فقط
+# 🎛️ نافذة الأزرار التفاعلية لقائمة التيمات (خاصة بالحاكم ريان حصرياً)
 # ----------------------------------------------------
+class TeamPointsModal(discord.ui.Modal):
+    def __init__(self, team_id: int, action_type: str, team_name: str):
+        super().__init__(title=f"إدارة نقاط: {team_name}")
+        self.team_id = team_id
+        self.action_type = action_type
+        self.team_name = team_name
+
+        self.amount_input = discord.ui.TextInput(
+            label="عدد النقاط",
+            placeholder="اكتب عدد النقاط هنا (مثال: 50)",
+            min_length=1,
+            max_length=5,
+            required=True
+        )
+        self.add_item(self.amount_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
+            return
+
+        try:
+            val = int(self.amount_input.value.strip())
+        except ValueError:
+            await interaction.response.send_message("❌ يرجى إدخال رقم صحيح يا طويل العمر!", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        guild_id_str = str(guild.id)
+        bonuses = load_team_bonuses()
+        if guild_id_str not in bonuses:
+            bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
+
+        key = "t1_extra" if self.team_id == 1 else "t2_extra"
+
+        if self.action_type == "add":
+            bonuses[guild_id_str][key] += val
+            msg = f"✨ تم إضافة `{val}` نقطة إلى **{self.team_name}** بنجاح!"
+        elif self.action_type == "remove":
+            bonuses[guild_id_str][key] -= val
+            msg = f"📉 تم خصم `{val}` نقطة من **{self.team_name}** بنجاح!"
+
+        save_team_bonuses(bonuses)
+        await interaction.response.send_message(msg, ephemeral=True)
+
+class TeamsControlView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذه الأزرار مخصصة للحاكم ريان فقط ولا تتدخل بشي يا الذيب!", ephemeral=True)
+            return False
+        return True
+
+    # --- أزرار التيم الأول ---
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v1")
+    async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        t1_role = guild.get_role(TEAM_1_ROLE_ID)
+        name = t1_role.name if t1_role else "التيم الأول"
+        await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
+
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v1")
+    async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        t1_role = guild.get_role(TEAM_1_ROLE_ID)
+        name = t1_role.name if t1_role else "التيم الأول"
+        await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
+
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v1")
+    async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        guild_id_str = str(guild.id)
+        bonuses = load_team_bonuses()
+        if guild_id_str not in bonuses:
+            bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
+        bonuses[guild_id_str]["t1_extra"] = 0
+        save_team_bonuses(bonuses)
+        
+        t1_role = guild.get_role(TEAM_1_ROLE_ID)
+        name = t1_role.name if t1_role else "التيم الأول"
+        await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
+
+    # --- أزرار التيم الثاني ---
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v1")
+    async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        t2_role = guild.get_role(TEAM_2_ROLE_ID)
+        name = t2_role.name if t2_role else "التيم الثاني"
+        await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
+
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v1")
+    async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        t2_role = guild.get_role(TEAM_2_ROLE_ID)
+        name = t2_role.name if t2_role else "التيم الثاني"
+        await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
+
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v1")
+    async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        guild_id_str = str(guild.id)
+        bonuses = load_team_bonuses()
+        if guild_id_str not in bonuses:
+            bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
+        bonuses[guild_id_str]["t2_extra"] = 0
+        save_team_bonuses(bonuses)
+        
+        t2_role = guild.get_role(TEAM_2_ROLE_ID)
+        name = t2_role.name if t2_role else "التيم الثاني"
+        await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
+
 class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v7")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v8")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -936,6 +979,7 @@ async def check_expired_bans():
 @bot.event
 async def on_ready():
     bot.add_view(TeamsResetView())
+    bot.add_view(TeamsControlView())
     bot.add_view(ApplyButtonView())
     if not check_expired_bans.is_running():
         check_expired_bans.start()
@@ -951,7 +995,7 @@ async def on_ready():
     print(f"🚀 [بوت منتدى النظيم شغّال بنجاح تام] باسم: {bot.user}")
 
 # ----------------------------------------------------
-# أوامر السلاش العربية (Slash Commands)
+# أوامر السلاش والعادية
 # ----------------------------------------------------
 
 @bot.tree.command(name="أداء", description="عرض تقارير أداء ومقارنة الفرق ونقاطهم وعدد ترقياتهم")
@@ -961,83 +1005,35 @@ async def performance_slash(interaction: discord.Interaction):
     view = TeamsResetView() if is_admin_or_owner(interaction) else None
     await interaction.followup.send(embed=embed, view=view)
 
-@bot.tree.command(name="إضافة_نقاط_تيم", description="[خاص بالحاكم ريان] إضافة نقاط تكتيكية إضافية لأحد التيمات")
-@app_commands.describe(team_choice="اختر التيم", amount="عدد النقاط")
-@app_commands.choices(team_choice=[
-    app_commands.Choice(name="التيم الأول (Team 1)", value=1),
-    app_commands.Choice(name="التيم الثاني (Team 2)", value=2)
-])
-async def add_team_points_slash(interaction: discord.Interaction, team_choice: int, amount: int):
-    if not is_bot_owner(interaction):
-        return await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط!", ephemeral=True)
-    
-    guild = interaction.guild
-    guild_id_str = str(guild.id)
-    bonuses = load_team_bonuses()
-    if guild_id_str not in bonuses:
-        bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
-    
-    if team_choice == 1:
-        bonuses[guild_id_str]["t1_extra"] += amount
-        t_name = "التيم الأول"
-    else:
-        bonuses[guild_id_str]["t2_extra"] += amount
-        t_name = "التيم الثاني"
-        
-    save_team_bonuses(bonuses)
-    await interaction.response.send_message(f"✨ تم إضافة `{amount}` نقطة تكتيكية إلى **{t_name}** بنجاح يا طويل العمر!")
+@bot.command(name="تيمات", aliases=["teams_panel"])
+async def teams_panel_cmd(ctx):
+    if ctx.author.id != BOT_OWNER_ID:
+        await ctx.send("❌ عذراً يا الحبيب، هذه القائمة مخصصة للحاكم ريان فقط!", delete_after=5)
+        return
+    try:
+        await ctx.message.delete()
+    except:
+        pass
 
-@bot.tree.command(name="خصم_نقاط_تيم", description="[خاص بالحاكم ريان] خصم نقاط من أحد التيمات")
-@app_commands.describe(team_choice="اختر التيم", amount="عدد النقاط المراد خصمها")
-@app_commands.choices(team_choice=[
-    app_commands.Choice(name="التيم الأول (Team 1)", value=1),
-    app_commands.Choice(name="التيم الثاني (Team 2)", value=2)
-])
-async def remove_team_points_slash(interaction: discord.Interaction, team_choice: int, amount: int):
-    if not is_bot_owner(interaction):
-        return await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط!", ephemeral=True)
-    
-    guild = interaction.guild
-    guild_id_str = str(guild.id)
-    bonuses = load_team_bonuses()
-    if guild_id_str not in bonuses:
-        bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
-    
-    if team_choice == 1:
-        bonuses[guild_id_str]["t1_extra"] -= amount
-        t_name = "التيم الأول"
-    else:
-        bonuses[guild_id_str]["t2_extra"] -= amount
-        t_name = "التيم الثاني"
-        
-    save_team_bonuses(bonuses)
-    await interaction.response.send_message(f"📉 تم خصم `{amount}` نقطة من **{t_name}** بنجاح يا طويل العمر!")
+    guild = ctx.guild
+    t1_role = guild.get_role(TEAM_1_ROLE_ID)
+    t2_role = guild.get_role(TEAM_2_ROLE_ID)
+    t1_name = t1_role.name if t1_role else "التيم الأول"
+    t2_name = t2_role.name if t2_role else "التيم الثاني"
 
-@bot.tree.command(name="تصفير_تيم", description="[خاص بالحاكم ريان] تصفير وتعديل رصيد النقاط الإضافي لأحد التيمات")
-@app_commands.describe(team_choice="اختر التيم")
-@app_commands.choices(team_choice=[
-    app_commands.Choice(name="التيم الأول (Team 1)", value=1),
-    app_commands.Choice(name="التيم الثاني (Team 2)", value=2)
-])
-async def reset_team_points_slash(interaction: discord.Interaction, team_choice: int):
-    if not is_bot_owner(interaction):
-        return await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط!", ephemeral=True)
-    
-    guild = interaction.guild
-    guild_id_str = str(guild.id)
-    bonuses = load_team_bonuses()
-    if guild_id_str not in bonuses:
-        bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
-    
-    if team_choice == 1:
-        bonuses[guild_id_str]["t1_extra"] = 0
-        t_name = "التيم الأول"
-    else:
-        bonuses[guild_id_str]["t2_extra"] = 0
-        t_name = "التيم الثاني"
-        
-    save_team_bonuses(bonuses)
-    await interaction.response.send_message(f"🔄 تم تصفير وإرجاع نقاط **{t_name}** الإضافية للصفر بنجاح يا طويل العمر!")
+    embed = discord.Embed(
+        title="⚔️ | لوحة إدارة وتحكم تيمات منتدى النظيم",
+        description=(
+            f"أهلاً بك يا الحاكم ريان. من خلال هذه اللوحة التفاعلية يمكنك إدارة نقاط الفريقين بكل سهولة:\n\n"
+            f"🔹 **التيم الأول:** `{t1_name}`\n"
+            f"🔹 **التيم الثاني:** `{t2_name}`\n\n"
+            f"👇 **اختر الإجراء المناسب للأزرار بالأسفل:**"
+        ),
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="لوحة تحكم الحاكم الخاصة | منتدى النظيم")
+    await ctx.send(embed=embed, view=TeamsControlView())
 
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري رسمي على عضو")
 @app_commands.describe(member="العضو المخالف", duration="المدة (مثال: 3 ايام)", reason="سبب التحذير", proof="رابط الدليل (اختياري)")
@@ -1213,10 +1209,6 @@ async def points_slash(interaction: discord.Interaction, member: discord.Member 
     embed.set_footer(text="منتدى النظيم | قسم الرقابة الإدارية")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# ----------------------------------------------------
-# الأوامر النصية العادية بالبادئة (.)
-# ----------------------------------------------------
-
 @bot.command(name="أداء", aliases=["performance", "teams"])
 async def performance_cmd(ctx):
     embed = await calculate_teams_performance(ctx.guild)
@@ -1233,7 +1225,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
-        value="▫️ `.أداء` (لعرض مقارنة وإحصائيات الفريقين وزر التصفير الافتراضي)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
+        value="▫️ `.أداء`\n▫️ `.تيمات` (لوحة إدارة التيمات الخاصة بك)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
