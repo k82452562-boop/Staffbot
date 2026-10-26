@@ -138,23 +138,6 @@ def parse_duration_to_seconds(duration_str: str) -> int:
         return val * 86400 * 30
     return val * 86400
 
-@bot.check
-async def check_permissions(ctx):
-    if is_admin_or_owner(ctx):
-        return True
-    
-    has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
-    if has_role:
-        return True
-
-    embed = discord.Embed(
-        title="⚠️ | وين رايح يا الذيب؟ الصلاحيات ما تكفي",
-        description="هالأوامر والأنظمة مخصصة للطاقم الإداري المصرح له فقط.",
-        color=discord.Color.from_rgb(200, 30, 30)
-    )
-    await ctx.send(embed=embed, delete_after=5)
-    return False
-
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
@@ -546,7 +529,7 @@ async def owner_dashboard(ctx):
     embed.set_footer(text="منتدى النظيم | لوحة التحكم السيادية")
     await ctx.send(embed=embed, view=OwnerDashboardView())
 
-# 🎯 محرك قراءة التكتات مع مانع تكرار صارم جداً
+# 🎯 محرك قراءة التكتات مع مانع تكرار
 @bot.event
 async def on_message(message):
     global last_ticket_processed_time
@@ -572,7 +555,6 @@ async def on_message(message):
 
     if message.channel.id == TICKET_LOG_CHANNEL_ID and not message.author.bot:
         current_time = time.time()
-        # رفع مدة الفاصل الزمني لمنع التكرار تماماً (5 ثوانٍ)
         if current_time - last_ticket_processed_time < 5.0:
             return
 
@@ -581,7 +563,6 @@ async def on_message(message):
         if processed_data.get(msg_id_str, False):
             return
 
-        # تسجيل الـ ID فوراً قبل المعالجة لمنع أي سباق أو تكرار رسالة
         processed_data[msg_id_str] = True
         if len(processed_data) > 500:
             old_keys = list(processed_data.keys())[:100]
@@ -800,60 +781,93 @@ async def on_ready():
         print(f"❌ خطأ مزامنة السلاش: {e}")
     print(f"🚀 [بوت منتدى النظيم شغّال] باسم: {bot.user}")
 
-@bot.tree.command(name="تحذير", description="تطبيق تحذير إداري")
-@app_commands.describe(member="العضو", duration="المدة", reason="السبب", proof="الدليل")
+# ----------------------------------------------------
+# ⚠️ نظام العقوبات والتحذيرات المتسلسل (1 إلى 3) مع المدة والتوقيت
+# ----------------------------------------------------
+@bot.tree.command(name="تحذير", description="تطبيق تحذير إداري متسلسل")
+@app_commands.describe(member="العضو", duration="المدة (مثال: 3 أيام)", reason="السبب", proof="الدليل")
 async def warn_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
-    r1, r2, r3 = guild.get_role(WARN_1_ID), guild.get_role(WARN_2_ID), guild.get_role(WARN_3_ID)
-    name = "تحذير أول"
+    r1 = guild.get_role(WARN_1_ID)
+    r2 = guild.get_role(WARN_2_ID)
+    r3 = guild.get_role(WARN_3_ID)
+    
+    warn_type = "تحذير أول"
     try:
         if r2 and r2 in member.roles:
-            if r2: await member.remove_roles(r2)
-            if r3: await member.add_roles(r3)
-            name = "تحذير ثالث"
+            if r2: await member.remove_roles(r2, reason="ترقية التحذير إلى ثالث")
+            if r3: await member.add_roles(r3, reason="تطبيق تحذير ثالث")
+            warn_type = "تحذير ثالث"
         elif r1 and r1 in member.roles:
-            if r1: await member.remove_roles(r1)
-            if r2: await member.add_roles(r2)
-            name = "تحذير ثاني"
+            if r1: await member.remove_roles(r1, reason="ترقية التحذير إلى ثاني")
+            if r2: await member.add_roles(r2, reason="تطبيق تحذير ثاني")
+            warn_type = "تحذير ثاني"
         else:
-            if r1: await member.add_roles(r1)
-            name = "تحذير أول"
-    except: pass
+            if r1: await member.add_roles(r1, reason="تطبيق تحذير أول")
+            warn_type = "تحذير أول"
+    except Exception as e:
+        print(f"خطأ في إدارة رولات التحذير: {e}")
 
     ch = guild.get_channel(WARN_CHANNEL_ID)
-    if ch: await ch.send(f"**سجل التحذيرات**\nالإداري: {interaction.user.mention}\nالعضو: {member.mention}\nالنوع: {name}\nالسبب: {reason}")
-    await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"تطبيق {name}")
-    await interaction.response.send_message(f"✅ تم تطبيق {name} على {member.mention}!", ephemeral=True)
+    if ch:
+        embed = discord.Embed(title="⚠️ | سجل التحذيرات الإداري", color=discord.Color.orange(), timestamp=discord.utils.utcnow())
+        embed.add_field(name="👤 العضو المخالف", value=member.mention, inline=False)
+        embed.add_field(name="🛡️ الإداري المسؤول", value=interaction.user.mention, inline=False)
+        embed.add_field(name="📌 نوع العقوبة", value=f"`{warn_type}`", inline=True)
+        embed.add_field(name="⏳ المدة", value=f"`{duration}`", inline=True)
+        embed.add_field(name="📝 السبب", value=reason, inline=False)
+        embed.add_field(name="🔗 الدليل", value=proof, inline=False)
+        await ch.send(embed=embed)
 
-@bot.tree.command(name="تايم_أوت", description="إسكات عضو")
+    await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"تطبيق {warn_type} على {member.name}")
+    await interaction.response.send_message(f"✅ تم تطبيق `{warn_type}` على {member.mention} بنجاح ولمدة `{duration}`!", ephemeral=True)
+
+@bot.tree.command(name="تايم_أوت", description="إسكات عضو لفترة محددة")
 @app_commands.describe(member="العضو", minutes="الدقائق", reason="السبب", proof="الدليل")
 async def timeout_slash(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     try:
         await member.timeout(discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes), reason=reason)
         ch = guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
-        if ch: await ch.send(f"**سجل التايم أوت**\nالإداري: {interaction.user.mention}\nالعضو: {member.mention}\nالمدة: {minutes} دقيقة")
+        if ch:
+            embed = discord.Embed(title="⏱️ | سجل التايم أوت", color=discord.Color.yellow(), timestamp=discord.utils.utcnow())
+            embed.add_field(name="👤 العضو", value=member.mention, inline=False)
+            embed.add_field(name="🛡️ الإداري", value=interaction.user.mention, inline=False)
+            embed.add_field(name="⏳ المدة", value=f"`{minutes}` دقيقة", inline=True)
+            embed.add_field(name="📝 السبب", value=reason, inline=False)
+            await ch.send(embed=embed)
+            
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["timeout"], "عقوبة تايم أوت")
-        await interaction.response.send_message(f"✅ تم كتم {member.mention} لمدة {minutes} دقيقة.", ephemeral=True)
+        await interaction.response.send_message(f"✅ تم كتم {member.mention} لمدة `{minutes}` دقيقة.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"❌ خطأ: {e}", ephemeral=True)
+        await interaction.response.send_message(f"❌ خطأ أثناء تطبيق التايم أوت: {e}", ephemeral=True)
 
 @bot.tree.command(name="حرمان", description="حرمان عضو من الرتب")
 @app_commands.describe(member="العضو", duration="المدة", reason="السبب", proof="الدليل")
 async def ban_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     ban_role = guild.get_role(BAN_ROLE_ID)
-    if not ban_role: return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة", ephemeral=True)
+    if not ban_role: 
+        return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة بالسيرفر!", ephemeral=True)
     try:
         roles = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
-        if roles: await member.remove_roles(*roles)
-        await member.add_roles(ban_role)
+        if roles: 
+            await member.remove_roles(*roles, reason=f"حرمان مؤقت بواسطة {interaction.user.name}")
+        await member.add_roles(ban_role, reason=reason)
+        
         ch = guild.get_channel(BAN_MODEL_CHANNEL_ID)
-        if ch: await ch.send(f"**سجل الحرمان**\nالإداري: {interaction.user.mention}\nالعضو: {member.mention}")
+        if ch:
+            embed = discord.Embed(title="⛔ | سجل الحرمان المؤقت", color=discord.Color.red(), timestamp=discord.utils.utcnow())
+            embed.add_field(name="👤 العضو المحروم", value=member.mention, inline=False)
+            embed.add_field(name="🛡️ الإداري", value=interaction.user.mention, inline=False)
+            embed.add_field(name="⏳ المدة", value=f"`{duration}`", inline=True)
+            embed.add_field(name="📝 السبب", value=reason, inline=False)
+            await ch.send(embed=embed)
+            
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "عقوبة حرمان رول")
-        await interaction.response.send_message(f"✅ تم تطبيق الحرمان على {member.mention}.", ephemeral=True)
+        await interaction.response.send_message(f"✅ تم تطبيق الحرمان على {member.mention} لمدة `{duration}`.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"❌ خطأ: {e}", ephemeral=True)
+        await interaction.response.send_message(f"❌ خطأ أثناء تطبيق الحرمان: {e}", ephemeral=True)
 
 @bot.tree.command(name="إضافة_نقاط", description="إضافة نقاط")
 async def addpoints_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
