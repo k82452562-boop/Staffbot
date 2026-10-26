@@ -48,12 +48,13 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
+# تعديل نقاط الإنجازات (بدون أصفار: نقاط مباشرة)
 POINTS_CONFIG = {
-    "ticket": 10,
-    "warn": 10,
-    "timeout": 10,
-    "ban": 20,          
-    "apply_accept": 10 
+    "ticket": 1,
+    "warn": 1,
+    "timeout": 1,
+    "ban": 2,          
+    "apply_accept": 1 
 }
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
@@ -248,16 +249,21 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     role_category_name = ""
 
     has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
-    required_points = 5000 if has_special_role else 400
-
-    if current_pts < required_points:
-        return
-
+    
+    # الشروط الجديدة: 70 نقطة للوسطى/العليا و 40 للصغرى
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
         if any(r.id == r_id for r in member.roles):
             middle_index = idx
             break
+
+    if middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles):
+        required_points = 70
+    else:
+        required_points = 40
+
+    if current_pts < required_points:
+        return
 
     junior_index = -1
     for idx, r_id in enumerate(JUNIOR_ROLES):
@@ -288,7 +294,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             target_role_id = JUNIOR_ROLES[0]
             role_category_name = "الإدارة الصغرى"
 
-    elif current_pts >= 400 and not has_special_role:
+    elif current_pts >= 40:
         target_role_id = JUNIOR_ROLES[0]
         role_category_name = "الإدارة الصغرى"
 
@@ -357,10 +363,10 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار الأصلية كاملة بدون نقص
+# النماذج والأزرار الأصلية كاملة
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
-    amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
+    amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         if not can_manage_points(interaction):
@@ -390,7 +396,7 @@ class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإد
 
 class RemovePointsModal(discord.ui.Modal, title="📉 | خصم نقاط من الإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
-    amount_input = discord.ui.TextInput(label="عدد النقاط المراد خصمها", placeholder="مثال: 20", required=True)
+    amount_input = discord.ui.TextInput(label="عدد النقاط المراد خصمها", placeholder="مثال: 2", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         if not can_manage_points(interaction):
@@ -1018,7 +1024,6 @@ async def panel_apply(ctx):
     embed.set_footer(text="منتدى النظيم | قيادة السيرفر العليا")
     await ctx.send(embed=embed, view=ApplyButtonView())
 
-# تعديل أمر .عقوبات لإرشاد الإداريين لاستخدام أوامر السلاش (/)
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
     embed = discord.Embed(
