@@ -59,30 +59,10 @@ POINTS_CONFIG = {
 }
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
+
+# نقطة البداية للإدارة الصغرى والوسطى (لو أردت تحديد الأقسام برمجياً)
 JUNIOR_BASE_ROLE_ID = 1540839564506300476
-
-JUNIOR_ROLES = [
-    1548407040014155806,
-    1548407479396991047,
-    1548407580131336283,
-    1548407675048689715,
-    1548407794426707978,
-    1548407869320466583,
-    1548407949356048534
-]
-
 MIDDLE_BASE_ROLE_ID = 1540838084151877714
-MIDDLE_ROLES = [
-    1540838084151877714,
-    1548408124531154974,
-    1548408197176361191,
-    1548408266239910020,
-    1548408357457756200,
-    1540838584922280016,
-    1554920899583549521,
-    1555165805317197915,
-    1555325627647791215
-]
 
 SENIOR_HIGHER_ROLES = [
     {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
@@ -100,7 +80,7 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
 BANS_FILE = "active_bans.json"
-TEAMS_RESET_FILE = "teams_reset.json"  # ملف لحفظ وقت آخر تصفير أسبوعي للمجموع التنافسي
+TEAMS_RESET_FILE = "teams_reset.json"
 
 double_points_end_time = 0
 processed_tickets = set()
@@ -280,13 +260,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
         else:
             required_points = SENIOR_HIGHER_ROLES[-1]["points"]
     else:
-        middle_index = -1
-        for idx, r_id in enumerate(MIDDLE_ROLES):
-            if any(r.id == r_id for r in member.roles):
-                middle_index = idx
-                break
-
-        is_middle = (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles))
+        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles) or any(r.id == 1540838084151877714 for r in member.roles)
         required_points = 70 if is_middle else 40
     
     remaining = max(0, required_points - current_pts)
@@ -298,11 +272,14 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
     
     return required_points, remaining, progress_percent, bar
 
+# ----------------------------------------------------
+# 🧠 دالة الترقية الذكية التلقائية (تلقط الرتبة التالية بالترتيب تلقائياً)
+# ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
     
-    target_role_id = None
+    target_role = None
     role_category_name = ""
     required_points = 40
 
@@ -320,84 +297,74 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             target_info = SENIOR_HIGHER_ROLES[next_idx]
             required_points = target_info["points"]
             if current_pts >= required_points:
-                target_role_id = target_info["role_id"]
+                target_role = guild.get_role(target_info["role_id"])
                 role_category_name = "الإدارة العليا المتقدمة"
     else:
-        middle_index = -1
-        for idx, r_id in enumerate(MIDDLE_ROLES):
-            if any(r.id == r_id for r in member.roles):
-                middle_index = idx
-                break
-
-        required_points = 70 if (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)) else 40
-        if current_pts < required_points:
-            return
-
-        junior_index = -1
-        for idx, r_id in enumerate(JUNIOR_ROLES):
-            if any(r.id == r_id for r in member.roles):
-                junior_index = idx
-                break
-
-        has_junior_base = any(r.id == JUNIOR_BASE_ROLE_ID for r in member.roles)
-        has_middle_base = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
-
-        if middle_index != -1 or has_middle_base:
-            if middle_index != -1 and middle_index < len(MIDDLE_ROLES) - 1:
-                target_role_id = MIDDLE_ROLES[middle_index + 1]
-                role_category_name = "الإدارة الوسطى / العليا"
-            elif middle_index == -1 and has_middle_base:
-                target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
-                role_category_name = "الإدارة الوسطى / العليا"
-
-        elif junior_index != -1 or has_junior_base:
-            if junior_index != -1:
-                if junior_index < len(JUNIOR_ROLES) - 1:
-                    target_role_id = JUNIOR_ROLES[junior_index + 1]
-                    role_category_name = "الإدارة الصغرى"
-                else:
-                    target_role_id = MIDDLE_ROLES[0]
-                    role_category_name = "الإدارة الوسطى"
-            elif has_junior_base:
-                target_role_id = JUNIOR_ROLES[0]
+        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
+        required_points = 70 if is_middle else 40
+        
+        if current_pts >= required_points:
+            # طريقة ذكية: نبحث عن أعلى رتبة يمتلكها العضو حالياً من رتب الإدارة ضمن ترتيب السيرفر (guild.roles)
+            # البوت بياخذ قائمة رتب السيرفر (من الأعلى للأسفل) ويشوف رتبة الإدارة اللي عند العضو، ويعطيه الرتبة اللي فوقها مباشرة!
+            member_roles_sorted = sorted(member.roles, key=lambda r: r.position, reverse=True)
+            current_admin_role = None
+            
+            for r in member_roles_sorted:
+                # نتأكد إنها رتبة إدارية وليست رتبة أعضاء عادية أو تيمات (مثلا نتجاهل التيمات ورتب الحظر والتحذير)
+                if r.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID, UNVERIFIED_ROLE_ID, VERIFIED_ROLE_ID] and not r.is_default():
+                    current_admin_role = r
+                    break
+            
+            if current_admin_role:
+                # نبحث في رتب السيرفر عن الرتبة التي تقع مباشرة فوق رتبة الإدارة الحالية للعضو
+                all_guild_roles_sorted = sorted(guild.roles, key=lambda r: r.position) # من الأقل للأعلى
+                try:
+                    curr_idx = all_guild_roles_sorted.index(current_admin_role)
+                    if curr_idx < len(all_guild_roles_sorted) - 1:
+                        next_role = all_guild_roles_sorted[curr_idx + 1]
+                        # نتأكد أن الرتبة التالية ليست رتبة قيادية عليا أو تيم
+                        if next_role.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID]:
+                            target_role = next_role
+                            role_category_name = "الإدارة الصغرى / الوسطى"
+                except Exception as e:
+                    print(f"خطأ في البحث عن الرتبة التالية: {e}")
+            
+            # لو ما عنده رتبة سابقة، نعطيه أول رتبة أساسية للإدارة الصغرى
+            if not target_role and not is_middle:
+                target_role = guild.get_role(JUNIOR_BASE_ROLE_ID)
                 role_category_name = "الإدارة الصغرى"
 
-        elif current_pts >= 40:
-            target_role_id = JUNIOR_ROLES[0]
-            role_category_name = "الإدارة الصغرى"
+    if target_role and target_role not in member.roles:
+        try:
+            # سحب الرتب الإدارية القديمة لمنع تراكب الرتب، مع إبقاء رتب التيمات والرتب الخاصة
+            roles_to_remove = [
+                r for r in member.roles 
+                if r.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID, SPECIAL_PROMOTION_ROLE_ID, UNVERIFIED_ROLE_ID, VERIFIED_ROLE_ID] 
+                and not r.is_default() and r.position < target_role.position
+            ]
+            if roles_to_remove:
+                await member.remove_roles(*roles_to_remove, reason="ترقية ذكية تلقائية: سحب الرتب القديمة")
+            
+            await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
+            
+            data = load_data()
+            user_id = str(member.id)
+            if user_id in data and isinstance(data[user_id], dict):
+                data[user_id]["points"] = 0
+                data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
+                save_data(data, guild)
 
-    if target_role_id:
-        target_role = guild.get_role(target_role_id)
-        if target_role and target_role not in member.roles:
-            try:
-                all_managed_roles = JUNIOR_ROLES + MIDDLE_ROLES + [s["role_id"] for s in SENIOR_HIGHER_ROLES]
-                roles_to_remove = [
-                    guild.get_role(rid) for rid in all_managed_roles 
-                    if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id and rid != SPECIAL_PROMOTION_ROLE_ID
-                ]
-                if roles_to_remove:
-                    await member.remove_roles(*roles_to_remove, reason="ترقية مستحقة: سحب الرتب القديمة")
-                
-                await member.add_roles(target_role, reason="ترقية إدارية جديدة")
-                
-                data = load_data()
-                user_id = str(member.id)
-                if user_id in data and isinstance(data[user_id], dict):
-                    data[user_id]["points"] = 0
-                    data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
-                    save_data(data, guild)
-
-                role_ping_str = notif_role.mention if notif_role else ""
-                msg = (
-                    f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية نارية وتصفير نقاط:**\n"
-                    f"ما شاء الله، المطنوخ {member.mention} تقفّل عنده `{required_points}` نقطة وتمت ترقيته رسمياً إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
-                    f"🔄 **ملاحظة:** تم سحب الرتبة القديمة وتصفير النقاط لانطلاق تحدٍ جديد."
-                )
-                log_channel = guild.get_channel(LOG_CHANNEL_ID)
-                if log_channel:
-                    await log_channel.send(msg)
-            except Exception as e:
-                print(f"خطأ أثناء الترقية: {e}")
+            role_ping_str = notif_role.mention if notif_role else ""
+            msg = (
+                f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية ذكية تلقائية وتصفير نقاط:**\n"
+                f"ما شاء الله، المطنوخ {member.mention} وصل `{required_points}` نقطة وتمت ترقيته تلقائياً إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
+                f"🔄 **ملاحظة:** تم سحب الرتبة القديمة وتصفير النقاط لانطلاق تحدٍ جديد."
+            )
+            log_channel = guild.get_channel(LOG_CHANNEL_ID)
+            if log_channel:
+                await log_channel.send(msg)
+        except Exception as e:
+            print(f"خطأ أثناء الترقية الذكية: {e}")
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
     global double_points_end_time
@@ -434,15 +401,13 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     await check_and_promote(guild, staff, current_pts)
 
 # ----------------------------------------------------
-# 📊 دالة تحليل أداء وتنافس الفرق (بناءً على وقت التصفير الأسبوعي بدون مسح نقاط الإداريين)
+# 📊 دالة تحليل أداء وتنافس الفرق
 # ----------------------------------------------------
 async def calculate_teams_performance(guild: discord.Guild):
     data = load_data()
     reset_data = load_teams_reset()
     
     guild_id_str = str(guild.id)
-    last_reset_time = reset_data.get(guild_id_str, 0)
-    
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
     
@@ -455,8 +420,6 @@ async def calculate_teams_performance(guild: discord.Guild):
     for m in t1_members:
         u_info = data.get(str(m.id), {})
         if isinstance(u_info, dict):
-            # نقدر نحسب النقاط المتراكمة أو إذا أردت تصفير المجموع التنافسي نعتمد على الفلترة بالوقت
-            # حالياً لضمان دقة "المجموع التنافسي للأداء" نقوم بتخزين نقاط الأسبوع بملف التصفير أو حسابها:
             t1_points += u_info.get("points", 0)
             t1_promotions += u_info.get("total_promotions", 0)
             t1_tickets += u_info.get("tickets", 0)
@@ -480,10 +443,6 @@ async def calculate_teams_performance(guild: discord.Guild):
         elif isinstance(u_info, int):
             t2_points += u_info
 
-    # إذا كان تم حفظ نقاط الأداء الخاصة بالتيمات عند التصفير، نطرحها أو نعرضها نظرياً
-    # الحل الأدق والأبسط لكي تبقى نقاط الأعضاء الشخصية سليمة ومجموع الأداء يصفر:
-    # نقوم بتخزين رصيد التيم عند آخر تصفير في ملف teams_reset.json ونطرحه من المجموع الحالي!
-    
     reset_info = reset_data.get(guild_id_str, {"t1_base": 0, "t2_base": 0, "time": 0})
     if isinstance(reset_info, dict):
         t1_competitive = max(0, t1_points - reset_info.get("t1_base", 0))
@@ -528,7 +487,7 @@ async def calculate_teams_performance(guild: discord.Guild):
             f"💳 **المجموع التنافسي الأسبوعي:** `{t2_competitive}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
-            f"🪪 **الهويات المفعلة:** `{t2_identities}`"
+            f"🪪 **الهويات المفعلة:** `{t1_identities}`"
         ),
         inline=False
     )
@@ -537,13 +496,13 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🔄 زر تصفير المجموع التنافسي للفرق فقط (بدون مسح نقاط الإداريين الفعلية)
+# 🔄 زر تصفير المجموع التنافسي للفرق فقط (بدون مسح نقاط الإداريين)
 # ----------------------------------------------------
 class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v1")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v2")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -554,7 +513,6 @@ class TeamsResetView(discord.ui.View):
         team_1_role = guild.get_role(TEAM_1_ROLE_ID)
         team_2_role = guild.get_role(TEAM_2_ROLE_ID)
         
-        # حساب مجموع نقاط التيمين الحالي لجعله نقطة الأساس (Base) الجديدة للتصفير الافتراضي
         t1_base = 0
         if team_1_role:
             for m in guild.members:
