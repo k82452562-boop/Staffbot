@@ -60,7 +60,7 @@ POINTS_CONFIG = {
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
 
-# نقطة البداية للإدارة الصغرى والوسطى (لو أردت تحديد الأقسام برمجياً)
+# رتب أساسية كبداية (أو يتم الاعتماد على الرتب الموجودة بالسيرفر تلقائياً)
 JUNIOR_BASE_ROLE_ID = 1540839564506300476
 MIDDLE_BASE_ROLE_ID = 1540838084151877714
 
@@ -260,7 +260,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
         else:
             required_points = SENIOR_HIGHER_ROLES[-1]["points"]
     else:
-        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles) or any(r.id == 1540838084151877714 for r in member.roles)
+        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles) or any("الوسطى" in r.name for r in member.roles)
         required_points = 70 if is_middle else 40
     
     remaining = max(0, required_points - current_pts)
@@ -273,7 +273,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
     return required_points, remaining, progress_percent, bar
 
 # ----------------------------------------------------
-# 🧠 دالة الترقية الذكية التلقائية (تلقط الرتبة التالية بالترتيب تلقائياً)
+# 🧠 دالة الترقية الذكية التلقائية (تلقط الرتبة التالية من ترتيب السيرفر مباشرة)
 # ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
@@ -300,43 +300,36 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 target_role = guild.get_role(target_info["role_id"])
                 role_category_name = "الإدارة العليا المتقدمة"
     else:
-        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)
+        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles) or any("الوسطى" in r.name for r in member.roles)
         required_points = 70 if is_middle else 40
         
         if current_pts >= required_points:
-            # طريقة ذكية: نبحث عن أعلى رتبة يمتلكها العضو حالياً من رتب الإدارة ضمن ترتيب السيرفر (guild.roles)
-            # البوت بياخذ قائمة رتب السيرفر (من الأعلى للأسفل) ويشوف رتبة الإدارة اللي عند العضو، ويعطيه الرتبة اللي فوقها مباشرة!
             member_roles_sorted = sorted(member.roles, key=lambda r: r.position, reverse=True)
             current_admin_role = None
             
             for r in member_roles_sorted:
-                # نتأكد إنها رتبة إدارية وليست رتبة أعضاء عادية أو تيمات (مثلا نتجاهل التيمات ورتب الحظر والتحذير)
                 if r.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID, UNVERIFIED_ROLE_ID, VERIFIED_ROLE_ID] and not r.is_default():
                     current_admin_role = r
                     break
             
             if current_admin_role:
-                # نبحث في رتب السيرفر عن الرتبة التي تقع مباشرة فوق رتبة الإدارة الحالية للعضو
-                all_guild_roles_sorted = sorted(guild.roles, key=lambda r: r.position) # من الأقل للأعلى
+                all_guild_roles_sorted = sorted(guild.roles, key=lambda r: r.position)
                 try:
                     curr_idx = all_guild_roles_sorted.index(current_admin_role)
                     if curr_idx < len(all_guild_roles_sorted) - 1:
                         next_role = all_guild_roles_sorted[curr_idx + 1]
-                        # نتأكد أن الرتبة التالية ليست رتبة قيادية عليا أو تيم
                         if next_role.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID]:
                             target_role = next_role
                             role_category_name = "الإدارة الصغرى / الوسطى"
                 except Exception as e:
                     print(f"خطأ في البحث عن الرتبة التالية: {e}")
             
-            # لو ما عنده رتبة سابقة، نعطيه أول رتبة أساسية للإدارة الصغرى
             if not target_role and not is_middle:
                 target_role = guild.get_role(JUNIOR_BASE_ROLE_ID)
                 role_category_name = "الإدارة الصغرى"
 
     if target_role and target_role not in member.roles:
         try:
-            # سحب الرتب الإدارية القديمة لمنع تراكب الرتب، مع إبقاء رتب التيمات والرتب الخاصة
             roles_to_remove = [
                 r for r in member.roles 
                 if r.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID, SPECIAL_PROMOTION_ROLE_ID, UNVERIFIED_ROLE_ID, VERIFIED_ROLE_ID] 
@@ -487,7 +480,7 @@ async def calculate_teams_performance(guild: discord.Guild):
             f"💳 **المجموع التنافسي الأسبوعي:** `{t2_competitive}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
-            f"🪪 **الهويات المفعلة:** `{t1_identities}`"
+            f"🪪 **الهويات المفعلة:** `{t2_identities}`"
         ),
         inline=False
     )
@@ -496,13 +489,13 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🔄 زر تصفير المجموع التنافسي للفرق فقط (بدون مسح نقاط الإداريين)
+# 🔄 زر تصفير المجموع التنافسي للفرق فقط
 # ----------------------------------------------------
 class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v2")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v4")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
