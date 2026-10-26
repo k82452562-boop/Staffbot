@@ -1,12 +1,12 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import json
 import os
 import time
 import asyncio
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ----------------------------------------------------
 # 1. إعدادات بوت ديسكورد الأساسية
@@ -80,7 +80,6 @@ MIDDLE_ROLES = [
     1555325627647791215
 ]
 
-# 👑 ترقيات الإدارة العليا الخاصة (الرتبة والهدف المطلوب)
 SENIOR_HIGHER_ROLES = [
     {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
     {"role_id": 1545544984638267452, "points": 300, "name": "الرتبة الثانية (إدارة عليا)"},
@@ -97,6 +96,7 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
 PROCESSED_FILE = "processed_tickets.json"
+BANS_FILE = "active_bans.json"
 
 double_points_end_time = 0
 last_ticket_processed_time = 0
@@ -133,7 +133,7 @@ def parse_duration_to_seconds(duration_str: str) -> int:
     duration_str = duration_str.strip().lower()
     numbers = re.findall(r'\d+', duration_str)
     if not numbers:
-        return 259200
+        return 86400
     
     val = int(numbers[0])
     if "دقيقة" in duration_str or "دقائق" in duration_str or "m" in duration_str:
@@ -228,6 +228,12 @@ def load_processed():
 def save_processed(data):
     save_json(PROCESSED_FILE, data)
 
+def load_bans():
+    return load_json(BANS_FILE)
+
+def save_bans(data):
+    save_json(BANS_FILE, data)
+
 async def send_unified_log(guild, title, description, color=discord.Color.from_rgb(30, 144, 255), fields=None):
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
     if log_channel:
@@ -277,7 +283,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     if member.id == BOT_OWNER_ID or member.guild_permissions.administrator:
         return
 
-    notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
     target_role_id = None
     role_category_name = ""
     required_points = 40
@@ -359,7 +364,8 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                     data[user_id]["points"] = 0
                     save_data(data, guild)
 
-                role_ping_str = notif_role.mention if notif_role else ""
+                notif_chan = guild.get_channel(NOTIFICATION_CHANNEL_ID)
+                role_ping_str = notif_chan.mention if notif_chan else ""
                 msg = (
                     f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية نارية وتصفير نقاط:**\n"
                     f"ما شاء الله، المطنوخ {member.mention} تقفّل عنده `{required_points}` نقطة وتمت ترقيته رسمياً إلى `{target_role.name}` ضمن **{role_category_name}**!"
@@ -402,7 +408,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     )
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار
+# النماذج والأزرار (بكاممل تفاصيلها وهيبتها الأصلية)
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
@@ -726,12 +732,18 @@ class ApplyButtonView(discord.ui.View):
         cooldowns[user_id] = time.time()
         save_cooldowns(cooldowns)
         await interaction.response.defer(ephemeral=True)
-        try: await interaction.user.send("✨ رد على الأسئلة بالترتيب يا الذيب:")
+        try: await interaction.user.send("✨ **أهلاً بك يا الذيب في نظام تقديم الهوية. رد على الأسئلة التالية بالترتيب:**")
         except:
-            await interaction.followup.send("❌ افتح الخاص حقك أول (DM)!", ephemeral=True)
+            await interaction.followup.send("❌ افتح الخاص حقك أول (DM) عشان تقدر تقدم!", ephemeral=True)
             return
 
-        questions = ["**1. اسمك الكريم ؟**", "**2. كم عمرك ؟**", "**3. حسابك المستعار في روبلوكس ؟**", "**4. حسابك الأساسي في روبلوكس ؟**", "**5. الحلف (اكتب: أقسم بالله)**"]
+        questions = [
+            "**1. اسمك الكريم ؟**", 
+            "**2. كم عمرك ؟**", 
+            "**3. حسابك المستعار في روبلوكس ؟**", 
+            "**4. حسابك الأساسي في روبلوكس ؟**", 
+            "**5. الحلف (اكتب: أقسم بالله)**"
+        ]
         answers = []
         def check(m): return m.author.id == interaction.user.id and isinstance(m.channel, discord.DMChannel)
 
@@ -741,7 +753,7 @@ class ApplyButtonView(discord.ui.View):
                 msg = await bot.wait_for('message', timeout=120.0, check=check)
                 answers.append(msg.content)
             except:
-                await interaction.user.send("⌛ انتهى الوقت.")
+                await interaction.user.send("⌛ انتهى الوقت المخصص للإجابة.")
                 return
 
         review_channel = interaction.guild.get_channel(APPLY_REVIEW_CHANNEL_ID)
@@ -755,7 +767,11 @@ class ApplyButtonView(discord.ui.View):
             embed.add_field(name="5. الحلف", value=answers[4], inline=False)
             
             view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
-            sent_msg = await review_channel.send(content=f"🔔 <&{ADMIN_ROLE_PENG_ID}> تقديم جديد جاهز!", embed=embed, view=view)
+            
+            admin_role_ping = interaction.guild.get_role(ADMIN_ROLE_PENG_ID)
+            ping_text = admin_role_ping.mention if admin_role_ping else f"<@&{ADMIN_ROLE_PENG_ID}>"
+            
+            sent_msg = await review_channel.send(content=f"🔔 {ping_text} تقديم جديد جاهز للمراجعة!", embed=embed, view=view)
             
             async def enable_btn(m, v):
                 await asyncio.sleep(5)
@@ -764,7 +780,7 @@ class ApplyButtonView(discord.ui.View):
                     try: await m.edit(view=v)
                     except: pass
             bot.loop.create_task(enable_btn(sent_msg, view))
-        await interaction.user.send("✅ وصلت إجاباتك للإدارة بنجاح!")
+        await interaction.user.send("✅ تم إرسال إجاباتك للإدارة بنجاح، انتظر الرد قريباً!")
 
 @bot.command(name="بانل_تقديم")
 async def panel_apply(ctx):
@@ -809,10 +825,63 @@ async def remove_role(ctx, member: discord.Member, role: discord.Role):
 async def close(ctx):
     await ctx.send("⚠️ **الإغلاق يكون عن طريق زر التكت فقط يا الذيب!**")
 
+# ----------------------------------------------------
+# ⏰ مهمة خلفية تلقائية لفحص انتهاء الحرمان وإعادة الرتب
+# ----------------------------------------------------
+@tasks.loop(minutes=1)
+async def check_expired_bans():
+    bans_data = load_bans()
+    if not bans_data:
+        return
+    
+    current_time = time.time()
+    updated = False
+    
+    for guild_id_str, members_dict in list(bans_data.items()):
+        guild = bot.get_guild(int(guild_id_str))
+        if not guild:
+            continue
+            
+        ban_role = guild.get_role(BAN_ROLE_ID)
+        for member_id_str, ban_info in list(members_dict.items()):
+            if current_time >= ban_info["expires_at"]:
+                member = guild.get_member(int(member_id_str))
+                if member:
+                    try:
+                        if ban_role and ban_role in member.roles:
+                            await member.remove_roles(ban_role, reason="انتهت مدة الحرمان - إرجاع الرتب")
+                        
+                        roles_to_restore = []
+                        for rid in ban_info["saved_roles"]:
+                            r = guild.get_role(rid)
+                            if r and r <= guild.me.top_role and not r.is_default():
+                                roles_to_restore.append(r)
+                                
+                        if roles_to_restore:
+                            await member.add_roles(*roles_to_restore, reason="انتهاء الحرمان وإرجاع الرتب السابقة تلقائياً")
+                            
+                        log_ch = guild.get_channel(LOG_CHANNEL_ID)
+                        if log_ch:
+                            await log_ch.send(embed=discord.Embed(title="♻️ | انتهاء الحرمان وإرجاع الرتب", description=f"العضو {member.mention} انتهت فترة حرمانه وتم استرجاع رتبه السابقة تلقائياً.", color=discord.Color.green()))
+                    except Exception as e:
+                        print(f"خطأ في إرجاع رتب العضو بعد انتهاء الحرمان: {e}")
+                
+                del members_dict[member_id_str]
+                updated = True
+                
+        if not members_dict:
+            del bans_data[guild_id_str]
+            
+    if updated:
+        save_bans(bans_data)
+
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(OwnerDashboardView())
+    if not check_expired_bans.is_running():
+        check_expired_bans.start()
+        
     for guild in bot.guilds:
         await fetch_points_from_discord()
         break
@@ -824,7 +893,7 @@ async def on_ready():
     print(f"🚀 [بوت منتدى النظيم شغّال] باسم: {bot.user}")
 
 # ----------------------------------------------------
-# ⚠️ نظام العقوبات والتحذيرات المتسلسل (1 إلى 3)
+# ⚠️ نظام العقوبات والتحذيرات المتسلسل مع حفظ رتب الحرمان
 # ----------------------------------------------------
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري متسلسل")
 @app_commands.describe(member="العضو", duration="المدة (مثال: 3 أيام)", reason="السبب", proof="الدليل")
@@ -884,30 +953,47 @@ async def timeout_slash(interaction: discord.Interaction, member: discord.Member
     except Exception as e:
         await interaction.response.send_message(f"❌ خطأ أثناء تطبيق التايم أوت: {e}", ephemeral=True)
 
-@bot.tree.command(name="حرمان", description="حرمان عضو من الرتب")
-@app_commands.describe(member="العضو", duration="المدة", reason="السبب", proof="الدليل")
+@bot.tree.command(name="حرمان", description="حرمان عضو من الرتب مع حفظها وإرجاعها تلقائياً")
+@app_commands.describe(member="العضو", duration="المدة (مثال: 3 أيام)", reason="السبب", proof="الدليل")
 async def ban_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     ban_role = guild.get_role(BAN_ROLE_ID)
     if not ban_role: 
         return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة بالسيرفر!", ephemeral=True)
     try:
-        roles = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
-        if roles: 
-            await member.remove_roles(*roles, reason=f"حرمان مؤقت بواسطة {interaction.user.name}")
+        saved_roles = [r.id for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
+        
+        roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
+        if roles_to_remove: 
+            await member.remove_roles(*roles_to_remove, reason=f"حرمان مؤقت بواسطة {interaction.user.name}")
         await member.add_roles(ban_role, reason=reason)
+        
+        duration_seconds = parse_duration_to_seconds(duration)
+        expires_at = time.time() + duration_seconds
+        
+        bans_data = load_bans()
+        guild_id_str = str(guild.id)
+        if guild_id_str not in bans_data:
+            bans_data[guild_id_str] = {}
+            
+        bans_data[guild_id_str][str(member.id)] = {
+            "saved_roles": saved_roles,
+            "expires_at": expires_at
+        }
+        save_bans(bans_data)
         
         ch = guild.get_channel(BAN_MODEL_CHANNEL_ID)
         if ch:
             embed = discord.Embed(title="⛔ | سجل الحرمان المؤقت", color=discord.Color.red(), timestamp=discord.utils.utcnow())
             embed.add_field(name="👤 العضو المحروم", value=member.mention, inline=False)
             embed.add_field(name="🛡️ الإداري", value=interaction.user.mention, inline=False)
-            embed.add_field(name="⏳ المدة", value=f"`{duration}`", inline=True)
+            embed.add_field(name="⏳ المدة", value=f"`{duration}` (تنتهي تلقائياً)", inline=True)
             embed.add_field(name="📝 السبب", value=reason, inline=False)
+            embed.add_field(name="🔗 الدليل", value=proof, inline=False)
             await ch.send(embed=embed)
             
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "عقوبة حرمان رول")
-        await interaction.response.send_message(f"✅ تم تطبيق الحرمان على {member.mention} لمدة `{duration}`.", ephemeral=True)
+        await interaction.response.send_message(f"✅ تم تطبيق الحرمان على {member.mention} لمدة `{duration}`, وسيتم إرجاع رتبه السابقة تلقائياً بعد انتهاء المدة.", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ خطأ أثناء تطبيق الحرمان: {e}", ephemeral=True)
 
