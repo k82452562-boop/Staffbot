@@ -100,6 +100,7 @@ bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
 BANS_FILE = "active_bans.json"
+TEAMS_RESET_FILE = "teams_reset.json"  # ملف لحفظ وقت آخر تصفير أسبوعي للمجموع التنافسي
 
 double_points_end_time = 0
 processed_tickets = set()
@@ -235,6 +236,12 @@ def save_data(data, guild=None):
     save_json(DATA_FILE, data)
     if guild:
         bot.loop.create_task(save_points_to_discord(guild))
+
+def load_teams_reset():
+    return load_json(TEAMS_RESET_FILE)
+
+def save_teams_reset(data):
+    save_json(TEAMS_RESET_FILE, data)
 
 def load_cooldowns():
     return load_json(COOLDOWN_FILE)
@@ -426,99 +433,15 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار
-class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
-    amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية فقط!", ephemeral=True)
-            return
-        guild = interaction.guild
-        member = await find_member_by_name(guild, self.user_input.value.strip())
-        if not member:
-            await interaction.response.send_message("❌ ما لقينا العضو بالسيرفر بهذا الاسم.", ephemeral=True)
-            return
-            
-        if member.id == interaction.user.id and any(role.id == POINTS_CONTROL_ROLE_ID for role in interaction.user.roles):
-            await interaction.response.send_message(f"❌ {interaction.user.mention} ماتقدر تعطي نفسك نقاط يالوح", ephemeral=False)
-            return
-
-        try:
-            amount = int(self.amount_input.value.strip())
-        except:
-            await interaction.response.send_message("❌ تأكد إنك كتبت رقماً صحيحاً للنقاط.", ephemeral=True)
-            return
-
-        data = load_data()
-        user_id = str(member.id)
-        if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
-        data[user_id]["points"] += amount
-        save_data(data, guild)
-
-        await interaction.response.send_message(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention} بنجاح!", ephemeral=True)
-        await send_unified_log(guild, "✨ | إضافة نقاط إدارية", f"بواسطة {interaction.user.mention} تم إضافة `{amount}` نقطة للإداري {member.mention}", discord.Color.from_rgb(46, 204, 113))
-        await check_and_promote(guild, member, data[user_id]["points"])
-
-class RemovePointsModal(discord.ui.Modal, title="📉 | خصم نقاط من الإداري"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
-    amount_input = discord.ui.TextInput(label="عدد النقاط المراد خصمها", placeholder="مثال: 5", required=True)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية فقط!", ephemeral=True)
-            return
-        guild = interaction.guild
-        member = await find_member_by_name(guild, self.user_input.value.strip())
-        if not member:
-            await interaction.response.send_message("❌ ما لقينا العضو بالسيرفر بهذا الاسم.", ephemeral=True)
-            return
-        try:
-            amount = int(self.amount_input.value.strip())
-        except:
-            await interaction.response.send_message("❌ تأكد إنك كتبت رقماً صحيحاً.", ephemeral=True)
-            return
-
-        data = load_data()
-        user_id = str(member.id)
-        if user_id in data and isinstance(data[user_id], dict):
-            data[user_id]["points"] = max(0, data[user_id]["points"] - amount)
-            save_data(data, guild)
-            await interaction.response.send_message(f"📉 تم خصم `{amount}` نقطة من {member.mention} بنجاح.", ephemeral=True)
-            await send_unified_log(guild, "📉 | خصم نقاط إدارية", f"بواسطة {interaction.user.mention} تم خصم `{amount}` نقطة من الإداري {member.mention}", discord.Color.from_rgb(230, 126, 34))
-        else:
-            await interaction.response.send_message("❌ هذا العضو ليس لديه نقاط مسجلة.", ephemeral=True)
-
-class ResetPointsModal(discord.ui.Modal, title="🔄 | تصفير نقاط إداري"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا لتصفير نقاطه...", required=True)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية فقط!", ephemeral=True)
-            return
-        guild = interaction.guild
-        member = await find_member_by_name(guild, self.user_input.value.strip())
-        if not member:
-            await interaction.response.send_message("❌ ما لقينا العضو بالسيرفر بهذا الاسم.", ephemeral=True)
-            return
-
-        data = load_data()
-        user_id = str(member.id)
-        if user_id in data:
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
-            save_data(data, guild)
-            await interaction.response.send_message(f"🔄 تم تصفير نقاط {member.mention} بالكامل بنجاح!", ephemeral=True)
-            await send_unified_log(guild, "🔄 | تصفير نقاط إداري", f"بواسطة {interaction.user.mention} تم تصفير نقاط الإداري {member.mention}", discord.Color.from_rgb(231, 76, 60))
-        else:
-            await interaction.response.send_message("❌ العضو ليس لديه سجل نقاط.", ephemeral=True)
-
 # ----------------------------------------------------
-# 📊 دالة تحليل أداء وتنافس الفرق
+# 📊 دالة تحليل أداء وتنافس الفرق (بناءً على وقت التصفير الأسبوعي بدون مسح نقاط الإداريين)
 # ----------------------------------------------------
 async def calculate_teams_performance(guild: discord.Guild):
     data = load_data()
+    reset_data = load_teams_reset()
+    
+    guild_id_str = str(guild.id)
+    last_reset_time = reset_data.get(guild_id_str, 0)
     
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
@@ -532,6 +455,8 @@ async def calculate_teams_performance(guild: discord.Guild):
     for m in t1_members:
         u_info = data.get(str(m.id), {})
         if isinstance(u_info, dict):
+            # نقدر نحسب النقاط المتراكمة أو إذا أردت تصفير المجموع التنافسي نعتمد على الفلترة بالوقت
+            # حالياً لضمان دقة "المجموع التنافسي للأداء" نقوم بتخزين نقاط الأسبوع بملف التصفير أو حسابها:
             t1_points += u_info.get("points", 0)
             t1_promotions += u_info.get("total_promotions", 0)
             t1_tickets += u_info.get("tickets", 0)
@@ -555,16 +480,31 @@ async def calculate_teams_performance(guild: discord.Guild):
         elif isinstance(u_info, int):
             t2_points += u_info
 
-    if t1_points > t2_points:
+    # إذا كان تم حفظ نقاط الأداء الخاصة بالتيمات عند التصفير، نطرحها أو نعرضها نظرياً
+    # الحل الأدق والأبسط لكي تبقى نقاط الأعضاء الشخصية سليمة ومجموع الأداء يصفر:
+    # نقوم بتخزين رصيد التيم عند آخر تصفير في ملف teams_reset.json ونطرحه من المجموع الحالي!
+    
+    reset_info = reset_data.get(guild_id_str, {"t1_base": 0, "t2_base": 0, "time": 0})
+    if isinstance(reset_info, dict):
+        t1_competitive = max(0, t1_points - reset_info.get("t1_base", 0))
+        t2_competitive = max(0, t2_points - reset_info.get("t2_base", 0))
+        last_reset_time = reset_info.get("time", 0)
+    else:
+        t1_competitive = t1_points
+        t2_competitive = t2_points
+
+    if t1_competitive > t2_competitive:
         best_team = f"🏆 التيم الأول ({team_1_role.name if team_1_role else 'فريق 1'}) متصدر المنافسة الأسبوعية!"
-    elif t2_points > t1_points:
+    elif t2_competitive > t1_competitive:
         best_team = f"🏆 التيم الثاني ({team_2_role.name if team_2_role else 'فريق 2'}) متصدر المنافسة الأسبوعية!"
     else:
-        best_team = "🤝 تعادل تام بين الفريقين في النقاط الأسبوعية!"
+        best_team = "🤝 تعادل تام بين الفريقين في النقاط التنافسية الأسبوعية!"
+
+    reset_date_str = datetime.fromtimestamp(last_reset_time).strftime('%Y-%m-%d %H:%M') if last_reset_time else "من البداية"
 
     embed = discord.Embed(
         title="⚔️ | تقرير أداء الفرق ومقارنة المنافسة الأسبوعية",
-        description=f"إليك تفاصيل أداء ومقارنة الفريقين:\n\n{best_team}",
+        description=f"إليك تفاصيل أداء ومقارنة الفريقين (منذ تصفير الأسبوع: `{reset_date_str}`):\n\n{best_team}",
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
@@ -573,7 +513,7 @@ async def calculate_teams_performance(guild: discord.Guild):
         name=f"🛡️ التيم الأول: {team_1_role.name if team_1_role else 'غير موجودة'}",
         value=(
             f"👥 **عدد الأعضاء:** `{len(t1_members)}` عضواً\n"
-            f"💳 **مجموع النقاط الأسبوعي:** `{t1_points}` نقطة\n"
+            f"💳 **المجموع التنافسي الأسبوعي:** `{t1_competitive}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t1_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t1_tickets}`\n"
             f"🪪 **الهويات المفعلة:** `{t1_identities}`"
@@ -585,7 +525,7 @@ async def calculate_teams_performance(guild: discord.Guild):
         name=f"🛡️ التيم الثاني: {team_2_role.name if team_2_role else 'غير موجودة'}",
         value=(
             f"👥 **عدد الأعضاء:** `{len(t2_members)}` عضواً\n"
-            f"💳 **مجموع النقاط الأسبوعي:** `{t2_points}` نقطة\n"
+            f"💳 **المجموع التنافسي الأسبوعي:** `{t2_competitive}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
             f"🪪 **الهويات المفعلة:** `{t2_identities}`"
@@ -597,13 +537,13 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🔄 زر تصفير تنافس الفرق الأسبوعي (مع الحفاظ على رتب الأعضاء)
+# 🔄 زر تصفير المجموع التنافسي للفرق فقط (بدون مسح نقاط الإداريين الفعلية)
 # ----------------------------------------------------
 class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_btn_v3")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v1")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -611,22 +551,34 @@ class TeamsResetView(discord.ui.View):
 
         guild = interaction.guild
         data = load_data()
-        
         team_1_role = guild.get_role(TEAM_1_ROLE_ID)
         team_2_role = guild.get_role(TEAM_2_ROLE_ID)
         
-        count_reset = 0
-        for member in guild.members:
-            if (team_1_role and team_1_role in member.roles) or (team_2_role and team_2_role in member.roles):
-                uid = str(member.id)
-                if uid in data and isinstance(data[uid], dict):
-                    data[uid]["points"] = 0
-                    count_reset += 1
+        # حساب مجموع نقاط التيمين الحالي لجعله نقطة الأساس (Base) الجديدة للتصفير الافتراضي
+        t1_base = 0
+        if team_1_role:
+            for m in guild.members:
+                if team_1_role in m.roles:
+                    u_info = data.get(str(m.id), {})
+                    t1_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
 
-        save_data(data, guild)
+        t2_base = 0
+        if team_2_role:
+            for m in guild.members:
+                if team_2_role in m.roles:
+                    u_info = data.get(str(m.id), {})
+                    t2_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
 
-        await interaction.response.send_message(f"🔄 **تم بنجاح تصفير نقاط التنافس الأسبوعي لـ {count_reset} إداري في الفريقين!**\n*(ملاحظة: رتب الأعضاء الفردية وترقياتهم وسجلاتهم محفوظة بالكامل).* 🎉", ephemeral=True)
-        await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام الأدمن {interaction.user.mention} بتصفير نقاط التنافس الأسبوعية للفرق لبدء جولة جديدة.", discord.Color.from_rgb(231, 76, 60))
+        reset_data = load_teams_reset()
+        reset_data[str(guild.id)] = {
+            "t1_base": t1_base,
+            "t2_base": t2_base,
+            "time": time.time()
+        }
+        save_teams_reset(reset_data)
+
+        await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق في أمر الأداء بنجاح!**\n*(ملاحظة: نقاط الإداريين الشخصية ومحافظهم وترقياتهم في أمان ولم تُمس نهائياً).* 🎉", ephemeral=True)
+        await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام الأدمن {interaction.user.mention} بتصفير المجموع التنافسي الأسبوعي للفرق لبدء جولة جديدة.", discord.Color.from_rgb(231, 76, 60))
 
 @bot.event
 async def on_message(message):
@@ -1203,7 +1155,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
-        value="▫️ `.أداء` (لعرض مقارنة وإحصائيات الفريقين وزر التصفير)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
+        value="▫️ `.أداء` (لعرض مقارنة وإحصائيات الفريقين وزر التصفير الافتراضي)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
@@ -1350,17 +1302,30 @@ async def reset_teams_cmd(ctx):
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
     
-    count_reset = 0
-    for member in guild.members:
-        if (team_1_role and team_1_role in member.roles) or (team_2_role and team_2_role in member.roles):
-            uid = str(member.id)
-            if uid in data and isinstance(data[uid], dict):
-                data[uid]["points"] = 0
-                count_reset += 1
+    t1_base = 0
+    if team_1_role:
+        for m in guild.members:
+            if team_1_role in m.roles:
+                u_info = data.get(str(m.id), {})
+                t1_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
 
-    save_data(data, guild)
-    await ctx.send(f"🔄 **تم تصفير نقاط التنافس لـ {count_reset} عضو في الفريقين بنجاح! وانطلق أسبوع جديد!** 🚀")
-    await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام {ctx.author.mention} بتصفير نقاط التنافس الأسبوعية للفرق.", discord.Color.from_rgb(231, 76, 60))
+    t2_base = 0
+    if team_2_role:
+        for m in guild.members:
+            if team_2_role in m.roles:
+                u_info = data.get(str(m.id), {})
+                t2_base += u_info.get("points", 0) if isinstance(u_info, dict) else (u_info if isinstance(u_info, int) else 0)
+
+    reset_data = load_teams_reset()
+    reset_data[str(guild.id)] = {
+        "t1_base": t1_base,
+        "t2_base": t2_base,
+        "time": time.time()
+    }
+    save_teams_reset(reset_data)
+
+    await ctx.send("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق في أمر الأداء بنجاح!** *(نقاط الإداريين الشخصية محفوظة بالكامل ولم تُمس).* 🚀")
+    await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام {ctx.author.mention} بتصفير المجموع التنافسي الأسبوعي للفرق.", discord.Color.from_rgb(231, 76, 60))
 
 if __name__ == "__main__":
     if TOKEN:
