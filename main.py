@@ -82,7 +82,7 @@ MIDDLE_ROLES = [
     1555325627647791215
 ]
 
-# 👑 ترقيات الإدارة العليا الخاصة بالنقاط التي طلبتها
+# 👑 ترقيات الإدارة العليا الخاصة بالنقاط التي طلبتها بدقة
 SENIOR_HIGHER_ROLES = [
     {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
     {"role_id": 1545544984638267452, "points": 300, "name": "الرتبة الثانية (إدارة عليا)"},
@@ -255,6 +255,40 @@ async def send_unified_log(guild, title, description, color=discord.Color.from_r
                 embed.add_field(name=name, value=value, inline=inline)
         await log_channel.send(embed=embed)
 
+async def get_promotion_progress(member: discord.Member, current_pts: int):
+    is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
+    
+    if is_senior_higher:
+        current_senior_idx = -1
+        for idx, s_info in enumerate(SENIOR_HIGHER_ROLES):
+            if any(r.id == s_info["role_id"] for r in member.roles):
+                current_senior_idx = idx
+                break
+        
+        if current_senior_idx < len(SENIOR_HIGHER_ROLES) - 1:
+            target_info = SENIOR_HIGHER_ROLES[current_senior_idx + 1]
+            required_points = target_info["points"]
+        else:
+            required_points = SENIOR_HIGHER_ROLES[-1]["points"]
+    else:
+        middle_index = -1
+        for idx, r_id in enumerate(MIDDLE_ROLES):
+            if any(r.id == r_id for r in member.roles):
+                middle_index = idx
+                break
+
+        is_middle = (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles))
+        required_points = 500 if is_middle else 400
+    
+    remaining = max(0, required_points - current_pts)
+    progress_percent = min(100, int((current_pts / required_points) * 100)) if required_points > 0 else 100
+    
+    filled_blocks = int(progress_percent / 10)
+    empty_blocks = 10 - filled_blocks
+    bar = "🟩" * filled_blocks + "⬛" * empty_blocks
+    
+    return required_points, remaining, progress_percent, bar
+
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
@@ -389,7 +423,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار الأصلية كاملة مع مانع إعطاء النقاط للنفس
+# النماذج والأزرار كاملة مع حماية منع إعطاء النقاط للنفس
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
@@ -1111,12 +1145,29 @@ async def resetpoints_slash(interaction: discord.Interaction, member: discord.Me
         save_data(data, interaction.guild)
         await interaction.response.send_message(f"🔄 تم تصفير نقاط {member.mention} بالكامل بنجاح!")
 
-@bot.tree.command(name="نقاط", description="عرض رصيد النقاط")
+@bot.tree.command(name="نقاط", description="عرض رصيد النقاط ومؤشر التقدم والمتبقي للترقية")
+@app_commands.describe(member="العضو (اختياري)")
 async def points_slash(interaction: discord.Interaction, member: discord.Member = None):
     target = member or interaction.user
     data = load_data()
-    pts = data.get(str(target.id), {}).get("points", 0) if isinstance(data.get(str(target.id)), dict) else data.get(str(target.id), 0)
-    await interaction.response.send_message(f"📊 رصيد نقاط {target.mention} الحالي: **{pts}** نقطة.")
+    user_info = data.get(str(target.id), {"points": 0})
+    pts = user_info.get("points", 0) if isinstance(user_info, dict) else user_info
+    
+    req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
+
+    embed = discord.Embed(
+        title=f"✨ | محفظة نقاط المطنوخ",
+        description=f"العضو: {target.mention}\n\n"
+                    f"💳 **الرصيد الحالي:** `{pts}` نقطة\n"
+                    f"🎯 **الهدف القادم:** `{req_pts}` نقطة\n"
+                    f"⏳ **المتبقي للترقية:** باقي لك **{rem_pts}** نقطة فقط!\n\n"
+                    f"📊 **مؤشر التقدم:**\n{bar} (`{percent}%`)",
+        color=discord.Color.from_rgb(46, 204, 113),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.set_footer(text="منتدى النظيم | قسم الرقابة الإدارية")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="تعديل_إمبايد", description="تعديل محتوى إمبايد أرسله البوت سابقاً")
 @app_commands.describe(channel_id="ID الروم", message_id="ID الرسالة", title="العنوان الجديد", description="الوصف الجديد")
@@ -1135,7 +1186,7 @@ async def editembed_slash(interaction: discord.Interaction, channel_id: str, mes
         await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
 
 # ----------------------------------------------------
-# 3. الأوامر النصية العادية بالبادئة (.)
+# 3. الأوامر النصية العادية بالبادئة (.) مع البروفايل والنقاط المطورة
 # ----------------------------------------------------
 
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
@@ -1208,18 +1259,51 @@ async def profile(ctx, member: discord.Member = None):
     user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0})
     if isinstance(user_info, int):
         user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
-    embed = discord.Embed(title=f"🛡️ | السجل الإداري: {target.name}", color=discord.Color.from_rgb(52, 152, 219))
-    embed.add_field(name="📊 النقاط", value=f"`{user_info.get('points', 0)}`")
-    embed.add_field(name="🎫 التكتات", value=f"`{user_info.get('tickets', 0)}`")
-    embed.add_field(name="🪪 الهويات", value=f"`{user_info.get('identities', 0)}`")
+    
+    pts = user_info.get('points', 0)
+    req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
+
+    embed = discord.Embed(
+        title=f"🛡️ | السجل الإداري السيادي لـ {target.name}",
+        description=f"إليك تفاصيل أداء وحالة المطنوخ الإدارية داخل سيرفر منتدى النظيم.",
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    
+    embed.add_field(name="📊 إجمالي النقاط", value=f"`{pts}` / `{req_pts}` نقطة للترقية", inline=True)
+    embed.add_field(name="📈 نسبة التقدم", value=f"`{percent}%`\n{bar}", inline=False)
+    embed.add_field(name="🎯 المتبقي للترقية", value=f"باقي لك **{rem_pts}** نقطة وتوصل رتبتك التالية يا وحش!", inline=False)
+    
+    embed.add_field(name="🎫 التكتات", value=f"`{user_info.get('tickets', 0)}`", inline=True)
+    embed.add_field(name="🪪 الهويات", value=f"`{user_info.get('identities', 0)}`", inline=True)
+    embed.add_field(name="⚠️ التحذيرات", value=f"`{user_info.get('warns', 0)}`", inline=True)
+    
+    embed.set_footer(text="منتدى النظيم | نظام الأداء الإداري الموحد", icon_url=ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None)
     await ctx.send(embed=embed)
 
 @bot.command(name="نقاط", aliases=["points"])
 async def points(ctx, member: discord.Member = None):
     target = member or ctx.author
     data = load_data()
-    pts = data.get(str(target.id), {}).get("points", 0) if isinstance(data.get(str(target.id)), dict) else data.get(str(target.id), 0)
-    await ctx.send(f"📊 رصيد نقاط {target.mention} الحالي: **{pts}** نقطة.")
+    user_info = data.get(str(target.id), {"points": 0})
+    pts = user_info.get("points", 0) if isinstance(user_info, dict) else user_info
+    
+    req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
+
+    embed = discord.Embed(
+        title=f"✨ | محفظة نقاط المطنوخ",
+        description=f"العضو: {target.mention}\n\n"
+                    f"💳 **الرصيد الحالي:** `{pts}` نقطة\n"
+                    f"🎯 **الهدف القادم:** `{req_pts}` نقطة\n"
+                    f"⏳ **المتبقي للترقية:** باقي لك **{rem_pts}** نقطة فقط!\n\n"
+                    f"📊 **مؤشر التقدم:**\n{bar} (`{percent}%`)",
+        color=discord.Color.from_rgb(46, 204, 113),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_thumbnail(url=target.display_avatar.url)
+    embed.set_footer(text="منتدى النظيم | قسم الرقابة الإدارية")
+    await ctx.send(embed=embed)
 
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
