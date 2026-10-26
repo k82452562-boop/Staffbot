@@ -546,7 +546,7 @@ async def owner_dashboard(ctx):
     embed.set_footer(text="منتدى النظيم | لوحة التحكم السيادية")
     await ctx.send(embed=embed, view=OwnerDashboardView())
 
-# 🎯 محرك قراءة التكتات مع مانع تكرار
+# 🎯 محرك قراءة التكتات مع مانع تكرار صارم جداً
 @bot.event
 async def on_message(message):
     global last_ticket_processed_time
@@ -572,7 +572,8 @@ async def on_message(message):
 
     if message.channel.id == TICKET_LOG_CHANNEL_ID and not message.author.bot:
         current_time = time.time()
-        if current_time - last_ticket_processed_time < 3.0:
+        # رفع مدة الفاصل الزمني لمنع التكرار تماماً (5 ثوانٍ)
+        if current_time - last_ticket_processed_time < 5.0:
             return
 
         processed_data = load_processed()
@@ -580,6 +581,7 @@ async def on_message(message):
         if processed_data.get(msg_id_str, False):
             return
 
+        # تسجيل الـ ID فوراً قبل المعالجة لمنع أي سباق أو تكرار رسالة
         processed_data[msg_id_str] = True
         if len(processed_data) > 500:
             old_keys = list(processed_data.keys())[:100]
