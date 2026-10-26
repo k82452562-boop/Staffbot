@@ -27,7 +27,7 @@ ALLOWED_ROLE_IDS = [
 
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   
-TICKET_LOG_CHANNEL_ID = 1559469613509640233  # تم تحديث آيدي روم لوق التكتات الجديد
+TICKET_LOG_CHANNEL_ID = 1559469613509640233  
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
 APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
@@ -48,7 +48,7 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
-# نقاط الإنجازات (بدون أصفار: نقاط مباشرة)
+# نقاط الإنجازات المباشرة (بدون أصفار)
 POINTS_CONFIG = {
     "ticket": 1,
     "warn": 1,
@@ -250,7 +250,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
 
     has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
     
-    # الشروط الجديدة: 70 نقطة للوسطى/العليا و 40 للصغرى
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
         if any(r.id == r_id for r in member.roles):
@@ -363,7 +362,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار الأصلية كاملة
+# النماذج والأزرار
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
@@ -467,205 +466,6 @@ async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove:
     except Exception as e:
         print(f"خطأ في إزالة التحذير التلقائي: {e}")
 
-class WarnModal(discord.ui.Modal, title="⚠ | لوحة توثيق التحذير الإداري"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
-    duration_input = discord.ui.TextInput(label="المدة (مثال: 3 ايام / 5 دقائق)", placeholder="راح يزول التحذير تلقائياً بعدها", required=True)
-    reason_input = discord.ui.TextInput(label="سبب التحذير بالتفصيل", style=discord.TextStyle.paragraph, placeholder="اكتب التفاصيل هنا...", required=True)
-    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط صورة أو فيديو...", required=False)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        query = self.user_input.value.strip()
-        member = await find_member_by_name(guild, query)
-
-        if not member:
-            await interaction.response.send_message(f"❌ **ما لقيته يا الغالي:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`). تأكد منه زين.", ephemeral=True)
-            return
-
-        r_warn1 = guild.get_role(WARN_1_ID)
-        r_warn2 = guild.get_role(WARN_2_ID)
-        r_warn3 = guild.get_role(WARN_3_ID)
-
-        assigned_warn_role = r_warn1
-        assigned_warn_name = "تحذير أول"
-        try:
-            if r_warn2 and r_warn2 in member.roles:
-                if r_warn2: await member.remove_roles(r_warn2)
-                if r_warn3: await member.add_roles(r_warn3)
-                assigned_warn_role = r_warn3
-                assigned_warn_name = "تحذير ثالث"
-            elif r_warn1 and r_warn1 in member.roles:
-                if r_warn1: await member.remove_roles(r_warn1)
-                if r_warn2: await member.add_roles(r_warn2)
-                assigned_warn_role = r_warn2
-                assigned_warn_name = "تحذير ثاني"
-            else:
-                if r_warn1: await member.add_roles(r_warn1)
-                assigned_warn_role = r_warn1
-                assigned_warn_name = "تحذير أول"
-        except Exception as e:
-            print(f"خطأ في منح رتبة التحذير: {e}")
-
-        proof = self.proof_input.value.strip() if self.proof_input.value else "لا يوجد"
-        reason = self.reason_input.value.strip()
-        duration_text = self.duration_input.value.strip()
-        duration_sec = parse_duration_to_seconds(duration_text)
-
-        warn_channel = guild.get_channel(WARN_CHANNEL_ID)
-        if warn_channel:
-            warning_msg = (
-                f"__**\n"
-                f"`سجل التحذيرات الرسمي`\n\n"
-                f"- اسـم الإداري : {interaction.user.mention}\n\n"
-                f"- اســم العضو : {member.mention}\n\n"
-                f"- نـوع التـحـذيـر : {assigned_warn_name}\n\n"
-                f"- الـمـده : {duration_text}\n\n"
-                f"- الـسـبـب: {reason}\n\n"
-                f"- الـدليـل : {proof}\n"
-                f"**__"
-            )
-            await warn_channel.send(warning_msg)
-
-        await send_unified_log(
-            guild, "⚠️ | تحذير إداري صارم", 
-            f"**الإداري:** {interaction.user.mention}\n**العضو المخالف:** {member.mention}\n**التصنيف:** {assigned_warn_name}\n**المدة:** {duration_text}\n**السبب:** {reason}", 
-            discord.Color.from_rgb(231, 76, 60)
-        )
-
-        data = load_data()
-        user_id = str(interaction.user.id)
-        if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
-        data[user_id]["warns"] += 1
-        save_data(data, guild)
-
-        await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"تطبيق {assigned_warn_name}")
-        await interaction.response.send_message(f"✅ **يا كفو! تم تطبيق {assigned_warn_name} على {member.mention} ونزلت نقاطك في الرصيد بنجاح!**", ephemeral=True)
-
-        if assigned_warn_role:
-            bot.loop.create_task(auto_remove_warn(guild, member.id, assigned_warn_role, duration_sec))
-
-class TimeoutModal(discord.ui.Modal, title="🔇 | لوحة توثيق التايم أوت (الميوت)"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
-    minutes_input = discord.ui.TextInput(label="المدة بالدقائق", placeholder="مثال: 60 (يعني ساعة)", required=True)
-    reason_input = discord.ui.TextInput(label="سبب الإسكات", style=discord.TextStyle.paragraph, required=True)
-    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط الدليل...", required=False)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        query = self.user_input.value.strip()
-        member = await find_member_by_name(guild, query)
-
-        if not member:
-            await interaction.response.send_message(f"❌ **ما لقيته:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`).", ephemeral=True)
-            return
-
-        try:
-            minutes = int(self.minutes_input.value.strip())
-        except:
-            await interaction.response.send_message("❌ **خطأ:** تأكد إنك كتبت رقماً صحيحاً للمدة بالدقائق.", ephemeral=True)
-            return
-
-        reason = self.reason_input.value.strip()
-        proof = self.proof_input.value.strip() if self.proof_input.value else "لا يوجد"
-        duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
-
-        try:
-            await member.timeout(duration_delta, reason=reason)
-            timeout_model_channel = guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
-            timeout_model_msg = (
-                f"**\n"
-                f"`سجل التايم أوت الرسمي`\n\n"
-                f" اسـم الإداري : {interaction.user.mention}\n\n"
-                f" اسـم العضو : {member.mention}\n\n"
-                f"الـمـده : {minutes} دقيقة\n\n"
-                f"الـسـبـب: {reason}\n\n"
-                f"الـدليـل : {proof}\n"
-                f"**"
-            )
-            if timeout_model_channel:
-                await timeout_model_channel.send(timeout_model_msg)
-
-            await send_unified_log(
-                guild, "🔇 | عقوبة إسكات (تايم أوت)", 
-                f"**الإداري:** {interaction.user.mention}\n**العضو:** {member.mention}\n**المدة:** {minutes} دقيقة\n**السبب:** {reason}", 
-                discord.Color.from_rgb(230, 126, 34)
-            )
-
-            data = load_data()
-            user_id = str(interaction.user.id)
-            if user_id not in data or not isinstance(data[user_id], dict):
-                data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
-            data[user_id]["timeouts"] += 1
-            save_data(data, guild)
-
-            await add_points_direct(guild, interaction.user, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم")
-            await interaction.response.send_message(f"✅ **تم كتم العضو {member.mention} لمدة {minutes} دقيقة بنجاح تام!**", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ عذراً، حصل خطأ أثناء التايم أوت: {e}", ephemeral=True)
-
-class BanModal(discord.ui.Modal, title="🚫 | لوحة توثيق حرمان الرول"):
-    user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم في السيرفر", placeholder="اكتب اسم العضو هنا...", required=True)
-    duration_input = discord.ui.TextInput(label="المدة (مثال: اسبوع / 3 ايام)", required=True)
-    reason_input = discord.ui.TextInput(label="سبب الحرمان", style=discord.TextStyle.paragraph, required=True)
-    proof_input = discord.ui.TextInput(label="رابط الدليل (اختياري)", placeholder="رابط الدليل...", required=False)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        query = self.user_input.value.strip()
-        member = await find_member_by_name(guild, query)
-
-        if not member:
-            await interaction.response.send_message(f"❌ **ما لقيته:** ما فيه عضو بالسيرفر بهذا الاسم (`{query}`).", ephemeral=True)
-            return
-
-        ban_role = guild.get_role(BAN_ROLE_ID)
-        if not ban_role:
-            await interaction.response.send_message("❌ رتبة الحرمان مش موجودة بالسيرفر يا الحبيب.", ephemeral=True)
-            return
-
-        duration = self.duration_input.value.strip()
-        reason = self.reason_input.value.strip()
-        proof = self.proof_input.value.strip() if self.proof_input.value else "لا يوجد"
-
-        try:
-            roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
-            if roles_to_remove:
-                await member.remove_roles(*roles_to_remove, reason=f"عقوبة حرمان بواسطة {interaction.user.name}")
-            await member.add_roles(ban_role, reason=f"تطبيق عقوبة الحرمان بواسطة {interaction.user.name}")
-
-            ban_model_channel = guild.get_channel(BAN_MODEL_CHANNEL_ID)
-            ban_model_msg = (
-                f"__**\n"
-                f"`سجل حرمان الرول الرسمي`\n\n"
-                f"- اسـم الإداري : {interaction.user.mention}\n\n"
-                f"- اسـم العضو : {member.mention}\n\n"
-                f"- الـسـبـب : {reason}\n\n"
-                f"- الـمـده : {duration}\n\n"
-                f"- الـدليـل : {proof}\n"
-                f"**__"
-            )
-            if ban_model_channel:
-                await ban_model_channel.send(ban_model_msg)
-
-            await send_unified_log(
-                guild, "🚫 | عقوبة حرمان رول قاسية", 
-                f"**الإداري:** {interaction.user.mention}\n**العضو:** {member.mention}\n**المدة:** {duration}\n**السبب:** {reason}", 
-                discord.Color.from_rgb(142, 68, 173)
-            )
-
-            data = load_data()
-            user_id = str(interaction.user.id)
-            if user_id not in data or not isinstance(data[user_id], dict):
-                data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
-            data[user_id]["bans"] += 1
-            save_data(data, guild)
-
-            await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
-            await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على {member.mention} وتوثيق السجل بكل فخر!**", ephemeral=True)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ عذراً، صار خطأ بتنفيذ الحرمان: {e}", ephemeral=True)
-
 class OwnerDashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -673,21 +473,21 @@ class OwnerDashboardView(discord.ui.View):
     @discord.ui.button(label="إضافة نقاط", style=discord.ButtonStyle.success, emoji="✨", custom_id="dash_add_pts")
     async def dash_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(AddPointsModal())
 
     @discord.ui.button(label="خصم نقاط", style=discord.ButtonStyle.danger, emoji="📉", custom_id="dash_remove_pts")
     async def dash_rem(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(RemovePointsModal())
 
     @discord.ui.button(label="تصفير نقاط", style=discord.ButtonStyle.secondary, emoji="🔄", custom_id="dash_reset_pts")
     async def dash_res(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(ResetPointsModal())
 
@@ -792,45 +592,46 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # قراءة لوق التكتات الجديد وإعطاء النقطة للمستلم تلقائياً
+    # 🎯 قراءة لوق التكتات الجديد بدقة تامة لاستخراج (المستلم) فقط وإعطائه النقطة
     if message.channel.id == TICKET_LOG_CHANNEL_ID:
-        full_text = message.content or ""
-        for embed in message.embeds:
-            title_text = embed.title or ""
-            desc_text = embed.description or ""
-            full_text += f"\n{title_text}\n{desc_text}"
-            for field in embed.fields:
-                full_text += f"\n{field.name}: {field.value}"
-
         staff_member = None
-        user_ids = re.findall(r'<@!?(\d+)>', full_text)
         
-        # في الإمبايد الجديد، صاحب التكت غالباً الأول والمستلم الثاني أو يتم البحث عن الآيدي الرقمي تحت خانة المستلم
-        if len(user_ids) >= 2:
-            # غالباً آيدي المستلم هو الثاني في الإمبايد أو يتم فحصه عبر الأرقام
-            staff_member = message.guild.get_member(int(user_ids[1]))
-        
-        if not staff_member and user_ids:
-            for uid in user_ids:
-                possible = message.guild.get_member(int(uid))
-                if possible and not possible.bot and possible.id != int(user_ids[0]):
-                    staff_member = possible
-                    break
+        for embed in message.embeds:
+            for field in embed.fields:
+                # نبحث في الحقل الخاص بـ "المستلم" حصرياً
+                if "المستلم" in field.name:
+                    field_text = field.value
+                    user_ids = re.findall(r'<@!?(\d+)>', field_text)
+                    if not user_ids:
+                        user_ids = re.findall(r'(\d{17,19})', field_text)
+                    
+                    if user_ids:
+                        possible_staff = message.guild.get_member(int(user_ids[0]))
+                        if possible_staff and not possible_staff.bot:
+                            staff_member = possible_staff
+                            break
+            if staff_member:
+                break
 
+        # حل إضافي احتياطي لو كان الإمبايد مصمم بطريقة أخرى
         if not staff_member:
-            all_numbers = re.findall(r'(\d{17,19})', full_text)
-            for num in all_numbers:
-                possible_member = message.guild.get_member(int(num))
-                if possible_member and not possible_member.bot:
-                    staff_member = possible_member
-                    break
+            for embed in message.embeds:
+                desc = embed.description or ""
+                # البحث عن قسم المستلم في الوصف
+                if "المستلم" in desc:
+                    user_ids = re.findall(r'<@!?(\d+)>', desc)
+                    if len(user_ids) >= 2: # الأول صاحب التكت وغالباً الثاني هو المستلم
+                        possible_staff = message.guild.get_member(int(user_ids[1]))
+                        if possible_staff and not possible_staff.bot:
+                            staff_member = possible_staff
+                            break
 
         if staff_member:
             await add_points_direct(
                 message.guild, 
                 staff_member, 
                 POINTS_CONFIG["ticket"], 
-                "استلام تذكرة (اللوق الجديد)", 
+                f"استلام تذكرة (المستلم: {staff_member.name})", 
                 target_type="ticket"
             )
 
