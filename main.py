@@ -25,6 +25,10 @@ ALLOWED_ROLE_IDS = [
     1540838084151877714   
 ]
 
+# معرفات الفرق (Teams Roles IDs)
+TEAM_1_ROLE_ID = 1562958541856182312
+TEAM_2_ROLE_ID = 1562958139530154034
+
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   
 TICKET_LOG_CHANNEL_ID = 1543094678038257784  
@@ -82,7 +86,6 @@ MIDDLE_ROLES = [
     1555325627647791215
 ]
 
-# 👑 ترقيات الإدارة العليا الخاصة بالنقاط التي طلبتها بدقة
 SENIOR_HIGHER_ROLES = [
     {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
     {"role_id": 1545544984638267452, "points": 300, "name": "الرتبة الثانية (إدارة عليا)"},
@@ -375,6 +378,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 user_id = str(member.id)
                 if user_id in data and isinstance(data[user_id], dict):
                     data[user_id]["points"] = 0
+                    data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
                     save_data(data, guild)
 
                 role_ping_str = notif_role.mention if notif_role else ""
@@ -400,7 +404,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
 
     if user_id not in data or not isinstance(data[user_id], dict):
         old_pts = data.get(user_id, 0) if isinstance(data.get(user_id), int) else 0
-        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[user_id] = {"points": old_pts, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
 
     user_data = data[user_id]
     user_data["points"] = user_data.get("points", 0) + actual_points
@@ -423,7 +427,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار كاملة مع حماية منع إعطاء النقاط للنفس
+# النماذج والأزرار
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
@@ -451,7 +455,7 @@ class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإد
         data = load_data()
         user_id = str(member.id)
         if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         data[user_id]["points"] += amount
         save_data(data, guild)
 
@@ -504,7 +508,7 @@ class ResetPointsModal(discord.ui.Modal, title="🔄 | تصفير نقاط إد�
         data = load_data()
         user_id = str(member.id)
         if user_id in data:
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
             save_data(data, guild)
             await interaction.response.send_message(f"🔄 تم تصفير نقاط {member.mention} بالكامل بنجاح!", ephemeral=True)
             await send_unified_log(guild, "🔄 | تصفير نقاط إداري", f"بواسطة {interaction.user.mention} تم تصفير نقاط الإداري {member.mention}", discord.Color.from_rgb(231, 76, 60))
@@ -532,100 +536,90 @@ async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove:
     except Exception as e:
         print(f"خطأ في إزالة التحذير التلقائي: {e}")
 
-class OwnerDashboardView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="إضافة نقاط", style=discord.ButtonStyle.success, emoji="✨", custom_id="dash_add_pts")
-    async def dash_add(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
-            return
-        await interaction.response.send_modal(AddPointsModal())
-
-    @discord.ui.button(label="خصم نقاط", style=discord.ButtonStyle.danger, emoji="📉", custom_id="dash_remove_pts")
-    async def dash_rem(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
-            return
-        await interaction.response.send_modal(RemovePointsModal())
-
-    @discord.ui.button(label="تصفير نقاط", style=discord.ButtonStyle.secondary, emoji="🔄", custom_id="dash_reset_pts")
-    async def dash_res(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not can_manage_points(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للرتب القيادية المصرح لها فقط!", ephemeral=True)
-            return
-        await interaction.response.send_modal(ResetPointsModal())
-
-    @discord.ui.button(label="تفعيل دبل النقاط (x2)", style=discord.ButtonStyle.success, emoji="🔥", custom_id="dash_double_pts")
-    async def dash_double(self, interaction: discord.Interaction, button: discord.ui.Button):
-        global double_points_end_time
-        if not is_admin_or_owner(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان والأدمن فقط!", ephemeral=True)
-            return
-        double_points_end_time = time.time() + 3600
-        await interaction.response.send_message("🔥 **تم تفعيل مضاعفة النقاط (x2) لكافة الإداريين لمدة ساعة كاملة عبر الداشبورد!**", ephemeral=True)
-        await send_unified_log(interaction.guild, "🔥 | تفعيل دبل النقاط", f"قام الحاكم ريان بتفعيل دبل النقاط لمدة ساعة عبر لوحة التحكم.", discord.Color.from_rgb(241, 196, 15))
-
-    @discord.ui.button(label="نشر بانل التقديم", style=discord.ButtonStyle.primary, emoji="📋", custom_id="dash_panel_apply")
-    async def dash_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not is_admin_or_owner(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان والأدمن فقط!", ephemeral=True)
-            return
-        embed = discord.Embed(
-            title="📋 | نظام تقديم الهوية الرسمي",
-            description="تبي تطلع الهوية وتفعل حسابك بالسيرفر؟ اضغط على الزر تحت وبيجيك البوت في الخاص مباشرة يدردش معك ويأخذ بياناتك بكل سهولة.",
-            color=discord.Color.from_rgb(52, 152, 219)
-        )
-        embed.set_footer(text="منتدى النظيم | قيادة السيرفر العليا")
-        view = ApplyButtonView()
-        await interaction.channel.send(embed=embed, view=view)
-        await interaction.response.send_message("✅ **تم إرسال بانل التقديم في هذا الروم بنجاح!**", ephemeral=True)
-
-    @discord.ui.button(label="لوحة الشرف (التوب)", style=discord.ButtonStyle.secondary, emoji="🏆", custom_id="dash_top")
-    async def dash_top(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not is_admin_or_owner(interaction):
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان والأدمن فقط!", ephemeral=True)
-            return
-        data = load_data()
-        if not data:
-            await interaction.response.send_message("📊 لا توجد بيانات كافية حتى الآن.", ephemeral=True)
-            return
-        sorted_users = []
-        for user_id, info in data.items():
-            pts = info["points"] if isinstance(info, dict) else info
-            sorted_users.append((int(user_id), pts))
-        sorted_users.sort(key=lambda x: x[1], reverse=True)
-
-        embed = discord.Embed(title="🏆 | لوحة الشرف وصدارة المطانيخ", color=discord.Color.from_rgb(241, 196, 15))
-        description = ""
-        for index, (uid, pts) in enumerate(sorted_users[:10], start=1):
-            medal = "🥇" if index == 1 else "🥈" if index == 2 else "🥉" if index == 3 else f"`#{index}`"
-            description += f"{medal} <@{uid}> — **{pts}** نقطة\n"
-        embed.description = description
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.command(name="لوحة", aliases=["dashboard", "owner_panel"])
-async def owner_dashboard(ctx):
-    if not is_admin_or_owner(ctx):
-        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للحاكم ريان والأدمن فقط!", delete_after=5)
-        return
+# ----------------------------------------------------
+# 📊 دالة تحليل أداء الفرق وإصدار التقرير الشامل
+# ----------------------------------------------------
+async def calculate_teams_performance(guild: discord.Guild):
+    data = load_data()
     
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+    team_1_role = guild.get_role(TEAM_1_ROLE_ID)
+    team_2_role = guild.get_role(TEAM_2_ROLE_ID)
+    
+    # إحصائيات التيم الأول
+    t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
+    t1_points = 0
+    t1_promotions = 0
+    t1_tickets = 0
+    t1_identities = 0
+    
+    for m in t1_members:
+        u_info = data.get(str(m.id), {})
+        if isinstance(u_info, dict):
+            t1_points += u_info.get("points", 0)
+            t1_promotions += u_info.get("total_promotions", 0)
+            t1_tickets += u_info.get("tickets", 0)
+            t1_identities += u_info.get("identities", 0)
+        elif isinstance(u_info, int):
+            t1_points += u_info
+
+    # إحصائيات التيم الثاني
+    t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
+    t2_points = 0
+    t2_promotions = 0
+    t2_tickets = 0
+    t2_identities = 0
+    
+    for m in t2_members:
+        u_info = data.get(str(m.id), {})
+        if isinstance(u_info, dict):
+            t2_points += u_info.get("points", 0)
+            t2_promotions += u_info.get("total_promotions", 0)
+            t2_tickets += u_info.get("tickets", 0)
+            t2_identities += u_info.get("identities", 0)
+        elif isinstance(u_info, int):
+            t2_points += u_info
+
+    # تحديد التيم الأفضل بناءً على إجمالي النقاط
+    if t1_points > t2_points:
+        best_team = f"🏆 التيم الأول ({team_1_role.name if team_1_role else 'فريق 1'})"
+    elif t2_points > t1_points:
+        best_team = f"🏆 التيم الثاني ({team_2_role.name if team_2_role else 'فريق 2'})"
+    else:
+        best_team = "🤝 تعادل تام بين الفريقين!"
 
     embed = discord.Embed(
-        title="🎛️ | لوحة تحكم الحاكم ريان الخاصة (Dashboard)",
-        description="أهلاً بك يا الحاكم ريان في لوحتك الخاصة المخصصة لإدارة العمليات والأنظمة والنقاط بضغطة زر وبدون تعقيد.",
-        color=discord.Color.from_rgb(155, 89, 182)
+        title="⚔️ | تقرير أداء الفرق والمقارنة السيادية",
+        description=f"إليك تفاصيل أداء ومقارنة الفريقين داخل سيرفر منتدى النظيم:\n\n{best_team}",
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
     )
-    embed.set_thumbnail(url=ctx.author.display_avatar.url)
-    embed.set_footer(text="منتدى النظيم | لوحة التحكم السيادية للحاكم ريان")
     
-    view = OwnerDashboardView()
-    await ctx.send(embed=embed, view=view)
+    embed.add_field(
+        name=f"🛡️ التيم الأول: {team_1_role.name if team_1_role else 'غير موجودة'}",
+        value=(
+            f"👥 **عدد الأعضاء:** `{len(t1_members)}` عضواً\n"
+            f"💳 **مجموع النقاط:** `{t1_points}` نقطة\n"
+            f"👑 **إجمالي الترقيات:** `{t1_promotions}` مرة\n"
+            f"🎫 **التكتات المنجزة:** `{t1_tickets}`\n"
+            f"🪪 **الهويات المفعلة:** `{t1_identities}`"
+        ),
+        inline=False
+    )
+    
+    embed.add_field(
+        name=f"🛡️ التيم الثاني: {team_2_role.name if team_2_role else 'غير موجودة'}",
+        value=(
+            f"👥 **عدد الأعضاء:** `{len(t2_members)}` عضواً\n"
+            f"💳 **مجموع النقاط:** `{t2_points}` نقطة\n"
+            f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
+            f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
+            f"🪪 **الهويات المفعلة:** `{t2_identities}`"
+        ),
+        inline=False
+    )
+    
+    embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الموحد")
+    return embed
 
 @bot.event
 async def on_message(message):
@@ -925,7 +919,7 @@ async def delete_channel_cmd(ctx):
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
 # ----------------------------------------------------
-# ⏰ مهمة خلفية تلقائية لفحص انتهاء الحرمان وإعادة الرتب
+# ⏰ مهمة خلفية لفحص انتهاء الحرمان
 # ----------------------------------------------------
 @tasks.loop(minutes=1)
 async def check_expired_bans():
@@ -974,14 +968,9 @@ async def check_expired_bans():
     if updated:
         save_bans(bans_data)
 
-# ----------------------------------------------------
-# 2. أوامر السلاش العربية المضافة (Slash Commands)
-# ----------------------------------------------------
-
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
-    bot.add_view(OwnerDashboardView())
     if not check_expired_bans.is_running():
         check_expired_bans.start()
         
@@ -994,6 +983,16 @@ async def on_ready():
     except Exception as e:
         print(f"❌ خطأ في مزامنة أوامر السلاش: {e}")
     print(f"🚀 [بوت منتدى النظيم شغّال بنجاح تام] باسم: {bot.user}")
+
+# ----------------------------------------------------
+# أوامر السلاش العربية (Slash Commands)
+# ----------------------------------------------------
+
+@bot.tree.command(name="أداء", description="عرض تقارير أداء ومقارنة الفرق ونقاطهم وعدد ترقياتهم")
+async def performance_slash(interaction: discord.Interaction):
+    await interaction.response.defer()
+    embed = await calculate_teams_performance(interaction.guild)
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="تحذير", description="تطبيق تحذير إداري رسمي على عضو")
 @app_commands.describe(member="العضو المخالف", duration="المدة (مثال: 3 ايام)", reason="سبب التحذير", proof="رابط الدليل (اختياري)")
@@ -1024,7 +1023,7 @@ async def warn_slash(interaction: discord.Interaction, member: discord.Member, d
     data = load_data()
     uid = str(interaction.user.id)
     if uid not in data or not isinstance(data[uid], dict):
-        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
     data[uid]["warns"] += 1
     save_data(data, guild)
 
@@ -1046,7 +1045,7 @@ async def timeout_slash(interaction: discord.Interaction, member: discord.Member
         data = load_data()
         uid = str(interaction.user.id)
         if uid not in data or not isinstance(data[uid], dict):
-            data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         data[uid]["timeouts"] += 1
         save_data(data, guild)
 
@@ -1093,7 +1092,7 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
         data = load_data()
         uid = str(interaction.user.id)
         if uid not in data or not isinstance(data[uid], dict):
-            data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+            data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         data[uid]["bans"] += 1
         save_data(data, guild)
 
@@ -1115,7 +1114,7 @@ async def addpoints_slash(interaction: discord.Interaction, member: discord.Memb
     data = load_data()
     uid = str(member.id)
     if uid not in data or not isinstance(data[uid], dict):
-        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
     data[uid]["points"] += amount
     save_data(data, interaction.guild)
     await interaction.response.send_message(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention} بنجاح!")
@@ -1141,7 +1140,7 @@ async def resetpoints_slash(interaction: discord.Interaction, member: discord.Me
     data = load_data()
     uid = str(member.id)
     if uid in data:
-        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         save_data(data, interaction.guild)
         await interaction.response.send_message(f"🔄 تم تصفير نقاط {member.mention} بالكامل بنجاح!")
 
@@ -1169,25 +1168,14 @@ async def points_slash(interaction: discord.Interaction, member: discord.Member 
     embed.set_footer(text="منتدى النظيم | قسم الرقابة الإدارية")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="تعديل_إمبايد", description="تعديل محتوى إمبايد أرسله البوت سابقاً")
-@app_commands.describe(channel_id="ID الروم", message_id="ID الرسالة", title="العنوان الجديد", description="الوصف الجديد")
-async def editembed_slash(interaction: discord.Interaction, channel_id: str, message_id: str, title: str, description: str):
-    if not is_admin_or_owner(interaction):
-        return await interaction.response.send_message("❌ ليس لديك صلاحية!", ephemeral=True)
-    try:
-        channel = bot.get_channel(int(channel_id)) or await bot.fetch_channel(int(channel_id))
-        msg = await channel.fetch_message(int(message_id))
-        embed = msg.embeds[0] if msg.embeds else discord.Embed()
-        embed.title = title
-        embed.description = description
-        await msg.edit(embed=embed)
-        await interaction.response.send_message("✅ تم تعديل الإمبايد المدمج بنجاح!", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
+# ----------------------------------------------------
+# الأوامر النصية العادية بالبادئة (.)
+# ----------------------------------------------------
 
-# ----------------------------------------------------
-# 3. الأوامر النصية العادية بالبادئة (.) مع البروفايل والنقاط المطورة
-# ----------------------------------------------------
+@bot.command(name="أداء", aliases=["performance", "teams"])
+async def performance_cmd(ctx):
+    embed = await calculate_teams_performance(ctx.guild)
+    await ctx.send(embed=embed)
 
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
 async def help_command(ctx):
@@ -1198,26 +1186,12 @@ async def help_command(ctx):
         timestamp=discord.utils.utcnow()
     )
     embed.add_field(
-        name="📊 ┋ أوامر النقاط والبروفايلات",
-        value="▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`\n▫️ `.تعديل_امبايد`",
+        name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
+        value="▫️ `.أداء` (لعرض مقارنة وإحصائيات الفريقين)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
     await ctx.send(embed=embed)
-
-@bot.command(name="تعديل_امبايد", aliases=["editembed"])
-async def edit_embed_cmd(ctx, channel_id: int, message_id: int, new_title: str, *, new_desc: str):
-    if not is_admin_or_owner(ctx): return
-    try:
-        channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
-        msg = await channel.fetch_message(message_id)
-        embed = msg.embeds[0] if msg.embeds else discord.Embed()
-        embed.title = new_title
-        embed.description = new_desc
-        await msg.edit(embed=embed)
-        await ctx.send("✅ تم تعديل الإمبايد بنجاح!", delete_after=5)
-    except Exception as e:
-        await ctx.send(f"❌ تعذر تعديل الإمبايد: {e}")
 
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
@@ -1256,9 +1230,9 @@ async def close(ctx):
 async def profile(ctx, member: discord.Member = None):
     target = member or ctx.author
     data = load_data()
-    user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0})
+    user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0})
     if isinstance(user_info, int):
-        user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
     
     pts = user_info.get('points', 0)
     req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
@@ -1275,9 +1249,9 @@ async def profile(ctx, member: discord.Member = None):
     embed.add_field(name="📈 نسبة التقدم", value=f"`{percent}%`\n{bar}", inline=False)
     embed.add_field(name="🎯 المتبقي للترقية", value=f"باقي لك **{rem_pts}** نقطة وتوصل رتبتك التالية يا وحش!", inline=False)
     
+    embed.add_field(name="👑 عدد الترقيات", value=f"`{user_info.get('total_promotions', 0)}` مرة", inline=True)
     embed.add_field(name="🎫 التكتات", value=f"`{user_info.get('tickets', 0)}`", inline=True)
     embed.add_field(name="🪪 الهويات", value=f"`{user_info.get('identities', 0)}`", inline=True)
-    embed.add_field(name="⚠️ التحذيرات", value=f"`{user_info.get('warns', 0)}`", inline=True)
     
     embed.set_footer(text="منتدى النظيم | نظام الأداء الإداري الموحد", icon_url=ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None)
     await ctx.send(embed=embed)
@@ -1315,7 +1289,7 @@ async def addpoints(ctx, member: discord.Member, amount: int):
 
     data = load_data()
     uid = str(member.id)
-    if uid not in data or not isinstance(data[uid], dict): data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+    if uid not in data or not isinstance(data[uid], dict): data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
     data[uid]["points"] += amount
     save_data(data, ctx.guild)
     await ctx.send(f"✨ تم إضافة `{amount}` نقطة لـ {member.mention}.")
@@ -1337,7 +1311,7 @@ async def resetpoints(ctx, member: discord.Member):
     data = load_data()
     uid = str(member.id)
     if uid in data:
-        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0}
+        data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         save_data(data, ctx.guild)
         await ctx.send(f"🔄 تم تصفير نقاط {member.mention}.")
 
