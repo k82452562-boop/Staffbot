@@ -31,7 +31,7 @@ TEAM_2_ROLE_ID = 1562958139530154034
 
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   
-TICKET_LOG_CHANNEL_ID = 1543094678038257784  
+TICKET_LOG_CHANNEL_ID = 1559469613509640233  # روم لوق التكتات الجديد المخصص للمستلم
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
 APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
@@ -52,12 +52,13 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
+# 🪙 النقاط
 POINTS_CONFIG = {
-    "ticket": 10,
-    "warn": 10,
-    "timeout": 10,
-    "ban": 20,          
-    "apply_accept": 10 
+    "ticket": 1,
+    "warn": 1,
+    "timeout": 1,
+    "ban": 2,          
+    "apply_accept": 1 
 }
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
@@ -281,7 +282,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
                 break
 
         is_middle = (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles))
-        required_points = 500 if is_middle else 400
+        required_points = 70 if is_middle else 40
     
     remaining = max(0, required_points - current_pts)
     progress_percent = min(100, int((current_pts / required_points) * 100)) if required_points > 0 else 100
@@ -298,7 +299,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     
     target_role_id = None
     role_category_name = ""
-    required_points = 400
+    required_points = 40
 
     is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
 
@@ -323,7 +324,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 middle_index = idx
                 break
 
-        required_points = 500 if (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)) else 400
+        required_points = 70 if (middle_index != -1 or any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles)) else 40
         if current_pts < required_points:
             return
 
@@ -356,7 +357,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 target_role_id = JUNIOR_ROLES[0]
                 role_category_name = "الإدارة الصغرى"
 
-        elif current_pts >= 400:
+        elif current_pts >= 40:
             target_role_id = JUNIOR_ROLES[0]
             role_category_name = "الإدارة الصغرى"
 
@@ -430,7 +431,7 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
 # النماذج والأزرار
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
-    amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 50", required=True)
+    amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         if not can_manage_points(interaction):
@@ -465,7 +466,7 @@ class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإد
 
 class RemovePointsModal(discord.ui.Modal, title="📉 | خصم نقاط من الإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
-    amount_input = discord.ui.TextInput(label="عدد النقاط المراد خصمها", placeholder="مثال: 20", required=True)
+    amount_input = discord.ui.TextInput(label="عدد النقاط المراد خصمها", placeholder="مثال: 5", required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         if not can_manage_points(interaction):
@@ -515,29 +516,8 @@ class ResetPointsModal(discord.ui.Modal, title="🔄 | تصفير نقاط إد�
         else:
             await interaction.response.send_message("❌ العضو ليس لديه سجل نقاط.", ephemeral=True)
 
-async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove: discord.Role, duration_seconds: int):
-    await asyncio.sleep(duration_seconds)
-    member = guild.get_member(member_id)
-    if not member:
-        return
-    
-    r_warn2 = guild.get_role(WARN_2_ID)
-    r_warn3 = guild.get_role(WARN_3_ID)
-
-    if role_to_remove.id == WARN_1_ID and (r_warn2 in member.roles or r_warn3 in member.roles):
-        return
-    if role_to_remove.id == WARN_2_ID and r_warn3 in member.roles:
-        return
-
-    try:
-        if role_to_remove in member.roles:
-            await member.remove_roles(role_to_remove, reason="انتهت مدة التحذير المحددة")
-            await send_unified_log(guild, "🟢 | انتهاء مدة التحذير", f"تم بحمد الله إزالة `{role_to_remove.name}` تلقائياً عن العضو {member.mention} لانقضاء المدة.", discord.Color.from_rgb(46, 204, 113))
-    except Exception as e:
-        print(f"خطأ في إزالة التحذير التلقائي: {e}")
-
 # ----------------------------------------------------
-# 📊 دالة تحليل أداء الفرق وإصدار التقرير الشامل
+# 📊 دالة تحليل أداء الفرق
 # ----------------------------------------------------
 async def calculate_teams_performance(guild: discord.Guild):
     data = load_data()
@@ -545,7 +525,6 @@ async def calculate_teams_performance(guild: discord.Guild):
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
     
-    # إحصائيات التيم الأول
     t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
     t1_points = 0
     t1_promotions = 0
@@ -562,7 +541,6 @@ async def calculate_teams_performance(guild: discord.Guild):
         elif isinstance(u_info, int):
             t1_points += u_info
 
-    # إحصائيات التيم الثاني
     t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
     t2_points = 0
     t2_promotions = 0
@@ -579,13 +557,12 @@ async def calculate_teams_performance(guild: discord.Guild):
         elif isinstance(u_info, int):
             t2_points += u_info
 
-    # تحديد التيم الأفضل بناءً على إجمالي النقاط
     if t1_points > t2_points:
-        best_team = f"🏆 التيم الأول ({team_1_role.name if team_1_role else 'فريق 1'})"
+        best_team = f"🏆 التيم الأول ({team_1_role.name if team_1_role else 'فريق 1'}) متصدر!"
     elif t2_points > t1_points:
-        best_team = f"🏆 التيم الثاني ({team_2_role.name if team_2_role else 'فريق 2'})"
+        best_team = f"🏆 التيم الثاني ({team_2_role.name if team_2_role else 'فريق 2'}) متصدر!"
     else:
-        best_team = "🤝 تعادل تام بين الفريقين!"
+        best_team = "🤝 تعادل تام بين الفريقين في النقاط!"
 
     embed = discord.Embed(
         title="⚔️ | تقرير أداء الفرق والمقارنة السيادية",
@@ -613,7 +590,7 @@ async def calculate_teams_performance(guild: discord.Guild):
             f"💳 **مجموع النقاط:** `{t2_points}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
-            f"🪪 **الهويات المفعلة:** `{t2_identities}`"
+            f"🪪 **الهويات المفعلة:** `{t1_identities}`"
         ),
         inline=False
     )
@@ -652,41 +629,46 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    if message.channel.id == TICKET_LOG_CHANNEL_ID and message.author.bot:
-        is_claim_embed = False
-        full_text = message.content or ""
+    # مراقبة روم لوق التكتات الجديد والاستخراج الدقيق للمستلم فقط
+    if message.channel.id == TICKET_LOG_CHANNEL_ID:
+        staff_member = None
+        full_text = ""
 
         for embed in message.embeds:
             title_text = embed.title or ""
             desc_text = embed.description or ""
-            if "إشعار استلام" in title_text or "استلام تذكرة جديد" in title_text or "إشعار استلام" in desc_text:
-                is_claim_embed = True
             full_text += f"\n{title_text}\n{desc_text}"
+            
             for field in embed.fields:
-                full_text += f"\n{field.name}: {field.value}"
+                field_name = field.name or ""
+                field_val = field.value or ""
+                full_text += f"\n{field_name}: {field_val}"
 
-        if not is_claim_embed:
-            return
+                # البحث بدقة في خانة المستلم وتجاهل صاحب التذكرة
+                if "المستلم" in field_name:
+                    user_ids = re.findall(r'(\d{17,19})', field_val)
+                    if user_ids:
+                        possible_staff = message.guild.get_member(int(user_ids[0]))
+                        if possible_staff and not possible_staff.bot:
+                            staff_member = possible_staff
 
-        staff_member = None
-        user_ids = re.findall(r'<@!?(\d+)>', full_text)
-        if user_ids:
-            staff_member = message.guild.get_member(int(user_ids[0]))
-
-        if not staff_member:
-            all_numbers = re.findall(r'(\d{17,19})', full_text)
-            for num in all_numbers:
-                possible_member = message.guild.get_member(int(num))
-                if possible_member and not possible_member.bot:
-                    staff_member = possible_member
-                    break
+        # لو ما لقى بالـ fields يبحث بالنص العادي مع التركيز على كلمة المستلم
+        if not staff_member and "المستلم" in full_text:
+            parts = full_text.split("المستلم")
+            if len(parts) > 1:
+                target_section = parts[1][:150] # أول 150 حرف بعد كلمة المستلم
+                user_ids = re.findall(r'(\d{17,19})', target_section)
+                if user_ids:
+                    possible_staff = message.guild.get_member(int(user_ids[0]))
+                    if possible_staff and not possible_staff.bot:
+                        staff_member = possible_staff
 
         if staff_member:
             await add_points_direct(
                 message.guild, 
                 staff_member, 
                 POINTS_CONFIG["ticket"], 
-                "استلام تذكرة (إشعار الاستلام)", 
+                "إغلاق تذكرة (تسجيل نقاط المستلم)", 
                 target_type="ticket"
             )
 
@@ -894,7 +876,7 @@ async def penalties_cmd(ctx):
             "🔹 **الأوامر المتاحة الآن:**\n"
             "👉 `/تحذير` - لتطبيق تحذير إداري وتوثيقه تلقائياً.\n"
             "👉 `/تايم_أوت` - لكتم العضو بالمدة المطلوبة.\n"
-            "👉 `/حرمان` - لتطبيق رتبة الحرمان وسحب الرتب.\n\n"
+            "👉 `/حرمان` - لتطبيق رتبة الحرمان وسحب الرتبة.\n\n"
             "فقط اكتب علامة `/` في الشات واختر الأمر المناسب يا وحش! 🚀"
         ),
         color=discord.Color.from_rgb(241, 196, 15)
@@ -918,9 +900,6 @@ async def delete_channel_cmd(ctx):
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
-# ----------------------------------------------------
-# ⏰ مهمة خلفية لفحص انتهاء الحرمان
-# ----------------------------------------------------
 @tasks.loop(minutes=1)
 async def check_expired_bans():
     bans_data = load_bans()
