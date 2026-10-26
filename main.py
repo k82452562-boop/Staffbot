@@ -16,7 +16,6 @@ PREFIX = "."
 
 BOT_OWNER_ID = 917414299184533515
 
-# الرتبة القيادية المصرح لها بالتحكم الكامل في النقاط
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
 
 ALLOWED_ROLE_IDS = [
@@ -25,13 +24,12 @@ ALLOWED_ROLE_IDS = [
     1540838084151877714   
 ]
 
-# معرفات الفرق (Teams Roles IDs)
 TEAM_1_ROLE_ID = 1562958541856182312
 TEAM_2_ROLE_ID = 1562958139530154034
 
 LOG_CHANNEL_ID = 1553913719128588389
 NOTIFICATION_CHANNEL_ID = 1541179719297278072   
-TICKET_LOG_CHANNEL_ID = 1559469613509640233  # روم لوق التكتات الجديد المخصص للمستلم
+TICKET_LOG_CHANNEL_ID = 1559469613509640233  
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
 APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
@@ -52,7 +50,6 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
-# 🪙 النقاط
 POINTS_CONFIG = {
     "ticket": 1,
     "warn": 1,
@@ -105,6 +102,7 @@ COOLDOWN_FILE = "cooldowns.json"
 BANS_FILE = "active_bans.json"
 
 double_points_end_time = 0
+processed_tickets = set()  # لمنع تكرار حساب نفس التكت مرتين
 
 def is_admin_or_owner(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
@@ -428,7 +426,6 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
     
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
@@ -590,7 +587,7 @@ async def calculate_teams_performance(guild: discord.Guild):
             f"💳 **مجموع النقاط:** `{t2_points}` نقطة\n"
             f"👑 **إجمالي الترقيات:** `{t2_promotions}` مرة\n"
             f"🎫 **التكتات المنجزة:** `{t2_tickets}`\n"
-            f"🪪 **الهويات المفعلة:** `{t1_identities}`"
+            f"🪪 **الهويات المفعلة:** `{t2_identities}`"
         ),
         inline=False
     )
@@ -629,8 +626,11 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # مراقبة روم لوق التكتات الجديد والاستخراج الدقيق للمستلم فقط
+    # مراقبة روم لوق التكتات ومنع التكرار نهائياً عبر معرف الرسالة
     if message.channel.id == TICKET_LOG_CHANNEL_ID:
+        if message.id in processed_tickets:
+            return  # تم معالجة هذه الرسالة مسبقاً، تجاهل التكرار فوراً!
+
         staff_member = None
         full_text = ""
 
@@ -644,7 +644,6 @@ async def on_message(message):
                 field_val = field.value or ""
                 full_text += f"\n{field_name}: {field_val}"
 
-                # البحث بدقة في خانة المستلم وتجاهل صاحب التذكرة
                 if "المستلم" in field_name:
                     user_ids = re.findall(r'(\d{17,19})', field_val)
                     if user_ids:
@@ -652,11 +651,10 @@ async def on_message(message):
                         if possible_staff and not possible_staff.bot:
                             staff_member = possible_staff
 
-        # لو ما لقى بالـ fields يبحث بالنص العادي مع التركيز على كلمة المستلم
         if not staff_member and "المستلم" in full_text:
             parts = full_text.split("المستلم")
             if len(parts) > 1:
-                target_section = parts[1][:150] # أول 150 حرف بعد كلمة المستلم
+                target_section = parts[1][:150]
                 user_ids = re.findall(r'(\d{17,19})', target_section)
                 if user_ids:
                     possible_staff = message.guild.get_member(int(user_ids[0]))
@@ -664,6 +662,11 @@ async def on_message(message):
                         staff_member = possible_staff
 
         if staff_member:
+            processed_tickets.add(message.id)  # تسجيل المعرف لمنع تكراره
+            # تنظيف الذاكرة لو زادت المعرفات عن 1000 رسالة
+            if len(processed_tickets) > 1000:
+                processed_tickets.pop()
+
             await add_points_direct(
                 message.guild, 
                 staff_member, 
