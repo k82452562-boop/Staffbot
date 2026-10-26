@@ -15,8 +15,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = "."
 
 BOT_OWNER_ID = 917414299184533515
-
-# الرتبة القيادية المصرح لها بالتحكم الكامل في النقاط
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
 
 ALLOWED_ROLE_IDS = [
@@ -48,7 +46,6 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
-# نقاط الإنجازات المباشرة (بدون أصفار)
 POINTS_CONFIG = {
     "ticket": 1,
     "warn": 1,
@@ -91,6 +88,7 @@ intents.guilds = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
 DATA_FILE = "points.json"
 COOLDOWN_FILE = "cooldowns.json"
+PROCESSED_FILE = "processed_tickets.json"
 
 double_points_end_time = 0
 
@@ -232,6 +230,12 @@ def load_cooldowns():
 def save_cooldowns(data):
     save_json(COOLDOWN_FILE, data)
 
+def load_processed():
+    return load_json(PROCESSED_FILE)
+
+def save_processed(data):
+    save_json(PROCESSED_FILE, data)
+
 async def send_unified_log(guild, title, description, color=discord.Color.from_rgb(30, 144, 255), fields=None):
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
     if log_channel:
@@ -248,8 +252,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     target_role_id = None
     role_category_name = ""
 
-    has_special_role = any(r.id == SPECIAL_PROMOTION_ROLE_ID for r in member.roles)
-    
     middle_index = -1
     for idx, r_id in enumerate(MIDDLE_ROLES):
         if any(r.id == r_id for r in member.roles):
@@ -592,13 +594,25 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # 🎯 قراءة لوق التكتات الجديد بدقة تامة لاستخراج (المستلم) فقط وإعطائه النقطة
-    if message.channel.id == TICKET_LOG_CHANNEL_ID:
+    # 🎯 قراءة لوق التكتات بدقة تامة مع منع التكرار السحابي والمحلي
+    if message.channel.id == TICKET_LOG_CHANNEL_ID and not message.author.bot:
+        processed_data = load_processed()
+        msg_id_str = str(message.id)
+        
+        if processed_data.get(msg_id_str, False):
+            return
+            
+        processed_data[msg_id_str] = True
+        if len(processed_data) > 500:
+            old_keys = list(processed_data.keys())[:100]
+            for k in old_keys:
+                del processed_data[k]
+        save_processed(processed_data)
+
         staff_member = None
         
         for embed in message.embeds:
             for field in embed.fields:
-                # نبحث في الحقل الخاص بـ "المستلم" حصرياً
                 if "المستلم" in field.name:
                     field_text = field.value
                     user_ids = re.findall(r'<@!?(\d+)>', field_text)
@@ -613,14 +627,12 @@ async def on_message(message):
             if staff_member:
                 break
 
-        # حل إضافي احتياطي لو كان الإمبايد مصمم بطريقة أخرى
         if not staff_member:
             for embed in message.embeds:
                 desc = embed.description or ""
-                # البحث عن قسم المستلم في الوصف
                 if "المستلم" in desc:
                     user_ids = re.findall(r'<@!?(\d+)>', desc)
-                    if len(user_ids) >= 2: # الأول صاحب التكت وغالباً الثاني هو المستلم
+                    if len(user_ids) >= 2:
                         possible_staff = message.guild.get_member(int(user_ids[1]))
                         if possible_staff and not possible_staff.bot:
                             staff_member = possible_staff
