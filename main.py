@@ -91,6 +91,7 @@ COOLDOWN_FILE = "cooldowns.json"
 PROCESSED_FILE = "processed_tickets.json"
 
 double_points_end_time = 0
+last_ticket_processed_time = 0  # قفل زمني إضافي يمنع التكرار الفوري
 
 def is_admin_or_owner(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
@@ -141,16 +142,10 @@ def parse_duration_to_seconds(duration_str: str) -> int:
 async def check_permissions(ctx):
     if is_admin_or_owner(ctx):
         return True
-    
     has_role = any(role.id in ALLOWED_ROLE_IDS for role in getattr(ctx.author, 'roles', []))
     if has_role:
         return True
-
-    embed = discord.Embed(
-        title="⚠️ | وين رايح يا الذيب؟ الصلاحيات ما تكفي",
-        description="هالأوامر والأنظمة مخصصة للطاقم الإداري المصرح له فقط.",
-        color=discord.Color.from_rgb(200, 30, 30)
-    )
+    embed = discord.Embed(title="⚠️ | وين رايح يا الذيب؟ الصلاحيات ما تكفي", description="هالأوامر والأنظمة مخصصة للطاقم الإداري المصرح له فقط.", color=discord.Color.from_rgb(200, 30, 30))
     await ctx.send(embed=embed, delete_after=5)
     return False
 
@@ -248,7 +243,6 @@ async def send_unified_log(guild, title, description, color=discord.Color.from_r
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
-    
     target_role_id = None
     role_category_name = ""
 
@@ -282,7 +276,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
         elif middle_index == -1 and has_middle_base:
             target_role_id = MIDDLE_ROLES[1] if len(MIDDLE_ROLES) > 1 else MIDDLE_ROLES[0]
             role_category_name = "الإدارة الوسطى / العليا"
-
     elif junior_index != -1 or has_junior_base:
         if junior_index != -1:
             if junior_index < len(JUNIOR_ROLES) - 1:
@@ -294,7 +287,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
         elif has_junior_base:
             target_role_id = JUNIOR_ROLES[0]
             role_category_name = "الإدارة الصغرى"
-
     elif current_pts >= 40:
         target_role_id = JUNIOR_ROLES[0]
         role_category_name = "الإدارة الصغرى"
@@ -308,8 +300,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                     if guild.get_role(rid) and guild.get_role(rid) in member.roles and rid != target_role_id and rid != SPECIAL_PROMOTION_ROLE_ID
                 ]
                 if roles_to_remove:
-                    await member.remove_roles(*roles_to_remove, reason="ترقية مستحقة: سحب الرتب القديمة")
-                
+                    await member.remove_roles(*roles_to_remove, reason="ترقية مستحقة")
                 await member.add_roles(target_role, reason="ترقية إدارية جديدة")
                 
                 data = load_data()
@@ -321,8 +312,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 role_ping_str = notif_role.mention if notif_role else ""
                 msg = (
                     f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية نارية وتصفير نقاط:**\n"
-                    f"ما شاء الله، المطنوخ {member.mention} تقفّل عنده `{required_points}` نقطة وتمت ترقيته رسمياً إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
-                    f"🔄 **ملاحظة:** تم سحب الرتبة القديمة وتصفير النقاط لانطلاق تحدٍ جديد."
+                    f"ما شاء الله، المطنوخ {member.mention} تقفّل عنده `{required_points}` نقطة وتمت ترقيته رسمياً إلى `{target_role.name}` ضمن **{role_category_name}**!"
                 )
                 log_channel = guild.get_channel(LOG_CHANNEL_ID)
                 if log_channel:
@@ -332,7 +322,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
     global double_points_end_time
-    
     is_double_active = time.time() < double_points_end_time
     actual_points = (base_points * 2) if is_double_active else base_points
     
@@ -361,10 +350,9 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
         f"تم إيداع `{actual_points}` نقطة في محفظة المطنوخ {staff.mention}{double_text}\n📌 **السبب:** {action_name}\n📈 **رصيده الإجمالي الآن:** `{current_pts}` نقطة",
         discord.Color.from_rgb(46, 204, 113) if not is_double_active else discord.Color.from_rgb(241, 196, 15)
     )
-    
     await check_and_promote(guild, staff, current_pts)
 
-# النماذج والأزرار
+# النماذج والأزرار والداشبورد الكاملة
 class AddPointsModal(discord.ui.Modal, title="✨ | إضافة نقاط للإداري"):
     user_input = discord.ui.TextInput(label="اسم العضو أو اليوزر نيم", placeholder="اكتب اسم العضو هنا...", required=True)
     amount_input = discord.ui.TextInput(label="عدد النقاط", placeholder="مثال: 5", required=True)
@@ -447,27 +435,6 @@ class ResetPointsModal(discord.ui.Modal, title="🔄 | تصفير نقاط إد�
         else:
             await interaction.response.send_message("❌ العضو ليس لديه سجل نقاط.", ephemeral=True)
 
-async def auto_remove_warn(guild: discord.Guild, member_id: int, role_to_remove: discord.Role, duration_seconds: int):
-    await asyncio.sleep(duration_seconds)
-    member = guild.get_member(member_id)
-    if not member:
-        return
-    
-    r_warn2 = guild.get_role(WARN_2_ID)
-    r_warn3 = guild.get_role(WARN_3_ID)
-
-    if role_to_remove.id == WARN_1_ID and (r_warn2 in member.roles or r_warn3 in member.roles):
-        return
-    if role_to_remove.id == WARN_2_ID and r_warn3 in member.roles:
-        return
-
-    try:
-        if role_to_remove in member.roles:
-            await member.remove_roles(role_to_remove, reason="انتهت مدة التحذير المحددة")
-            await send_unified_log(guild, "🟢 | انتهاء مدة التحذير", f"تم بحمد الله إزالة `{role_to_remove.name}` تلقائياً عن العضو {member.mention} لانقضاء المدة.", discord.Color.from_rgb(46, 204, 113))
-    except Exception as e:
-        print(f"خطأ في إزالة التحذير التلقائي: {e}")
-
 class OwnerDashboardView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -546,12 +513,10 @@ async def owner_dashboard(ctx):
     if not is_admin_or_owner(ctx):
         await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للحاكم ريان والأدمن فقط!", delete_after=5)
         return
-    
     try:
         await ctx.message.delete()
     except:
         pass
-
     embed = discord.Embed(
         title="🎛️ | لوحة تحكم الحاكم ريان الخاصة (Dashboard)",
         description="أهلاً بك يا الحاكم ريان في لوحتك الخاصة المخصصة لإدارة العمليات والأنظمة والنقاط بضغطة زر وبدون تعقيد.",
@@ -559,12 +524,13 @@ async def owner_dashboard(ctx):
     )
     embed.set_thumbnail(url=ctx.author.display_avatar.url)
     embed.set_footer(text="منتدى النظيم | لوحة التحكم السيادية للحاكم ريان")
-    
     view = OwnerDashboardView()
     await ctx.send(embed=embed, view=view)
 
+# 🎯 محرك قراءة التكتات مع قفل زمني ومانع تكرار صارم جداً
 @bot.event
 async def on_message(message):
+    global last_ticket_processed_time
     await bot.process_commands(message)
 
     if message.channel.id == NICKNAME_CHANNEL_ID and not message.author.bot:
@@ -572,16 +538,13 @@ async def on_message(message):
             await message.delete()
         except Exception:
             pass
-
         guild = message.guild
         member = message.author
         raw_name = message.content.strip()
-
         if raw_name:
             new_nickname = f"NZM | {raw_name}"
             if len(new_nickname) > 32:
                 new_nickname = new_nickname[:32]
-
             try:
                 await member.edit(nick=new_nickname, reason="تغيير الاسم تلقائياً")
                 role_to_add = guild.get_role(NICKNAME_ROLE_ID)
@@ -594,14 +557,17 @@ async def on_message(message):
             except Exception as e:
                 print(f"خطأ في تعديل الاسم: {e}")
 
-    # 🎯 قراءة لوق التكتات بدقة تامة مع منع التكرار السحابي والمحلي
     if message.channel.id == TICKET_LOG_CHANNEL_ID and not message.author.bot:
+        current_time = time.time()
+        # قفل زمني صارم: لو مر أقل من 3 ثوانٍ على آخر تكت معالج، تجاهله فوراً لمنع التكرار المزدوج
+        if current_time - last_ticket_processed_time < 3.0:
+            return
+
         processed_data = load_processed()
         msg_id_str = str(message.id)
-        
         if processed_data.get(msg_id_str, False):
             return
-            
+
         processed_data[msg_id_str] = True
         if len(processed_data) > 500:
             old_keys = list(processed_data.keys())[:100]
@@ -609,8 +575,10 @@ async def on_message(message):
                 del processed_data[k]
         save_processed(processed_data)
 
+        # تحديث وقت آخر معالجة
+        last_ticket_processed_time = current_time
+
         staff_member = None
-        
         for embed in message.embeds:
             for field in embed.fields:
                 if "المستلم" in field.name:
@@ -618,7 +586,6 @@ async def on_message(message):
                     user_ids = re.findall(r'<@!?(\d+)>', field_text)
                     if not user_ids:
                         user_ids = re.findall(r'(\d{17,19})', field_text)
-                    
                     if user_ids:
                         possible_staff = message.guild.get_member(int(user_ids[0]))
                         if possible_staff and not possible_staff.bot:
@@ -653,7 +620,6 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
         self.is_completed = False
-        
         for child in self.children:
             child.disabled = True
 
@@ -662,14 +628,11 @@ class ApplyReviewView(discord.ui.View):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
             return
-
         if self.is_completed:
             await interaction.response.send_message("⚠️ سبق أحد الإداريين وحسم الطلب خلاص!", ephemeral=True)
             return
-
         self.is_completed = True
         staff = interaction.user
-
         for child in self.children:
             child.disabled = True
         try:
@@ -679,7 +642,6 @@ class ApplyReviewView(discord.ui.View):
 
         unverified_role = self.guild.get_role(UNVERIFIED_ROLE_ID)
         verified_role = self.guild.get_role(VERIFIED_ROLE_ID)
-
         try:
             if unverified_role and unverified_role in self.applicant.roles:
                 await self.applicant.remove_roles(unverified_role, reason="قبول تقديم الهوية")
@@ -695,7 +657,6 @@ class ApplyReviewView(discord.ui.View):
 
         await add_points_direct(self.guild, staff, POINTS_CONFIG["apply_accept"], f"قبول تقديم هوية العضو ({self.applicant.name})", target_type="identity")
         await interaction.response.send_message(f"✅ **كفو والله! تم قبول التقديم بواسطة المطنوخ {staff.mention} ونزلت النقاط برصيده!**")
-
         try:
             embed = interaction.message.embeds[0]
             embed.set_field_at(0, name="👤 المتقدم", value=f"{self.applicant.mention}\n✅ **تم القبول بواسطة:** {staff.mention}", inline=False)
@@ -708,14 +669,11 @@ class ApplyReviewView(discord.ui.View):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
             return
-
         if self.is_completed:
             await interaction.response.send_message("⚠️ سبق أحد الإداريين وحسم الطلب خلاص!", ephemeral=True)
             return
-
         self.is_completed = True
         staff = interaction.user
-
         for child in self.children:
             child.disabled = True
         try:
@@ -746,7 +704,6 @@ class ApplyButtonView(discord.ui.View):
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
-        
         if user_id in cooldowns:
             elapsed = time.time() - cooldowns[user_id]
             if elapsed < 600:
@@ -758,9 +715,7 @@ class ApplyButtonView(discord.ui.View):
 
         cooldowns[user_id] = time.time()
         save_cooldowns(cooldowns)
-
         await interaction.response.defer(ephemeral=True)
-        
         try:
             await interaction.user.send("✨ **يا هلا بك في نظام التقديم الرسمي!** رد على الأسئلة بالترتيب وناخذك خطوة بخطوة يا الذيب.")
         except discord.Forbidden:
@@ -807,7 +762,6 @@ class ApplyButtonView(discord.ui.View):
 
             admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
             view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
-            
             sent_message = await review_channel.send(content=f"🔔 {admin_role_mention} فيه تقديم هوية جديد جاهز للمراجعة!", embed=embed, view=view)
             
             async def enable_buttons_after_delay(msg, v):
@@ -821,9 +775,7 @@ class ApplyButtonView(discord.ui.View):
                         await msg.edit(embed=emb, view=v)
                     except Exception:
                         pass
-
             bot.loop.create_task(enable_buttons_after_delay(sent_message, view))
-        
         await interaction.user.send("✅ **وصلت إجاباتك للإدارة بنجاح!** أول ما يراجعونها بيجيك العلم.")
 
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
@@ -875,10 +827,6 @@ async def delete_channel_cmd(ctx):
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
-# ----------------------------------------------------
-# 2. أوامر السلاش العربية المضافة (Slash Commands)
-# ----------------------------------------------------
-
 @bot.event
 async def on_ready():
     bot.add_view(ApplyButtonView())
@@ -898,7 +846,6 @@ async def on_ready():
 async def warn_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     r_warn1, r_warn2, r_warn3 = guild.get_role(WARN_1_ID), guild.get_role(WARN_2_ID), guild.get_role(WARN_3_ID)
-
     assigned_warn_name = "تحذير أول"
     try:
         if r_warn2 and r_warn2 in member.roles:
@@ -1043,10 +990,6 @@ async def editembed_slash(interaction: discord.Interaction, channel_id: str, mes
         await interaction.response.send_message("✅ تم تعديل الإمبايد المدمج بنجاح!", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
-
-# ----------------------------------------------------
-# 3. الأوامر النصية العادية بالبادئة (.)
-# ----------------------------------------------------
 
 @bot.command(name="help", aliases=["مساعدة", "الأوامر", "اوامر"])
 async def help_command(ctx):
