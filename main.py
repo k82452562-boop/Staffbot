@@ -60,9 +60,13 @@ POINTS_CONFIG = {
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
 
-# رتب أساسية كبداية (أو يتم الاعتماد على الرتب الموجودة بالسيرفر تلقائياً)
-JUNIOR_BASE_ROLE_ID = 1540839564506300476
-MIDDLE_BASE_ROLE_ID = 1540838084151877714
+# رتب الإدارة الصغرى والوسطى المعروفة (بحيث يسحب القديمة ويرقي للجديدة بأمان تام بدون لمس الحصانة)
+MANAGEMENT_ROLE_KEYWORDS = [
+    "Trainee", "Junior Moderator", "Moderator", "Senior Moderator", "Head Moderator",
+    "Junior Administrator", "Senior Administrator", "Supervisor", "Senior Supervisor",
+    "Manager", "Senior Manager", "Admin Prime", "Access", "Acting Admin", "Administrator",
+    "Operations Manager", "Elite administrator", "Chief Executive"
+]
 
 SENIOR_HIGHER_ROLES = [
     {"role_id": 1545521154842828890, "points": 200, "name": "الرتبة الأولى (إدارة عليا)"},
@@ -260,7 +264,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
         else:
             required_points = SENIOR_HIGHER_ROLES[-1]["points"]
     else:
-        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles) or any("الوسطى" in r.name for r in member.roles)
+        is_middle = any(any(keyword.lower() in r.name.lower() for keyword in ["Supervisor", "Manager", "Chief", "Director"]) for r in member.roles)
         required_points = 70 if is_middle else 40
     
     remaining = max(0, required_points - current_pts)
@@ -273,7 +277,7 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
     return required_points, remaining, progress_percent, bar
 
 # ----------------------------------------------------
-# 🧠 دالة الترقية الذكية التلقائية (تلقط الرتبة التالية من ترتيب السيرفر مباشرة)
+# 🧠 دالة الترقية الذكية الآمنة (لا تسحب إلا رتب الإدارة فقط)
 # ----------------------------------------------------
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
@@ -300,7 +304,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                 target_role = guild.get_role(target_info["role_id"])
                 role_category_name = "الإدارة العليا المتقدمة"
     else:
-        is_middle = any(r.id == MIDDLE_BASE_ROLE_ID for r in member.roles) or any("الوسطى" in r.name for r in member.roles)
+        is_middle = any(any(keyword.lower() in r.name.lower() for keyword in ["Supervisor", "Manager", "Chief", "Director"]) for r in member.roles)
         required_points = 70 if is_middle else 40
         
         if current_pts >= required_points:
@@ -308,7 +312,8 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             current_admin_role = None
             
             for r in member_roles_sorted:
-                if r.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID, UNVERIFIED_ROLE_ID, VERIFIED_ROLE_ID] and not r.is_default():
+                # التحقق الصارم: هل الرتبة تابعة لأسماء الإدارة المعروفة حصرياً؟
+                if any(kw.lower() in r.name.lower() for kw in MANAGEMENT_ROLE_KEYWORDS):
                     current_admin_role = r
                     break
             
@@ -318,25 +323,34 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
                     curr_idx = all_guild_roles_sorted.index(current_admin_role)
                     if curr_idx < len(all_guild_roles_sorted) - 1:
                         next_role = all_guild_roles_sorted[curr_idx + 1]
-                        if next_role.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID]:
+                        # نتأكد أن الرتبة التالية ليست حصانة أو تيم أو رتبة غير إدارية
+                        if next_role.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID] and not any(bad in next_role.name.lower() for bad in ["حصانة", "تقاعد", "حماية"]):
                             target_role = next_role
                             role_category_name = "الإدارة الصغرى / الوسطى"
                 except Exception as e:
                     print(f"خطأ في البحث عن الرتبة التالية: {e}")
             
             if not target_role and not is_middle:
-                target_role = guild.get_role(JUNIOR_BASE_ROLE_ID)
+                # رتبة البداية الافتراضية للإدارة الصغرى (Trainee أو أول رتبة)
+                for r in sorted(guild.roles, key=lambda r: r.position):
+                    if "Trainee" in r.name or "junior" in r.name.lower():
+                        target_role = r
+                        break
+                if not target_role:
+                    target_role = guild.get_role(1540839564506300476)
                 role_category_name = "الإدارة الصغرى"
 
     if target_role and target_role not in member.roles:
         try:
+            # سحب الرتب الإدارية القديمة فقط حصرياً (لن تقرب رتب الحصانة أو الأعضاء أبداً)
             roles_to_remove = [
                 r for r in member.roles 
-                if r.id not in [TEAM_1_ROLE_ID, TEAM_2_ROLE_ID, BAN_ROLE_ID, SPECIAL_PROMOTION_ROLE_ID, UNVERIFIED_ROLE_ID, VERIFIED_ROLE_ID] 
-                and not r.is_default() and r.position < target_role.position
+                if any(kw.lower() in r.name.lower() for kw in MANAGEMENT_ROLE_KEYWORDS)
+                and r.id != target_role.id
+                and r.position < target_role.position
             ]
             if roles_to_remove:
-                await member.remove_roles(*roles_to_remove, reason="ترقية ذكية تلقائية: سحب الرتب القديمة")
+                await member.remove_roles(*roles_to_remove, reason="ترقية ذكية آمنة: سحب الرتب الإدارية القديمة فقط")
             
             await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
             
@@ -349,15 +363,15 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
 
             role_ping_str = notif_role.mention if notif_role else ""
             msg = (
-                f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية ذكية تلقائية وتصفير نقاط:**\n"
+                f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية ذكية وتصفير نقاط:**\n"
                 f"ما شاء الله، المطنوخ {member.mention} وصل `{required_points}` نقطة وتمت ترقيته تلقائياً إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
-                f"🔄 **ملاحظة:** تم سحب الرتبة القديمة وتصفير النقاط لانطلاق تحدٍ جديد."
+                f"🔄 **ملاحظة:** تم سحب رتبتك الإدارية القديمة وتصفير النقاط لانطلاق تحدٍ جديد."
             )
             log_channel = guild.get_channel(LOG_CHANNEL_ID)
             if log_channel:
                 await log_channel.send(msg)
         except Exception as e:
-            print(f"خطأ أثناء الترقية الذكية: {e}")
+            print(f"خطأ أثناء الترقية الآمنة: {e}")
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
     global double_points_end_time
@@ -495,7 +509,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v4")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v5")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
