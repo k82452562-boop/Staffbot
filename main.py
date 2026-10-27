@@ -182,6 +182,24 @@ def load_bans():
 def save_bans(data):
     save_json(BANS_FILE, data)
 
+# 🛡️ دالة تحويل مدة الوقت إلى ثوانٍ (مضافة ومنسقة بدقة)
+def parse_duration_to_seconds(duration_str: str) -> int:
+    duration_str = duration_str.strip().lower()
+    numbers = re.findall(r'\d+', duration_str)
+    if not numbers:
+        return 86400  # افتراضي يوم واحد لو ما كتب رقم
+    
+    val = int(numbers[0])
+    if "دقيقة" in duration_str or "دقائق" in duration_str or "m" in duration_str:
+        return val * 60
+    elif "ساعة" in duration_str or "ساعات" in duration_str or "h" in duration_str:
+        return val * 3600
+    elif "يوم" in duration_str or "ايام" in duration_str or "أيام" in duration_str or "d" in duration_str:
+        return val * 86400
+    elif "شهر" in duration_str or "اشهر" in duration_str:
+        return val * 86400 * 30
+    return val * 86400
+
 async def fetch_points_from_discord():
     try:
         channel = bot.get_channel(BACKUP_CHANNEL_ID)
@@ -318,7 +336,6 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             
             await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
             
-            # تصفير نقاط الشخص فقط، ونقاط التيم لا تتأثر نهائياً
             data = load_data()
             user_id = str(member.id)
             if user_id in data and isinstance(data[user_id], dict):
@@ -362,7 +379,6 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
 
     save_data(data, guild)
 
-    # 🛡️ تراكم نقاط التيم بشكل مستقل وثابت حتى لو حصلت ترقية وتصفرت نقاط الشخص
     guild_id_str = str(guild.id)
     persistent = load_team_persistent()
     if guild_id_str not in persistent:
@@ -399,12 +415,10 @@ async def calculate_teams_performance(guild: discord.Guild):
     t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
     t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
 
-    # جلب النقاط التراكمية المستقلة للتيمات لضمان عدم تأثرها بترقيات الأعضاء أو تصفيرهم
     guild_persistent = persistent.get(guild_id_str, {"t1_total": 0, "t2_total": 0})
     t1_points = guild_persistent.get("t1_total", 0)
     t2_points = guild_persistent.get("t2_total", 0)
 
-    # حساب التكتات والترقيات للإحصائيات
     data = load_data()
     t1_promotions = t1_tickets = t1_identities = 0
     for m in t1_members:
@@ -422,7 +436,6 @@ async def calculate_teams_performance(guild: discord.Guild):
             t2_tickets += u_info.get("tickets", 0)
             t2_identities += u_info.get("identities", 0)
 
-    # إضافة/خصم التعديلات اليدوية الخاصة بالحاكم
     guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
     t1_points += guild_bonus.get("t1_extra", 0)
     t2_points += guild_bonus.get("t2_extra", 0)
@@ -480,7 +493,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🎛️ نافذة الأزرار والتفاعل للتحكم بالتيمات (خاصة بالحاكم ريان حصرياً)
+# 🎛️ إدارة التيمات واللوحة الخاصة بالحاكم
 # ----------------------------------------------------
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
@@ -537,21 +550,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v2")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v3")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v2")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v3")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v2")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v3")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -565,21 +578,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v2")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v3")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v2")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v3")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v2")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v3")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -597,7 +610,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v9")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v10")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -902,15 +915,14 @@ async def panel_apply(ctx):
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
     embed = discord.Embed(
-        title="⚠️ | تنبيه نظام الإدارة",
+        title="⚠️ | تنبيه نظام الإدارة وسهولة العقوبات",
         description=(
             "يا هلا ومرحبابك يا المطنوخ.\n\n"
-            "تم إلغاء الأوامر القديمة للعقوبات، وصار تنفيذ العقوبات **حصرياً عبر أوامر السلاش (Slash Commands)** لتكون أسرع وأسهل!\n\n"
-            "🔹 **الأوامر المتاحة الآن:**\n"
-            "👉 `/تحذير` - لتطبيق تحذير إداري وتوثيقه تلقائياً.\n"
-            "👉 `/تايم_أوت` - لكتم العضو بالمدة المطلوبة.\n"
-            "👉 `/حرمان` - لتطبيق رتبة الحرمان وسحب الرتبة.\n\n"
-            "فقط اكتب علامة `/` في الشات واختر الأمر المناسب يا وحش! 🚀"
+            "جميع أوامر العقوبات صارت مبسطة وسريعة **عبر أوامر السلاش (Slash Commands)** لتكون واضحة وفورية:\n\n"
+            "🔹 **1. `/تحذير`** - لتسجيل تحذير رسمي على العضو.\n"
+            "🔹 **2. `/تايم_أوت`** - لكتم العضو بالدقائق المحددة.\n"
+            "🔹 **3. `/حرمان`** - لحرمان العضو مؤقتاً من رتبه مع حفظها وإرجاعها تلقائياً.\n\n"
+            "فقط اكتب `/` في الشات واختر الأمر بكل سهولة يا وحش! 🚀"
         ),
         color=discord.Color.from_rgb(241, 196, 15)
     )
@@ -999,7 +1011,7 @@ async def on_ready():
     print(f"🚀 [بوت منتدى النظيم شغّال بنجاح تام] باسم: {bot.user}")
 
 # ----------------------------------------------------
-# أوامر السلاش والعادية
+# 🛡️ أوامر العقوبات والسلاش المبسطة والواضحة
 # ----------------------------------------------------
 
 @bot.tree.command(name="أداء", description="عرض تقارير أداء ومقارنة الفرق ونقاطهم وعدد ترقياتهم")
@@ -1039,8 +1051,8 @@ async def teams_panel_cmd(ctx):
     embed.set_footer(text="لوحة تحكم الحاكم الخاصة | منتدى النظيم")
     await ctx.send(embed=embed, view=TeamsControlView())
 
-@bot.tree.command(name="تحذير", description="تطبيق تحذير إداري رسمي على عضو")
-@app_commands.describe(member="العضو المخالف", duration="المدة (مثال: 3 ايام)", reason="سبب التحذير", proof="رابط الدليل (اختياري)")
+@bot.tree.command(name="تحذير", description="[عقوبة سريعة] تطبيق تحذير إداري رسمي على عضو")
+@app_commands.describe(member="اختر العضو المخالف", duration="حدد المدة (مثال: 3 ايام)", reason="اكتب سبب التحذير بوضوح", proof="رابط الدليل (اختياري)")
 async def warn_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     r_warn1, r_warn2, r_warn3 = guild.get_role(WARN_1_ID), guild.get_role(WARN_2_ID), guild.get_role(WARN_3_ID)
@@ -1075,8 +1087,8 @@ async def warn_slash(interaction: discord.Interaction, member: discord.Member, d
     await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"تطبيق {assigned_warn_name}")
     await interaction.response.send_message(f"✅ **تم تطبيق {assigned_warn_name} على {member.mention} واُضيفت النقاط برصيدك بنجاح!**", ephemeral=True)
 
-@bot.tree.command(name="تايم_أوت", description="إسكات عضو لمدة معينة بالدقائق")
-@app_commands.describe(member="العضو", minutes="المدة بالدقائق", reason="السبب", proof="رابط الدليل (اختياري)")
+@bot.tree.command(name="تايم_أوت", description="[عقوبة سريعة] إسكات عضو لمدة معينة بالدقائق")
+@app_commands.describe(member="اختر العضو", minutes="المدة بالدقائق (مثال: 10)", reason="سبب الكتم", proof="رابط الدليل (اختياري)")
 async def timeout_slash(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
@@ -1099,13 +1111,13 @@ async def timeout_slash(interaction: discord.Interaction, member: discord.Member
     except Exception as e:
         await interaction.response.send_message(f"❌ تعذر تنفيذ التايم أوت: {e}", ephemeral=True)
 
-@bot.tree.command(name="حرمان", description="حرمان عضو من الرتب مع حفظها وإرجاعها تلقائياً")
-@app_commands.describe(member="العضو المخالف", duration="المدة", reason="السبب", proof="رابط الدليل (اختياري)")
+@bot.tree.command(name="حرمان", description="[عقوبة سريعة] حرمان عضو من الرتب مع حفظها وإرجاعها تلقائياً")
+@app_commands.describe(member="اختر العضو المخالف", duration="مدة الحرمان (مثال: 3 ايام)", reason="سبب الحرمان", proof="رابط الدليل (اختياري)")
 async def ban_slash(interaction: discord.Interaction, member: discord.Member, duration: str, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
     ban_role = guild.get_role(BAN_ROLE_ID)
     if not ban_role:
-        return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة!", ephemeral=True)
+        return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة بالسيرفر!", ephemeral=True)
 
     try:
         saved_roles = [r.id for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
@@ -1142,7 +1154,7 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
         save_data(data, guild)
 
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
-        await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على {member.mention} وتوثيق السجل، وسيتم استرجاع رتبه تلقائياً بعد انتهاء المدة!**", ephemeral=True)
+        await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على {member.mention} بنجاح، وسيتم استرجاع رتبه تلقائياً بعد انتهاء المدة!**", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ تعذر تطبيق الحرمان: {e}", ephemeral=True)
 
@@ -1230,6 +1242,11 @@ async def help_command(ctx):
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
         value="▫️ `.أداء`\n▫️ `.تيمات` (لوحة إدارة التيمات الخاصة بك)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
+        inline=False
+    )
+    embed.add_field(
+        name="🛡️ ┋ أوامر العقوبات السريعة (Slash Commands)",
+        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع التلقائي)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
