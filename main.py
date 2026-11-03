@@ -104,6 +104,7 @@ BANS_FILE = "active_bans.json"
 TEAMS_RESET_FILE = "teams_reset.json"
 TEAM_BONUS_FILE = "team_bonuses.json"
 TEAM_PERSISTENT_FILE = "team_persistent_scores.json"
+TEAM_STATS_RESET_FILE = "team_stats_resets.json"
 
 double_points_end_time = 0
 processed_tickets = set()
@@ -170,6 +171,12 @@ def load_team_persistent():
 def save_team_persistent(data):
     save_json(TEAM_PERSISTENT_FILE, data)
 
+def load_team_stats_reset():
+    return load_json(TEAM_STATS_RESET_FILE)
+
+def save_team_stats_reset(data):
+    save_json(TEAM_STATS_RESET_FILE, data)
+
 def load_cooldowns():
     return load_json(COOLDOWN_FILE)
 
@@ -182,12 +189,11 @@ def load_bans():
 def save_bans(data):
     save_json(BANS_FILE, data)
 
-# 🛡️ دالة تحويل مدة الوقت إلى ثوانٍ (مضافة ومنسقة بدقة)
 def parse_duration_to_seconds(duration_str: str) -> int:
     duration_str = duration_str.strip().lower()
     numbers = re.findall(r'\d+', duration_str)
     if not numbers:
-        return 86400  # افتراضي يوم واحد لو ما كتب رقم
+        return 86400
     
     val = int(numbers[0])
     if "دقيقة" in duration_str or "دقائق" in duration_str or "m" in duration_str:
@@ -407,6 +413,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     reset_data = load_teams_reset()
     bonuses = load_team_bonuses()
     persistent = load_team_persistent()
+    stats_resets = load_team_stats_reset()
     
     guild_id_str = str(guild.id)
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
@@ -419,22 +426,37 @@ async def calculate_teams_performance(guild: discord.Guild):
     t1_points = guild_persistent.get("t1_total", 0)
     t2_points = guild_persistent.get("t2_total", 0)
 
+    # جلب قواعد التصفير الخاصة بإحصائيات التكتات والترقيات والهويات
+    guild_stats_reset = stats_resets.get(guild_id_str, {
+        "t1_tickets_base": 0, "t1_identities_base": 0, "t1_promotions_base": 0,
+        "t2_tickets_base": 0, "t2_identities_base": 0, "t2_promotions_base": 0
+    })
+
     data = load_data()
-    t1_promotions = t1_tickets = t1_identities = 0
+    t1_promotions_raw = t1_tickets_raw = t1_identities_raw = 0
     for m in t1_members:
         u_info = data.get(str(m.id), {})
         if isinstance(u_info, dict):
-            t1_promotions += u_info.get("total_promotions", 0)
-            t1_tickets += u_info.get("tickets", 0)
-            t1_identities += u_info.get("identities", 0)
+            t1_promotions_raw += u_info.get("total_promotions", 0)
+            t1_tickets_raw += u_info.get("tickets", 0)
+            t1_identities_raw += u_info.get("identities", 0)
 
-    t2_promotions = t2_tickets = t2_identities = 0
+    t2_promotions_raw = t2_tickets_raw = t2_identities_raw = 0
     for m in t2_members:
         u_info = data.get(str(m.id), {})
         if isinstance(u_info, dict):
-            t2_promotions += u_info.get("total_promotions", 0)
-            t2_tickets += u_info.get("tickets", 0)
-            t2_identities += u_info.get("identities", 0)
+            t2_promotions_raw += u_info.get("total_promotions", 0)
+            t2_tickets_raw += u_info.get("tickets", 0)
+            t2_identities_raw += u_info.get("identities", 0)
+
+    # حساب المجاميع الصافية بعد طرح قواعد التصفير الأسبوعية
+    t1_tickets = max(0, t1_tickets_raw - guild_stats_reset.get("t1_tickets_base", 0))
+    t1_identities = max(0, t1_identities_raw - guild_stats_reset.get("t1_identities_base", 0))
+    t1_promotions = max(0, t1_promotions_raw - guild_stats_reset.get("t1_promotions_base", 0))
+
+    t2_tickets = max(0, t2_tickets_raw - guild_stats_reset.get("t2_tickets_base", 0))
+    t2_identities = max(0, t2_identities_raw - guild_stats_reset.get("t2_identities_base", 0))
+    t2_promotions = max(0, t2_promotions_raw - guild_stats_reset.get("t2_promotions_base", 0))
 
     guild_bonus = bonuses.get(guild_id_str, {"t1_extra": 0, "t2_extra": 0})
     t1_points += guild_bonus.get("t1_extra", 0)
@@ -550,21 +572,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v3")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v5")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v3")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v5")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v3")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v5")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -578,21 +600,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v3")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v5")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v3")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v5")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v3")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v5")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -610,7 +632,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v10")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v12")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -637,8 +659,38 @@ class TeamsResetView(discord.ui.View):
         }
         save_teams_reset(reset_data)
 
-        await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق بنجاح!**\n*(ملاحظة: نقاط الإداريين وفريقهم ومحافظهم الشخصية في أمان تام).* 🎉", ephemeral=True)
-        await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام الأدمن {interaction.user.mention} بتصفير المجموع التنافسي الأسبوعي للفرق.", discord.Color.from_rgb(231, 76, 60))
+        # تصفير إحصائيات التكتات والهويات والترقيات للتيمين أيضاً
+        team_1_role = guild.get_role(TEAM_1_ROLE_ID)
+        team_2_role = guild.get_role(TEAM_2_ROLE_ID)
+        t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
+        t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
+        data = load_data()
+
+        t1_t_sum = t1_i_sum = t1_p_sum = 0
+        for m in t1_members:
+            u_info = data.get(str(m.id), {})
+            if isinstance(u_info, dict):
+                t1_t_sum += u_info.get("tickets", 0)
+                t1_i_sum += u_info.get("identities", 0)
+                t1_p_sum += u_info.get("total_promotions", 0)
+
+        t2_t_sum = t2_i_sum = t2_p_sum = 0
+        for m in t2_members:
+            u_info = data.get(str(m.id), {})
+            if isinstance(u_info, dict):
+                t2_t_sum += u_info.get("tickets", 0)
+                t2_i_sum += u_info.get("identities", 0)
+                t2_p_sum += u_info.get("total_promotions", 0)
+
+        stats_resets = load_team_stats_reset()
+        stats_resets[guild_id_str] = {
+            "t1_tickets_base": t1_t_sum, "t1_identities_base": t1_i_sum, "t1_promotions_base": t1_p_sum,
+            "t2_tickets_base": t2_t_sum, "t2_identities_base": t2_i_sum, "t2_promotions_base": t2_p_sum
+        }
+        save_team_stats_reset(stats_resets)
+
+        await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي وإحصائيات التكتات والترقيات الأسبوعية للفرق بالكامل!** 🎉", ephemeral=True)
+        await send_unified_log(guild, "🔄 | تصفير تنافس وإحصائيات الفرق", f"قام الأدمن {interaction.user.mention} بتصفير التنافس وإحصائيات التكتات والترقيات للفرق أسبوعياً.", discord.Color.from_rgb(231, 76, 60))
 
 @bot.event
 async def on_message(message):
@@ -1409,8 +1461,37 @@ async def reset_teams_cmd(ctx):
     }
     save_teams_reset(reset_data)
 
-    await ctx.send("🔄 **تم تصفير المجموع التنافسي الأسبوعي للفرق بنجاح!** *(نقاط الإداريين الشخصية وفرقهم محفوظة بالكامل).* 🚀")
-    await send_unified_log(guild, "🔄 | تصفير تنافس الفرق الأسبوعي", f"قام {ctx.author.mention} بتصفير المجموع التنافسي الأسبوعي للفرق.", discord.Color.from_rgb(231, 76, 60))
+    team_1_role = guild.get_role(TEAM_1_ROLE_ID)
+    team_2_role = guild.get_role(TEAM_2_ROLE_ID)
+    t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
+    t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
+    data = load_data()
+
+    t1_t_sum = t1_i_sum = t1_p_sum = 0
+    for m in t1_members:
+        u_info = data.get(str(m.id), {})
+        if isinstance(u_info, dict):
+            t1_t_sum += u_info.get("tickets", 0)
+            t1_i_sum += u_info.get("identities", 0)
+            t1_p_sum += u_info.get("total_promotions", 0)
+
+    t2_t_sum = t2_i_sum = t2_p_sum = 0
+    for m in t2_members:
+        u_info = data.get(str(m.id), {})
+        if isinstance(u_info, dict):
+            t2_t_sum += u_info.get("tickets", 0)
+            t2_i_sum += u_info.get("identities", 0)
+            t2_p_sum += u_info.get("total_promotions", 0)
+
+    stats_resets = load_team_stats_reset()
+    stats_resets[guild_id_str] = {
+        "t1_tickets_base": t1_t_sum, "t1_identities_base": t1_i_sum, "t1_promotions_base": t1_p_sum,
+        "t2_tickets_base": t2_t_sum, "t2_identities_base": t2_i_sum, "t2_promotions_base": t2_p_sum
+    }
+    save_team_stats_reset(stats_resets)
+
+    await ctx.send("🔄 **تم تصفير المجموع التنافسي وإحصائيات التكتات والترقيات الأسبوعية للفرق بالكامل!** 🚀")
+    await send_unified_log(guild, "🔄 | تصفير تنافس وإحصائيات الفرق", f"قام {ctx.author.mention} بتصفير التنافس وإحصائيات التكتات والترقيات للفرق أسبوعياً.", discord.Color.from_rgb(231, 76, 60))
 
 if __name__ == "__main__":
     if TOKEN:
