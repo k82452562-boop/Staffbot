@@ -426,7 +426,6 @@ async def calculate_teams_performance(guild: discord.Guild):
     t1_points = guild_persistent.get("t1_total", 0)
     t2_points = guild_persistent.get("t2_total", 0)
 
-    # جلب قواعد التصفير الخاصة بإحصائيات التكتات والترقيات والهويات
     guild_stats_reset = stats_resets.get(guild_id_str, {
         "t1_tickets_base": 0, "t1_identities_base": 0, "t1_promotions_base": 0,
         "t2_tickets_base": 0, "t2_identities_base": 0, "t2_promotions_base": 0
@@ -449,7 +448,6 @@ async def calculate_teams_performance(guild: discord.Guild):
             t2_tickets_raw += u_info.get("tickets", 0)
             t2_identities_raw += u_info.get("identities", 0)
 
-    # حساب المجاميع الصافية بعد طرح قواعد التصفير الأسبوعية
     t1_tickets = max(0, t1_tickets_raw - guild_stats_reset.get("t1_tickets_base", 0))
     t1_identities = max(0, t1_identities_raw - guild_stats_reset.get("t1_identities_base", 0))
     t1_promotions = max(0, t1_promotions_raw - guild_stats_reset.get("t1_promotions_base", 0))
@@ -572,21 +570,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v5")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v6")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v5")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v6")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v5")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v6")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -600,21 +598,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v5")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v6")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v5")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v6")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v5")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v6")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -632,7 +630,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v12")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v13")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -659,7 +657,6 @@ class TeamsResetView(discord.ui.View):
         }
         save_teams_reset(reset_data)
 
-        # تصفير إحصائيات التكتات والهويات والترقيات للتيمين أيضاً
         team_1_role = guild.get_role(TEAM_1_ROLE_ID)
         team_2_role = guild.get_role(TEAM_2_ROLE_ID)
         t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
@@ -973,7 +970,8 @@ async def penalties_cmd(ctx):
             "جميع أوامر العقوبات صارت مبسطة وسريعة **عبر أوامر السلاش (Slash Commands)** لتكون واضحة وفورية:\n\n"
             "🔹 **1. `/تحذير`** - لتسجيل تحذير رسمي على العضو.\n"
             "🔹 **2. `/تايم_أوت`** - لكتم العضو بالدقائق المحددة.\n"
-            "🔹 **3. `/حرمان`** - لحرمان العضو مؤقتاً من رتبه مع حفظها وإرجاعها تلقائياً.\n\n"
+            "🔹 **3. `/حرمان`** - لحرمان العضو مؤقتاً من رتبه مع حفظها وإرجاعها تلقائياً.\n"
+            "🔹 **4. `/اعفاء`** - لرفع الحرمان عن العضو وإرجاع رتبه السابقة فوراً.\n\n"
             "فقط اكتب `/` في الشات واختر الأمر بكل سهولة يا وحش! 🚀"
         ),
         color=discord.Color.from_rgb(241, 196, 15)
@@ -1210,6 +1208,59 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
     except Exception as e:
         await interaction.response.send_message(f"❌ تعذر تطبيق الحرمان: {e}", ephemeral=True)
 
+@bot.tree.command(name="اعفاء", description="[عقوبة سريعة] رفع الحرمان عن العضو وإرجاع رتبه السابقة فوراً")
+@app_commands.describe(member="اختر العضو المراد إعفاؤه")
+async def unban_slash(interaction: discord.Interaction, member: discord.Member):
+    if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
+        return await interaction.response.send_message("❌ ما عندك صلاحية لتنفيذ أمر الإعفاء يا الغالي!", ephemeral=True)
+
+    guild = interaction.guild
+    guild_id_str = str(guild.id)
+    bans_data = load_bans()
+    
+    ban_role = guild.get_role(BAN_ROLE_ID)
+    
+    try:
+        # إزالة رتبة الحرمان لو موجودة عليه
+        if ban_role and ban_role in member.roles:
+            await member.remove_roles(ban_role, reason=f"إعفاء بواسطة {interaction.user.name}")
+
+        # محاولة استرجاع الرتب السابقة المحفوظة في ملف الحظر لو كانت مسجلة
+        roles_restored = False
+        if guild_id_str in bans_data and str(member.id) in bans_data[guild_id_str]:
+            saved_role_ids = bans_data[guild_id_str][str(member.id)].get("saved_roles", [])
+            roles_to_restore = []
+            for rid in saved_role_ids:
+                r = guild.get_role(rid)
+                if r and r <= guild.me.top_role and not r.is_default():
+                    roles_to_restore.append(r)
+            
+            if roles_to_restore:
+                await member.add_roles(*roles_to_restore, reason=f"إعفاء وإرجاع الرتب بواسطة {interaction.user.name}")
+                roles_restored = True
+            
+            # حذف العضو من قائمة الحظر النشطة
+            del bans_data[guild_id_str][str(member.id)]
+            if not bans_data[guild_id_str]:
+                del bans_data[guild_id_str]
+            save_bans(bans_data)
+
+        # توثيق الإعفاء في روم الحرمان أو السجلات
+        log_ch = guild.get_channel(BAN_MODEL_CHANNEL_ID) or guild.get_channel(LOG_CHANNEL_ID)
+        if log_ch:
+            embed_log = discord.Embed(
+                title="♻️ | إعفاء ورفع حرمان إداري",
+                description=f"**الإداري:** {interaction.user.mention}\n**العضو المعفي:** {member.mention}\n**الحالة:** تم رفع الحرمان وإرجاع رتبه السابقة.",
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
+            )
+            await log_ch.send(embed=embed_log)
+
+        restore_msg = "وتم استرجاع رتبه السابقة بنجاح!" if roles_restored else "وتم رفع رتبة الحرمان عنه."
+        await interaction.response.send_message(f"✅ **تم إعفاء العضو {member.mention} {restore_msg}**", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ تعذر تنفيذ الإعفاء: {e}", ephemeral=True)
+
 @bot.tree.command(name="إضافة_نقاط", description="إضافة نقاط لعضو إداري (خاص للقيادة)")
 @app_commands.describe(member="العضو الإداري", amount="عدد النقاط")
 async def addpoints_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
@@ -1298,7 +1349,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات السريعة (Slash Commands)",
-        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع التلقائي)",
+        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع التلقائي)\n▫️ `/اعفاء` (لرفع الحرمان عن العضو وإرجاع رتبه فوراً)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
