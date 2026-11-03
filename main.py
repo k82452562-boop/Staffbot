@@ -570,21 +570,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v6")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v7")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v6")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v7")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v6")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v7")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -598,21 +598,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v6")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v7")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v6")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v7")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v6")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v7")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -630,7 +630,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v13")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v14")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -1021,7 +1021,8 @@ async def check_expired_bans():
                         roles_to_restore = []
                         for rid in ban_info["saved_roles"]:
                             r = guild.get_role(rid)
-                            if r and r <= guild.me.top_role and not r.is_default():
+                            # 🛡️ تحقق ذكي لمنع أي تعليق أو أخطاء صلاحيات عند استرجاع الرتب
+                            if r and r < guild.me.top_role and not r.is_default() and not r.managed:
                                 roles_to_restore.append(r)
                                 
                         if roles_to_restore:
@@ -1170,9 +1171,18 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
         return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة بالسيرفر!", ephemeral=True)
 
     try:
-        saved_roles = [r.id for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
+        # 🛡️ فلترة الرتب المسموح فقط بسحبها (استبعاد الرتب التلقائية، رتب البوتات، والرتب الأعلى من صلاحية البوت)
+        saved_roles = [
+            r.id for r in member.roles 
+            if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role and not r.managed
+        ]
         
-        roles_to_remove = [r for r in member.roles if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role]
+        roles_to_remove = [
+            r for r in member.roles 
+            if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role and not r.managed
+        ]
+        
+        # سحب الرتب وإضافة رتبة الحرمان فوراً وبأقصى سرعة
         if roles_to_remove: 
             await member.remove_roles(*roles_to_remove, reason=f"حرمان بواسطة {interaction.user.name}")
         await member.add_roles(ban_role, reason=f"حرمان بواسطة {interaction.user.name}")
@@ -1221,31 +1231,27 @@ async def unban_slash(interaction: discord.Interaction, member: discord.Member):
     ban_role = guild.get_role(BAN_ROLE_ID)
     
     try:
-        # إزالة رتبة الحرمان لو موجودة عليه
         if ban_role and ban_role in member.roles:
             await member.remove_roles(ban_role, reason=f"إعفاء بواسطة {interaction.user.name}")
 
-        # محاولة استرجاع الرتب السابقة المحفوظة في ملف الحظر لو كانت مسجلة
         roles_restored = False
         if guild_id_str in bans_data and str(member.id) in bans_data[guild_id_str]:
             saved_role_ids = bans_data[guild_id_str][str(member.id)].get("saved_roles", [])
             roles_to_restore = []
             for rid in saved_role_ids:
                 r = guild.get_role(rid)
-                if r and r <= guild.me.top_role and not r.is_default():
+                if r and r < guild.me.top_role and not r.is_default() and not r.managed:
                     roles_to_restore.append(r)
             
             if roles_to_restore:
                 await member.add_roles(*roles_to_restore, reason=f"إعفاء وإرجاع الرتب بواسطة {interaction.user.name}")
                 roles_restored = True
             
-            # حذف العضو من قائمة الحظر النشطة
             del bans_data[guild_id_str][str(member.id)]
             if not bans_data[guild_id_str]:
                 del bans_data[guild_id_str]
             save_bans(bans_data)
 
-        # توثيق الإعفاء في روم الحرمان أو السجلات
         log_ch = guild.get_channel(BAN_MODEL_CHANNEL_ID) or guild.get_channel(LOG_CHANNEL_ID)
         if log_ch:
             embed_log = discord.Embed(
@@ -1349,7 +1355,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات السريعة (Slash Commands)",
-        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع التلقائي)\n▫️ `/اعفاء` (لرفع الحرمان عن العضو وإرجاع رتبه فوراً)",
+        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع الفوري التلقائي)\n▫️ `/اعفاء` (لرفع الحرمان عن العضو وإرجاع رتبه فوراً)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
