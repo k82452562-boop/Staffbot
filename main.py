@@ -570,21 +570,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v7")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v8")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v7")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v8")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v7")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v8")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -598,21 +598,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v7")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v8")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v7")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v8")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v7")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v8")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -630,7 +630,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v14")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v15")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -995,6 +995,47 @@ async def delete_channel_cmd(ctx):
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
+# ----------------------------------------------------
+# 🚨 أمر !اونر الجديد (مع التحقق من التكت واستدعاء الرتبة)
+# ----------------------------------------------------
+@bot.command(name="اونر", aliases=["owner"])
+async def owner_call_cmd(ctx):
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+    target_role_id = 1567062184004026488
+    role = ctx.guild.get_role(target_role_id)
+    role_mention = role.mention if role else f"<@&{target_role_id}>"
+
+    channel_name = ctx.channel.name.lower()
+    # التحقق مما إذا كان اسم الروم يحتوي على تذكرة أو تكت
+    if "تذكرة" in channel_name or "تكت" in channel_name or "ticket" in channel_name:
+        try:
+            await ctx.channel.edit(name="مطلوب-اونر", reason=f"طلب أونر بواسطة {ctx.author.name}")
+        except Exception as e:
+            print(f"خطأ في تغيير اسم الروم: {e}")
+
+        embed = discord.Embed(
+            title="🚨 | طلب حضور الأونر",
+            description=f"الإداري {ctx.author.mention} يطلب حضور الأونر في التكت!\n📌 **تمت تنميش الرتبة:** {role_mention}",
+            color=discord.Color.from_rgb(231, 76, 60),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_footer(text="منتدى النظيم | نداء الأونرات السريع")
+        await ctx.send(content=role_mention, embed=embed)
+    else:
+        # لو الروم ليس تكت، فقط استدعاء الرتبة مع تنبيه
+        embed = discord.Embed(
+            title="⚠️ | تنبيه نداء الأونر",
+            description=f"الإداري {ctx.author.mention} قام بنداء الأونرات.\n📌 **الرتبة المستدعية:** {role_mention}\n*(ملاحظة: هذا ليس روم تكت، لذلك لم يتم تغيير اسم الروم).*",
+            color=discord.Color.from_rgb(241, 196, 15),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_footer(text="منتدى النظيم | نداء الأونرات السريع")
+        await ctx.send(content=role_mention, embed=embed)
+
 @tasks.loop(minutes=1)
 async def check_expired_bans():
     bans_data = load_bans()
@@ -1021,7 +1062,6 @@ async def check_expired_bans():
                         roles_to_restore = []
                         for rid in ban_info["saved_roles"]:
                             r = guild.get_role(rid)
-                            # 🛡️ تحقق ذكي لمنع أي تعليق أو أخطاء صلاحيات عند استرجاع الرتب
                             if r and r < guild.me.top_role and not r.is_default() and not r.managed:
                                 roles_to_restore.append(r)
                                 
@@ -1171,7 +1211,6 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
         return await interaction.response.send_message("❌ رتبة الحرمان غير موجودة بالسيرفر!", ephemeral=True)
 
     try:
-        # 🛡️ فلترة الرتب المسموح فقط بسحبها (استبعاد الرتب التلقائية، رتب البوتات، والرتب الأعلى من صلاحية البوت)
         saved_roles = [
             r.id for r in member.roles 
             if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role and not r.managed
@@ -1182,7 +1221,6 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
             if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role and not r.managed
         ]
         
-        # سحب الرتب وإضافة رتبة الحرمان فوراً وبأقصى سرعة
         if roles_to_remove: 
             await member.remove_roles(*roles_to_remove, reason=f"حرمان بواسطة {interaction.user.name}")
         await member.add_roles(ban_role, reason=f"حرمان بواسطة {interaction.user.name}")
@@ -1354,8 +1392,8 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
-        name="🛡️ ┋ أوامر العقوبات السريعة (Slash Commands)",
-        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع الفوري التلقائي)\n▫️ `/اعفاء` (لرفع الحرمان عن العضو وإرجاع رتبه فوراً)",
+        name="🛡️ ┋ أوامر العقوبات السريعة (Slash Commands) ونداء الأونر",
+        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع الفوري)\n▫️ `/اعفاء` (لرفع الحرمان وإرجاع الرتب)\n▫️ `!اونر` (لاستدعاء الأونر وتغيير اسم التكت تلقائياً)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
