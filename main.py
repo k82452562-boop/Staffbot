@@ -9,10 +9,10 @@ import re
 from datetime import datetime, timedelta
 
 # ----------------------------------------------------
-# 1. إعدادات بوت ديسكورد الأساسية
+# 1. إعدادات بوت ديسكورد الأساسية (يدعم ! و .)
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
-PREFIX = "."
+PREFIX = ("!", ".")
 
 BOT_OWNER_ID = 917414299184533515
 
@@ -570,21 +570,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v8")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v10")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v8")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v10")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v8")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v10")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -598,21 +598,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v8")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v10")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v8")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v10")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v8")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v10")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -630,7 +630,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v15")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v17")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -996,10 +996,22 @@ async def delete_channel_cmd(ctx):
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
 # ----------------------------------------------------
-# 🚨 أمر !اونر الجديد (مع التحقق من التكت واستدعاء الرتبة)
+# 🚨 أمر !اونر الجديد (مع حماية رتبة طاقم الإدارة 1545520633939624006)
 # ----------------------------------------------------
 @bot.command(name="اونر", aliases=["owner"])
 async def owner_call_cmd(ctx):
+    required_staff_role_id = 1545520633939624006
+    has_staff_role = any(role.id == required_staff_role_id for role in ctx.author.roles)
+
+    # التحقق مما إذا كان لديه الرتبة أو هو الأونر الأساسي أو أدمن
+    if not has_staff_role and not is_admin_or_owner(ctx):
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+        await ctx.send(f"{ctx.author.mention} ماتقدر تمنشن ياهطف !!!", delete_after=7)
+        return
+
     try:
         await ctx.message.delete()
     except:
@@ -1010,7 +1022,6 @@ async def owner_call_cmd(ctx):
     role_mention = role.mention if role else f"<@&{target_role_id}>"
 
     channel_name = ctx.channel.name.lower()
-    # التحقق مما إذا كان اسم الروم يحتوي على تذكرة أو تكت
     if "تذكرة" in channel_name or "تكت" in channel_name or "ticket" in channel_name:
         try:
             await ctx.channel.edit(name="مطلوب-اونر", reason=f"طلب أونر بواسطة {ctx.author.name}")
@@ -1026,7 +1037,6 @@ async def owner_call_cmd(ctx):
         embed.set_footer(text="منتدى النظيم | نداء الأونرات السريع")
         await ctx.send(content=role_mention, embed=embed)
     else:
-        # لو الروم ليس تكت، فقط استدعاء الرتبة مع تنبيه
         embed = discord.Embed(
             title="⚠️ | تنبيه نداء الأونر",
             description=f"الإداري {ctx.author.mention} قام بنداء الأونرات.\n📌 **الرتبة المستدعية:** {role_mention}\n*(ملاحظة: هذا ليس روم تكت، لذلك لم يتم تغيير اسم الروم).*",
@@ -1392,8 +1402,8 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
-        name="🛡️ ┋ أوامر العقوبات السريعة (Slash Commands) ونداء الأونر",
-        value="▫️ `/تحذير` (لتطبيق تحذير وتوثيقه)\n▫️ `/تايم_أوت` (لكتم العضو بالدقائق)\n▫️ `/حرمان` (لحرمان العضو مع الحفظ والاسترجاع الفوري)\n▫️ `/اعفاء` (لرفع الحرمان وإرجاع الرتب)\n▫️ `!اونر` (لاستدعاء الأونر وتغيير اسم التكت تلقائياً)",
+        name="🛡️ ┋ أوامر العقوبات ونداء الأونر (!اونر أو .اونر)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `!اونر` أو `.اونر` (مخصص لرتبة الإدارة فقط لاستدعاء الأونر)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
