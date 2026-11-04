@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta
 
 # ----------------------------------------------------
-# 1. إعدادات بوت ديسكورد الأساسية (يدعم ! و .)
+# 1. إعدادات بوت ديسكورد الأساسية
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = ("!", ".")
@@ -36,6 +36,7 @@ APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930
 APPLY_REVIEW_CHANNEL_ID = 1543073109496692737   
 WARN_CHANNEL_ID = 1543647851953791179           
 ADMIN_ROLE_PENG_ID = 1545520633939624006        
+EVENT_ANNOUNCE_CHANNEL_ID = 1543082133231243365
 
 UNVERIFIED_ROLE_ID = 1545695261446250516      
 VERIFIED_ROLE_ID = 1545516954754875523        
@@ -108,6 +109,14 @@ TEAM_STATS_RESET_FILE = "team_stats_resets.json"
 
 double_points_end_time = 0
 processed_tickets = set()
+
+active_event = {
+    "running": False,
+    "activity_type": "",
+    "description": "",
+    "end_time": 0,
+    "participants": {}
+}
 
 def is_admin_or_owner(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
@@ -362,7 +371,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             print(f"خطأ أثناء الترقية: {e}")
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
-    global double_points_end_time
+    global double_points_end_time, active_event
     
     is_double_active = time.time() < double_points_end_time
     actual_points = (base_points * 2) if is_double_active else base_points
@@ -384,6 +393,11 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
         user_data["identities"] = user_data.get("identities", 0) + 1
 
     save_data(data, guild)
+
+    if active_event["running"]:
+        match_type = active_event["activity_type"]
+        if match_type == "all" or target_type == match_type:
+            active_event["participants"][staff.id] = active_event["participants"].get(staff.id, 0) + 1
 
     guild_id_str = str(guild.id)
     persistent = load_team_persistent()
@@ -512,9 +526,6 @@ async def calculate_teams_performance(guild: discord.Guild):
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الموحد")
     return embed
 
-# ----------------------------------------------------
-# 🎛️ إدارة التيمات واللوحة الخاصة بالحاكم
-# ----------------------------------------------------
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
         super().__init__(title=f"إدارة نقاط: {team_name}")
@@ -570,21 +581,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v10")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v13")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v10")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v13")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v10")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v13")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -598,21 +609,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v10")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v13")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v10")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v13")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v10")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v13")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -630,7 +641,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v17")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v20")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -688,6 +699,137 @@ class TeamsResetView(discord.ui.View):
 
         await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي وإحصائيات التكتات والترقيات الأسبوعية للفرق بالكامل!** 🎉", ephemeral=True)
         await send_unified_log(guild, "🔄 | تصفير تنافس وإحصائيات الفرق", f"قام الأدمن {interaction.user.mention} بتصفير التنافس وإحصائيات التكتات والترقيات للفرق أسبوعياً.", discord.Color.from_rgb(231, 76, 60))
+
+# ----------------------------------------------------
+# 🏅 مودال توزيع النقاط المخصص لكل مركز (توب الفعالية)
+# ----------------------------------------------------
+class EventRewardModal(discord.ui.Modal):
+    def __init__(self, sorted_participants, guild, ping_str, announce_channel):
+        super().__init__(title="توزيع جوائز ونقاط الفعالية")
+        self.sorted_participants = sorted_participants
+        self.guild = guild
+        self.ping_str = ping_str
+        self.announce_channel = announce_channel
+
+        self.rank1_input = discord.ui.TextInput(
+            label="المركز الأول (نقاط)",
+            placeholder="مثال: 5",
+            required=True,
+            max_length=4
+        )
+        self.rank2_input = discord.ui.TextInput(
+            label="المركز الثاني (نقاط)",
+            placeholder="مثال: 3",
+            required=False,
+            max_length=4
+        )
+        self.rank3_input = discord.ui.TextInput(
+            label="المركز الثالث (نقاط)",
+            placeholder="مثال: 3",
+            required=False,
+            max_length=4
+        )
+        self.rest_input = discord.ui.TextInput(
+            label="باقي المشاركين (نقاط لكل شخص)",
+            placeholder="مثال: 1",
+            required=False,
+            max_length=4
+        )
+
+        self.add_item(self.rank1_input)
+        self.add_item(self.rank2_input)
+        self.add_item(self.rank3_input)
+        self.add_item(self.rest_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ مخصص للحاكم ريان فقط!", ephemeral=True)
+            return
+
+        try:
+            r1_pts = int(self.rank1_input.value.strip()) if self.rank1_input.value else 0
+            r2_pts = int(self.rank2_input.value.strip()) if self.rank2_input.value else 0
+            r3_pts = int(self.rank3_input.value.strip()) if self.rank3_input.value else 0
+            rest_pts = int(self.rest_input.value.strip()) if self.rest_input.value else 0
+        except ValueError:
+            await interaction.response.send_message("❌ يرجى إدخال أرقام صحيحة في خانات النقاط!", ephemeral=True)
+            return
+
+        data = load_data()
+        guild_id_str = str(self.guild.id)
+        persistent = load_team_persistent()
+        if guild_id_str not in persistent:
+            persistent[guild_id_str] = {"t1_total": 0, "t2_total": 0}
+
+        team_1_role = self.guild.get_role(TEAM_1_ROLE_ID)
+        team_2_role = self.guild.get_role(TEAM_2_ROLE_ID)
+
+        result_desc = "🏁 **تم إعلان نتائج الفعالية وتوزيع النقاط على المراكز حسب طلب الحاكم ريان:**\n\n"
+
+        for idx, (uid, count) in enumerate(self.sorted_participants):
+            member = self.guild.get_member(uid)
+            member_str = member.mention if member else f"<@{uid}>"
+
+            if idx == 0:
+                awarded = r1_pts
+                medal = "🥇 المركز الأول"
+            elif idx == 1:
+                awarded = r2_pts
+                medal = "🥈 المركز الثاني"
+            elif idx == 2:
+                awarded = r3_pts
+                medal = "🥉 المركز الثالث"
+            else:
+                awarded = rest_pts
+                medal = f"🏅 المركز #{idx+1}"
+
+            result_desc += f"{medal} — {member_str} (العمليات المنجزة: `{count}`) ➔ **+{awarded} نقطة**\n"
+
+            if awarded > 0:
+                uid_str = str(uid)
+                if uid_str not in data or not isinstance(data[uid_str], dict):
+                    data[uid_str] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
+                
+                data[uid_str]["points"] += awarded
+
+                if member:
+                    if team_1_role and team_1_role in member.roles:
+                        persistent[guild_id_str]["t1_total"] = persistent[guild_id_str].get("t1_total", 0) + awarded
+                    elif team_2_role and team_2_role in member.roles:
+                        persistent[guild_id_str]["t2_total"] = persistent[guild_id_str].get("t2_total", 0) + awarded
+                
+                save_data(data, self.guild)
+
+        save_team_persistent(persistent)
+
+        result_embed = discord.Embed(
+            title="🏆 | نتائج الفعالية وتتويج الأبطال",
+            description=result_desc,
+            color=discord.Color.from_rgb(241, 196, 15),
+            timestamp=discord.utils.utcnow()
+        )
+        result_embed.set_footer(text="منتدى النظيم | لوحة الفعاليات الكبرى")
+
+        if self.announce_channel:
+            await self.announce_channel.send(content=f"📢 {self.ping_str} **إعلان نتائج وتتويج الفعالية:**", embed=result_embed)
+        
+        await interaction.response.send_message("✅ **تم توزيع النقاط على المشاركين وإضافتها لمحفظتهم وتيماتهم بنجاح تام!**", ephemeral=True)
+
+class EventDistributeView(discord.ui.View):
+    def __init__(self, sorted_participants, guild, ping_str, announce_channel):
+        super().__init__(timeout=None)
+        self.sorted_participants = sorted_participants
+        self.guild = guild
+        self.ping_str = ping_str
+        self.announce_channel = announce_channel
+
+    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v2")
+    async def distribute_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != BOT_OWNER_ID:
+            await interaction.response.send_message("❌ هذا الزر مخصص للحاكم ريان فقط!", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(EventRewardModal(self.sorted_participants, self.guild, self.ping_str, self.announce_channel))
 
 @bot.event
 async def on_message(message):
@@ -777,7 +919,7 @@ class ApplyReviewView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v12")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v13")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
@@ -823,7 +965,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v12")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v13")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
@@ -862,7 +1004,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v12")
+    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v13")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -995,15 +1137,11 @@ async def delete_channel_cmd(ctx):
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
-# ----------------------------------------------------
-# 🚨 أمر !اونر الجديد (مع حماية رتبة طاقم الإدارة 1545520633939624006)
-# ----------------------------------------------------
 @bot.command(name="اونر", aliases=["owner"])
 async def owner_call_cmd(ctx):
     required_staff_role_id = 1545520633939624006
     has_staff_role = any(role.id == required_staff_role_id for role in ctx.author.roles)
 
-    # التحقق مما إذا كان لديه الرتبة أو هو الأونر الأساسي أو أدمن
     if not has_staff_role and not is_admin_or_owner(ctx):
         try:
             await ctx.message.delete()
@@ -1045,6 +1183,111 @@ async def owner_call_cmd(ctx):
         )
         embed.set_footer(text="منتدى النظيم | نداء الأونرات السريع")
         await ctx.send(content=role_mention, embed=embed)
+
+# ----------------------------------------------------
+# 🏆 أمر الفعاليات المتطور بالترتيب والتوزيع اليدوي
+# ----------------------------------------------------
+@bot.tree.command(name="فعالية", description="[خاص بالحاكم ريان] إطلاق فعالية إدارية مع رصد الأداء والتوزيع اليدوي للنقاط حسب المراكز")
+@app_commands.describe(
+    activity_type="اختر نوع النشاط (تكتات، هويات، تحذيرات، تايم، حرمان، أو الكل)",
+    title="عنوان الفعالية أو الشي الي يسوونه",
+    duration_minutes="مدة الفعالية بالدقائق"
+)
+@app_commands.choices(activity_type=[
+    app_commands.Choice(name="تكتات (Tickets)", value="ticket"),
+    app_commands.Choice(name="هويات (Identities)", value="identity"),
+    app_commands.Choice(name="تحذيرات (Warns)", value="warn"),
+    app_commands.Choice(name="تايم أوت (Timeouts)", value="timeout"),
+    app_commands.Choice(name="حرمانات (Bans)", value="ban"),
+    app_commands.Choice(name="جميع الأنشطة الإدارية (All)", value="all")
+])
+async def start_custom_event(interaction: discord.Interaction, activity_type: str, title: str, duration_minutes: int):
+    if interaction.user.id != BOT_OWNER_ID:
+        await interaction.response.send_message("❌ هذا الأمر مخصص للحاكم ريان فقط يا الذيب!", ephemeral=True)
+        return
+
+    global active_event
+    if active_event["running"]:
+        await interaction.response.send_message("⚠️ فيه فعالية شغال حالياً! انتظر لين تنتهي.", ephemeral=True)
+        return
+
+    guild = interaction.guild
+    announce_channel = guild.get_channel(EVENT_ANNOUNCE_CHANNEL_ID)
+    staff_ping_role = guild.get_role(1545520633939624006)
+    ping_str = staff_ping_role.mention if staff_ping_role else "<@&1545520633939624006>"
+
+    active_event = {
+        "running": True,
+        "activity_type": activity_type,
+        "description": title,
+        "end_time": time.time() + (duration_minutes * 60),
+        "participants": {}
+    }
+
+    await interaction.response.send_message(f"🚀 **تم إطلاق الفعالية وبث الإعلان في الروم المخصص بنجاح!**", ephemeral=True)
+
+    embed = discord.Embed(
+        title="🎉 | إطلاق فعالية إدارية كبرى جديدة!",
+        description=(
+            f"يا طاقم الإدارة ويا أبطال منتدى النظيم!\n\n"
+            f"🏆 **اسم الفعالية / المطلوب:**\n`{title}`\n\n"
+            f"📌 **نوع النشاط المستهدف:** `{activity_type}`\n"
+            f"⏱️ **الوقت المحدد:** `{duration_minutes} دقيقة`\n"
+            f"🎁 **طريقة التتويج:** عند انتهاء الوقت، سيقوم الحاكم ريان بتوزيع النقاط يدوياً حسب الترتيب والمراكز!\n\n"
+            f"👇 **شدوا حيلكم، البوت يتابع أداء الجميع طوال فترة الفعالية!**"
+        ),
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="منتدى النظيم | فعاليات الإدارة الكبرى")
+
+    if announce_channel:
+        await announce_channel.send(content=f"🔔 {ping_str} **تنبيه ببدء الفعالية الرسمية!**", embed=embed)
+    else:
+        await interaction.channel.send(content=f"🔔 {ping_str} **تنبيه ببدء الفعالية الرسمية!**", embed=embed)
+
+    async def finish_event_after_delay():
+        global active_event
+        await asyncio.sleep(duration_minutes * 60)
+        
+        if not active_event["running"]:
+            return
+
+        active_event["running"] = False
+        participants = active_event["participants"]
+
+        if participants:
+            sorted_participants = sorted(participants.items(), key=lambda x: x[1], reverse=True)
+            
+            result_desc = "🏁 **انتهت الفعالية الإدارية! إليكم ترتيب التوب التلقائي حسب الأداء:**\n\n"
+            for idx, (uid, count) in enumerate(sorted_participants, 1):
+                member = guild.get_member(uid)
+                member_str = member.mention if member else f"<@{uid}>"
+                result_desc += f"`#{idx}` {member_str} — العمليات المنجزة: `{count}`\n"
+            
+            result_desc += f"\n👇 **يا الحاكم ريان، اضغط على الزر أدناه لتحديد وتوزيع النقاط لكل مركز بكل سهولة!**"
+
+            control_embed = discord.Embed(
+                title="📊 | تقرير نتائج الفعالية وجهوزية التوزيع",
+                description=result_desc,
+                color=discord.Color.from_rgb(52, 152, 219),
+                timestamp=discord.utils.utcnow()
+            )
+            control_embed.set_footer(text="منتدى النظيم | لوحة تحكم الفعاليات")
+
+            view = EventDistributeView(sorted_participants, guild, ping_str, announce_channel)
+            
+            if announce_channel:
+                await announce_channel.send(content=f"📢 {ping_str} **انتهت الفعالية! بانتظار توزيع الجوائز:**", embed=control_embed, view=view)
+            else:
+                await interaction.channel.send(content=f"📢 {ping_str} **انتهت الفعالية! بانتظار توزيع الجوائز:**", embed=control_embed, view=view)
+        else:
+            if announce_channel:
+                await announce_channel.send(content=f"📢 {ping_str} **انتهت الفعالية:** للأسف لم يشارك أحد أو يسجل أي إنجاز خلال هذه الفترة.")
+
+        active_event["participants"] = {}
+
+    bot.loop.create_task(finish_event_after_delay())
 
 @tasks.loop(minutes=1)
 async def check_expired_bans():
@@ -1112,7 +1355,7 @@ async def on_ready():
     print(f"🚀 [بوت منتدى النظيم شغّال بنجاح تام] باسم: {bot.user}")
 
 # ----------------------------------------------------
-# 🛡️ أوامر العقوبات والسلاش المبسطة والواضحة
+# 🛡️ أوامر العقوبات والسلاش المبسطة والكاملة
 # ----------------------------------------------------
 
 @bot.tree.command(name="أداء", description="عرض تقارير أداء ومقارنة الفرق ونقاطهم وعدد ترقياتهم")
@@ -1185,6 +1428,10 @@ async def warn_slash(interaction: discord.Interaction, member: discord.Member, d
     data[uid]["warns"] += 1
     save_data(data, guild)
 
+    if active_event["running"]:
+        if active_event["activity_type"] == "all" or active_event["activity_type"] == "warn":
+            active_event["participants"][interaction.user.id] = active_event["participants"].get(interaction.user.id, 0) + 1
+
     await add_points_direct(guild, interaction.user, POINTS_CONFIG["warn"], f"تطبيق {assigned_warn_name}")
     await interaction.response.send_message(f"✅ **تم تطبيق {assigned_warn_name} على {member.mention} واُضيفت النقاط برصيدك بنجاح!**", ephemeral=True)
 
@@ -1206,6 +1453,10 @@ async def timeout_slash(interaction: discord.Interaction, member: discord.Member
             data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         data[uid]["timeouts"] += 1
         save_data(data, guild)
+
+        if active_event["running"]:
+            if active_event["activity_type"] == "all" or active_event["activity_type"] == "timeout":
+                active_event["participants"][interaction.user.id] = active_event["participants"].get(interaction.user.id, 0) + 1
 
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["timeout"], "تطبيق عقوبة تايم أوت")
         await interaction.response.send_message(f"✅ **تم كتم العضو {member.mention} لمدة {minutes} دقيقة بنجاح!**", ephemeral=True)
@@ -1260,6 +1511,10 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
             data[uid] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
         data[uid]["bans"] += 1
         save_data(data, guild)
+
+        if active_event["running"]:
+            if active_event["activity_type"] == "all" or active_event["activity_type"] == "ban":
+                active_event["participants"][interaction.user.id] = active_event["participants"].get(interaction.user.id, 0) + 1
 
         await add_points_direct(guild, interaction.user, POINTS_CONFIG["ban"], "تطبيق عقوبة حرمان رول")
         await interaction.response.send_message(f"✅ **تم تطبيق الحرمان على {member.mention} بنجاح، وسيتم استرجاع رتبه تلقائياً بعد انتهاء المدة!**", ephemeral=True)
@@ -1398,12 +1653,12 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
-        value="▫️ `.أداء`\n▫️ `.تيمات` (لوحة إدارة التيمات الخاصة بك)\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
+        value="▫️ `.أداء`\n▫️ `.تيمات`\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
         inline=False
     )
     embed.add_field(
-        name="🛡️ ┋ أوامر العقوبات ونداء الأونر (!اونر أو .اونر)",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `!اونر` أو `.اونر` (مخصص لرتبة الإدارة فقط لاستدعاء الأونر)",
+        name="🛡️ ┋ أوامر العقوبات والفعاليات ونداء الأอนر",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فعالية` (لإطلاق الفعاليات الإدارية مع الترتيب والتحكم اليدوي بتوزيع الجوائز)\n▫️ `!اونر` (لاستدعاء الأอนر وتحتوي على حماية رتبة الإدارة)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
