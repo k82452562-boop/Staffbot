@@ -9,12 +9,17 @@ import re
 from datetime import datetime, timedelta
 
 # ----------------------------------------------------
-# 1. إعدادات بوت ديسكورد الأساسية
+# 1. إعدادات بوت ديسكورد الأساسية والصلاحيات المطلقة
 # ----------------------------------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 PREFIX = ("!", ".")
 
-BOT_OWNER_ID = 917414299184533515
+# الأونرات والمسؤولون بصلاحيات كاملة على كل شيء
+OWNER_IDS = [
+    917414299184533515,  # حسابك الأساسي (الحاكم ريان)
+    391638472022163456,  # الأيدي الجديد الأول
+    1526761757497098335  # الأيدي الجديد الثاني
+]
 
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
 
@@ -121,17 +126,17 @@ active_event = {
 
 def is_admin_or_owner(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
-    if author.id == BOT_OWNER_ID:
+    if author.id in OWNER_IDS:
         return True
     return author.guild_permissions.administrator
 
 def is_bot_owner(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
-    return author.id == BOT_OWNER_ID
+    return author.id in OWNER_IDS
 
 def can_manage_points(ctx_or_interaction):
     author = ctx_or_interaction.author if hasattr(ctx_or_interaction, 'author') else ctx_or_interaction.user
-    if author.id == BOT_OWNER_ID or author.guild_permissions.administrator:
+    if author.id in OWNER_IDS or author.guild_permissions.administrator:
         return True
     return any(role.id == POINTS_CONTROL_ROLE_ID for role in getattr(author, 'roles', []))
 
@@ -565,8 +570,8 @@ class TeamPointsModal(discord.ui.Modal):
         self.add_item(self.amount_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
+        if interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأونرات فقط!", ephemeral=True)
             return
 
         try:
@@ -598,26 +603,26 @@ class TeamsControlView(discord.ui.View):
         super().__init__(timeout=None)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ هذه الأزرار مخصصة للحاكم ريان فقط ولا تتدخل بشي يا الذيب!", ephemeral=True)
+        if interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message("❌ هذه الأزرار مخصصة للأونرات فقط ولا تتدخل بشي يا الذيب!", ephemeral=True)
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v16")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v17")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v16")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v17")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v16")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v17")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -631,21 +636,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v16")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v17")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v16")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v17")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v16")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v17")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -663,7 +668,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v23")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v24")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -723,7 +728,7 @@ class TeamsResetView(discord.ui.View):
         await send_unified_log(guild, "🔄 | تصفير تنافس وإحصائيات الفرق", f"قام الأدمن {interaction.user.mention} بتصفير التنافس وإحصائيات التكتات والترقيات للفرق أسبوعياً.", discord.Color.from_rgb(231, 76, 60))
 
 # ----------------------------------------------------
-# 🏅 مودال إعدادات الفعالية الجديدة (عند الضغط على زر بدء فعالية)
+# 🏅 مودال إعدادات الفعالية الجديدة
 # ----------------------------------------------------
 class EventSetupModal(discord.ui.Modal):
     def __init__(self):
@@ -760,8 +765,8 @@ class EventSetupModal(discord.ui.Modal):
         self.add_item(self.title_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ هذه اللوحة مخصصة للحاكم ريان فقط!", ephemeral=True)
+        if interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message("❌ هذه اللوحة مخصصة للأونرات فقط!", ephemeral=True)
             return
 
         valid_types = {
@@ -847,7 +852,7 @@ class EventSetupModal(discord.ui.Modal):
                     member_str = member.mention if member else f"<@{uid}>"
                     result_desc += f"`#{idx}` {member_str} — العمليات المنجزة: `{count}`\n"
                 
-                result_desc += f"\n👇 **يا الحاكم ريان، اضغط على الزر أدناه لتوزيع نقاط الفعالية ({pool_pts} نقطة إجمالية) على المراكز حسب احتياجك!**"
+                result_desc += f"\n👇 **يا الأونر، اضغط على الزر أدناه لتوزيع نقاط الفعالية ({pool_pts} نقطة إجمالية) على المراكز حسب احتياجك!**"
 
                 control_embed = discord.Embed(
                     title="📊 | تقرير نتائج الفعالية وجهوزية التوزيع",
@@ -911,8 +916,8 @@ class EventRewardModal(discord.ui.Modal):
         self.add_item(self.rest_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        if interaction.user.id != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ مخصص للحاكم ريان فقط!", ephemeral=True)
+        if interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message("❌ مخصص للأونرات فقط!", ephemeral=True)
             return
 
         try:
@@ -933,7 +938,7 @@ class EventRewardModal(discord.ui.Modal):
         team_1_role = self.guild.get_role(TEAM_1_ROLE_ID)
         team_2_role = self.guild.get_role(TEAM_2_ROLE_ID)
 
-        result_desc = "🏁 **تم إعلان نتائج الفعالية وتوزيع النقاط على المراكز حسب طلب الحاكم ريان:**\n\n"
+        result_desc = "🏁 **تم إعلان نتائج الفعالية وتوزيع النقاط على المراكز حسب اختيار الأونر:**\n\n"
 
         for idx, (uid, count) in enumerate(self.sorted_participants):
             member = self.guild.get_member(uid)
@@ -992,10 +997,10 @@ class EventDistributeView(discord.ui.View):
         self.ping_str = ping_str
         self.announce_channel = announce_channel
 
-    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v5")
+    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v6")
     async def distribute_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ هذا الزر مخصص للحاكم ريان فقط!", ephemeral=True)
+        if interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message("❌ هذا الزر مخصص للأونرات فقط!", ephemeral=True)
             return
 
         await interaction.response.send_modal(EventRewardModal(self.sorted_participants, self.guild, self.ping_str, self.announce_channel))
@@ -1007,10 +1012,10 @@ class StartEventPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🚀 بدء فعالية جديدة", style=discord.ButtonStyle.green, custom_id="open_event_setup_modal_btn_v1")
+    @discord.ui.button(label="🚀 بدء فعالية جديدة", style=discord.ButtonStyle.green, custom_id="open_event_setup_modal_btn_v2")
     async def open_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != BOT_OWNER_ID:
-            await interaction.response.send_message("❌ هذا الزر مخصص للحاكم ريان فقط!", ephemeral=True)
+        if interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message("❌ هذا الزر مخصص للأونرات فقط!", ephemeral=True)
             return
         await interaction.response.send_modal(EventSetupModal())
 
@@ -1102,7 +1107,7 @@ class ApplyReviewView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v16")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v17")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
@@ -1148,7 +1153,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v16")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v17")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
@@ -1187,7 +1192,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v16")
+    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v17")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -1310,13 +1315,13 @@ async def penalties_cmd(ctx):
 
 @bot.command(name="حذف", aliases=["delete", "del"])
 async def delete_channel_cmd(ctx):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("❌ عذراً يا الحبيب، أمر الحذف مخصص للحاكم ريان فقط!", delete_after=5)
+    if ctx.author.id not in OWNER_IDS:
+        await ctx.send("❌ عذراً يا الحبيب، أمر الحذف مخصص للأونرات فقط!", delete_after=5)
         return
     try:
         await ctx.send("💥 جاري حذف الروم يا طويل العمر...")
         await asyncio.sleep(1)
-        await ctx.channel.delete(reason=f"حذف الروم بأمر الحاكم ريان")
+        await ctx.channel.delete(reason=f"حذف الروم بأمر الأونر")
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
@@ -1372,8 +1377,8 @@ async def owner_call_cmd(ctx):
 # ----------------------------------------------------
 @bot.command(name="فعاليات", aliases=["فعالية"])
 async def events_panel_command(ctx):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("❌ هذا الأمر مخصص للحاكم ريان فقط يا الذيب!", delete_after=5)
+    if ctx.author.id not in OWNER_IDS:
+        await ctx.send("❌ هذا الأمر مخصص للأونرات فقط يا الذيب!", delete_after=5)
         return
 
     try:
@@ -1472,8 +1477,8 @@ async def performance_slash(interaction: discord.Interaction):
 
 @bot.command(name="تيمات", aliases=["teams_panel"])
 async def teams_panel_cmd(ctx):
-    if ctx.author.id != BOT_OWNER_ID:
-        await ctx.send("❌ عذراً يا الحبيب، هذه القائمة مخصصة للحاكم ريان فقط!", delete_after=5)
+    if ctx.author.id not in OWNER_IDS:
+        await ctx.send("❌ عذراً يا الحبيب، هذه القائمة مخصصة للأونرات فقط!", delete_after=5)
         return
     try:
         await ctx.message.delete()
@@ -1497,7 +1502,7 @@ async def teams_panel_cmd(ctx):
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
-    embed.set_footer(text="لوحة تحكم الحاكم الخاصة | منتدى النظيم")
+    embed.set_footer(text="لوحة تحكم الأونر الخاصة | منتدى النظيم")
     await ctx.send(embed=embed, view=TeamsControlView())
 
 @bot.tree.command(name="تحذير", description="[عقوبة سريعة] تطبيق تحذير إداري رسمي على عضو")
@@ -1763,7 +1768,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات ونداء الأอนر",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لإظهار لوحة الفعاليات وزر بدء فعالية)\n▫️ `!اونر` (لاستدعاء الأอนر وتحتوي على حماية رتبة الإدارة)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لإظهار لوحة الفعاليات وزر بدء فعالية للأونرات)\n▫️ `!اونر` (لاستدعاء الأอนر وتحتوي على حماية رتبة الإدارة)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
@@ -1772,7 +1777,7 @@ async def help_command(ctx):
 @bot.command(name="دبل_نقاط", aliases=["doublepoints", "دبل"])
 async def double_points(ctx):
     if not is_admin_or_owner(ctx):
-        await ctx.send("❌ مخصص للأدمنستريتر فقط!")
+        await ctx.send("❌ مخصص للأدمنستريتر والأونرات فقط!")
         return
     global double_points_end_time
     double_points_end_time = time.time() + 3600
@@ -1902,7 +1907,7 @@ async def leaderboard(ctx: commands.Context):
 @bot.command(name="تصفير_الفرق", aliases=["reset_teams"])
 async def reset_teams_cmd(ctx):
     if not is_admin_or_owner(ctx):
-        await ctx.send("❌ مخصص للأدمنستريتر فقط!")
+        await ctx.send("❌ مخصص للأدمنستريتر والأونرات فقط!")
         return
     
     guild = ctx.guild
