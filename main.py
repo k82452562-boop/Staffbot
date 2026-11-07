@@ -21,6 +21,12 @@ OWNER_IDS = [
     1526761757497098335  # الأيدي الثاني
 ]
 
+# الأيدي الخاصة المطلوبة لتنبيهات الترقيات الخاصة
+PROMOTION_ALERT_USER_IDS = [
+    1304459341730021476,
+    391638472022163456
+]
+
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
 
 ALLOWED_ROLE_IDS = [
@@ -65,12 +71,10 @@ POINTS_CONFIG = {
 }
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
-
-# الرتبة الإضافية الجديدة المطلوبة عند التوظيف
 NEW_HIRE_EXTRA_ROLE_ID = 1540839564506300476
 
 JUNIOR_ROLES_LIST = [
-    1548407040014155806, # أول رتبة في الإدارة الصغرى
+    1548407040014155806, 
     1548407479396991047,
     1548407580131336283,
     1548407675048689715,
@@ -273,7 +277,7 @@ async def save_teams_persistent_to_discord():
                                 except:
                                     pass
                 file = discord.File(TEAM_PERSISTENT_FILE, filename="team_persistent_scores.json")
-                await channel.send("💾 **[حفظ سحابي فوري] تم تأمين نسخة نقاط التيمات:**", file=file)
+                await channel.send("💾 **[حفظ سحابي فوري] تم تأمين نسخة نقاط التيمات الإجمالية:**", file=file)
                 break
     except Exception as e:
         print(f"⚠️ خطأ أثناء رفع نسخة التيمات سحابياً: {e}")
@@ -877,9 +881,6 @@ class EventSetupModal(discord.ui.Modal):
 
         bot.loop.create_task(finish_event_after_delay())
 
-# ----------------------------------------------------
-# 🏅 مودال توزيع النقاط المخصص لكل مركز (توب الفعالية)
-# ----------------------------------------------------
 class EventRewardModal(discord.ui.Modal):
     def __init__(self, sorted_participants, guild, ping_str, announce_channel):
         super().__init__(title="توزيع جوائز ونقاط الفعالية")
@@ -1008,9 +1009,6 @@ class EventDistributeView(discord.ui.View):
 
         await interaction.response.send_modal(EventRewardModal(self.sorted_participants, self.guild, self.ping_str, self.announce_channel))
 
-# ----------------------------------------------------
-# 🔘 لوحة وزر بدء الفعالية (.فعاليات)
-# ----------------------------------------------------
 class StartEventPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -1047,7 +1045,7 @@ async def on_message(message):
                 if role_to_add and role_to_add not in member.roles:
                     await member.add_roles(role_to_add, reason="منح رتبة اسم الحساب تلقائياً")
                 try:
-                    await member.send(f"✅ **يا هلا يا الذيب! تم تعديل اسمك بالسيرفر إلى:** `{new_nickname}` ونزلت رتبتك بنجاح.")
+                    await member.send(f"✅ **يا هلا يا الذيب!** تم تعديل اسمك بالسيرفر إلى: `{new_nickname}` ونزلت رتبتك بنجاح.")
                 except Exception:
                     pass
             except Exception as e:
@@ -1294,9 +1292,6 @@ async def panel_apply(ctx):
     embed.set_footer(text="منتدى النظيم | قيادة السيرفر العليا")
     await ctx.send(embed=embed, view=ApplyButtonView())
 
-# ----------------------------------------------------
-# 🔍 أمر فحص الأعضاء وإعطاء رتبة غير الموثق
-# ----------------------------------------------------
 @bot.command(name="فحص_الرتب", aliases=["فحص", "check_roles"])
 async def check_roles_cmd(ctx):
     if ctx.author.id not in OWNER_IDS:
@@ -1327,9 +1322,6 @@ async def check_roles_cmd(ctx):
 
     await msg.edit(content=f"✅ **تم الانتهاء من الفحص بنجاح!**\nتم إعطاء رتبة العضو غير الموثق لـ **`{count}`** عضو ممن لم يكونوا يمتلكون أي رتبة.")
 
-# ----------------------------------------------------
-# ✨ أمر تفعيل جماعي
-# ----------------------------------------------------
 @bot.command(name="تفعيل_الكل", aliases=["تفعيل", "verify_all"])
 async def verify_all_cmd(ctx):
     if ctx.author.id not in OWNER_IDS:
@@ -1364,9 +1356,6 @@ async def verify_all_cmd(ctx):
 
     await msg.edit(content=f"✅ **تم إتمام التفعيل الجماعي بنجاح!**\nتم منح رتبة التفعيل لـ **`{count}`** عضو.")
 
-# ----------------------------------------------------
-# 👑 أمر توظيف إداري معدل (.توظيف @الشخص الرقم) مع الرتبة الإضافية
-# ----------------------------------------------------
 @bot.command(name="توظيف", aliases=["hire"])
 async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
     if ctx.author.id not in OWNER_IDS:
@@ -1374,15 +1363,14 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
         return
 
     guild = ctx.guild
-    staff_role = guild.get_role(ADMIN_ROLE_PENG_ID) # رتبة طاقم الإدارة (1545520633939624006)
-    first_junior_role = guild.get_role(JUNIOR_ROLES_LIST[0]) # أول رتبة في الإدارة الصغرى (1548407040014155806)
-    extra_role = guild.get_role(NEW_HIRE_EXTRA_ROLE_ID) # الرتبة الإضافية الجديدة (1540839564506300476)
+    staff_role = guild.get_role(ADMIN_ROLE_PENG_ID) 
+    first_junior_role = guild.get_role(JUNIOR_ROLES_LIST[0]) 
+    extra_role = guild.get_role(NEW_HIRE_EXTRA_ROLE_ID) 
 
     if not staff_role or not first_junior_role or not extra_role:
         await ctx.send("❌ خطأ: إحدى رتب التوظيف الأساسية أو الإضافية غير موجودة بالسيرفر وتأكد من الآديات!")
         return
 
-    # تنظيف اسم العضو وإزالة NZM | لو كانت موجودة واستبدالها بـ NZ ﹝الرقم﹞
     current_nick = member.display_name
     clean_name = current_nick
     if "NZM |" in clean_name:
@@ -1395,7 +1383,6 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
         new_nickname = new_nickname[:32]
 
     try:
-        # تعديل الاسم وإعطاء الرتب الثلاث
         await member.edit(nick=new_nickname, reason=f"توظيف إداري برقم الهوية بواسطة الأونر {ctx.author.name}")
 
         roles_to_add = []
@@ -1411,7 +1398,6 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
 
         await ctx.send(f"🎉 **مبروك للمطنوخ {member.mention}!** تم توظيفه وتعديل اسمه إلى `{new_nickname}` ونزلت رتب الإدارة الثلاث بنجاح.")
 
-        # إرسال لوق التوظيف
         log_channel = guild.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             embed = discord.Embed(
@@ -1431,8 +1417,122 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
         await ctx.send(f"❌ حدث خطأ أثناء توظيف العضو: {e}")
 
 # ----------------------------------------------------
-# ⬆️ أمر ترقية إداري يدوي (.ترقية @الشخص) للأدمنستريتر
+# ⬆️ نظام الترقية اليدوية بالأزرار والتحقق والإشعارات الخاصة
 # ----------------------------------------------------
+class ManualPromotionView(discord.ui.View):
+    def __init__(self, admin: discord.Member, target: discord.Member, target_role: discord.Role, role_category_name: str):
+        super().__init__(timeout=60)
+        self.admin = admin
+        self.target = target
+        self.target_role = target_role
+        self.role_category_name = role_category_name
+        self.is_handled = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not is_admin_or_owner(interaction):
+            await interaction.response.send_message("❌ هذا الزر مخصص للأدمنستريتر فقط!", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="نعم، تم أخذ الإذن (ترقية)", style=discord.ButtonStyle.green, emoji="✅")
+    async def confirm_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.is_handled:
+            await interaction.response.send_message("⚠️ تم إتمام هذه الترقية مسبقاً!", ephemeral=True)
+            return
+
+        self.is_handled = True
+        for child in self.children:
+            child.disabled = True
+        
+        try:
+            await interaction.message.edit(view=self)
+        except:
+            pass
+
+        guild = interaction.guild
+        notif_role = guild.get_channel(NOTIFICATION_CHANNEL_ID) or guild.get_role(NOTIFICATION_CHANNEL_ID)
+
+        try:
+            all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
+            roles_to_remove = [
+                r for r in self.target.roles 
+                if r.id in all_managed_ids and r.id != self.target_role.id
+            ]
+            if roles_to_remove:
+                await self.target.remove_roles(*roles_to_remove, reason=f"ترقية يدوية بواسطة {self.admin.name}")
+            
+            await self.target.add_roles(self.target_role, reason=f"ترقية يدوية معتمدة بواسطة {self.admin.name}")
+            
+            # تصفير النقاط الشخصية
+            data = load_data()
+            user_id = str(self.target.id)
+            if user_id not in data or not isinstance(data[user_id], dict):
+                data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
+            
+            data[user_id]["points"] = 0
+            data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
+            save_data(data, guild)
+
+            success_text = (
+                f"👑 **ترقية إدارية معتمدة وتصفير نقاط شخصية:**\n"
+                f"قام الأدمن/الأونر {self.admin.mention} بترقية المطنوخ {self.target.mention} إلى رتبة `{self.target_role.name}` ضمن **{self.role_category_name}**!\n"
+                f"🔄 **ملاحظة:** تم تصفير نقاطه الشخصية لانطلاق تحدٍ جديد، ونقاط فريقه (التيم) محفوظة بالكامل."
+            )
+            
+            await interaction.response.send_message(f"✅ **تمت ترقية العضو {self.target.mention} بنجاح وتم إرسال الإشعارات!**", ephemeral=True)
+            
+            log_channel = guild.get_channel(LOG_CHANNEL_ID)
+            if log_channel:
+                await log_channel.send(success_text)
+
+            # إرسال رسالة خاصة (DM) للأونرات المحددين بالآديات المطلوبة
+            for owner_id in PROMOTION_ALERT_USER_IDS:
+                try:
+                    owner_member = guild.get_member(owner_id)
+                    if not owner_member:
+                        owner_member = await bot.fetch_user(owner_id)
+                    if owner_member:
+                        dm_embed = discord.Embed(
+                            title="🚨 | إشعار ترقية إدارية قيادية",
+                            description=(
+                                f"**تفاصيل الترقية في السيرفر ({guild.name}):**\n\n"
+                                f"👤 **العضو المُرَقَّى:** {self.target.mention} (`{self.target.id}`)\n"
+                                f"🛡️ **الرتبة الجديدة:** `{self.target_role.name}`\n"
+                                f"👑 **المشرف/الأدمن المسؤول:** {self.admin.mention} (`{self.admin.id}`)\n"
+                                f"📅 **الوقت:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                            ),
+                            color=discord.Color.from_rgb(241, 196, 15),
+                            timestamp=discord.utils.utcnow()
+                        )
+                        await owner_member.send(embed=dm_embed)
+                except Exception as e:
+                    print(f"تعذر إرسال رسالة الترقية الخاصة للأونر {owner_id}: {e}")
+
+            try:
+                await self.target.send(f"🎉 **يا هلا يا الذيب!** تم ترقيتك في سيرفر **{guild.name}** إلى رتبة `{self.target_role.name}` بمعية الإدارة العليا.")
+            except:
+                pass
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ حدث خطأ أثناء تنفيذ الترقية: {e}", ephemeral=True)
+
+    @discord.ui.button(label="إلغاء الطلب", style=discord.ButtonStyle.red, emoji="❌")
+    async def cancel_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.is_handled:
+            await interaction.response.send_message("⚠️ تم حسم الطلب مسبقاً!", ephemeral=True)
+            return
+        
+        self.is_handled = True
+        for child in self.children:
+            child.disabled = True
+        
+        try:
+            await interaction.message.edit(view=self)
+        except:
+            pass
+
+        await interaction.response.send_message("❌ **تم إلغاء طلب الترقية بنجاح.**", ephemeral=True)
+
 @bot.command(name="ترقية", aliases=["promote"])
 async def manual_promote_cmd(ctx, member: discord.Member):
     if not is_admin_or_owner(ctx):
@@ -1440,11 +1540,8 @@ async def manual_promote_cmd(ctx, member: discord.Member):
         return
 
     guild = ctx.guild
-    notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
-    
     target_role = None
     role_category_name = ""
-    required_points = 0
 
     is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
 
@@ -1458,7 +1555,6 @@ async def manual_promote_cmd(ctx, member: discord.Member):
         next_idx = current_senior_idx + 1
         if next_idx < len(SENIOR_HIGHER_ROLES):
             target_info = SENIOR_HIGHER_ROLES[next_idx]
-            required_points = target_info["points"]
             target_role = guild.get_role(target_info["role_id"])
             role_category_name = "الإدارة العليا المتقدمة"
     else:
@@ -1492,47 +1588,21 @@ async def manual_promote_cmd(ctx, member: discord.Member):
         await ctx.send(f"❌ العضو {member.mention} وصل لأعلى رتبة إدارية موجودة ولا يمكن ترقيته أكثر!")
         return
 
-    try:
-        all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
-        roles_to_remove = [
-            r for r in member.roles 
-            if r.id in all_managed_ids and r.id != target_role.id
-        ]
-        if roles_to_remove:
-            await member.remove_roles(*roles_to_remove, reason=f"ترقية يدوية بواسطة الأدمن {ctx.author.name}: سحب الرتبة القديمة")
-        
-        await member.add_roles(target_role, reason=f"ترقية يدوية بواسطة الأدمن {ctx.author.name}")
-        
-        # تصفير النقاط الشخصية
-        data = load_data()
-        user_id = str(member.id)
-        if user_id not in data or not isinstance(data[user_id], dict):
-            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
-        
-        data[user_id]["points"] = 0
-        data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
-        save_data(data, guild)
+    embed = discord.Embed(
+        title="⚠️ | تأكيد طلب الترقية الإدارية",
+        description=(
+            f"يا هلا بالمطنوخ {ctx.author.mention}.\n\n"
+            f"أنت على وشك ترقية العضو: {member.mention}\n"
+            f"الرتبة القادمة: `{target_role.name}` ضمن **{role_category_name}**.\n\n"
+            f"❓ **هل تم أخذ الإذن من مسؤول الإدارة؟**"
+        ),
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="منتدى النظيم | نظام اعتمادات الترقيات الآمن")
 
-        role_ping_str = notif_role.mention if notif_role else ""
-        success_msg = (
-            f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية يدوية وتصفير نقاط شخصية:**\n"
-            f"تمت ترقية المطنوخ {member.mention} بواسطة {ctx.author.mention} إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
-            f"🔄 **ملاحظة:** تم تصفير نقاطه الشخصية لانطلاق تحدٍ جديد، ونقاط فريقه (التيم) محفوظة بالكامل."
-        )
-        
-        await ctx.send(success_msg)
-        
-        log_channel = guild.get_channel(LOG_CHANNEL_ID)
-        if log_channel:
-            await log_channel.send(success_msg)
-
-        try:
-            await member.send(f"🎉 **يا هلا يا الذيب!** تم ترقيتك في سيرفر **{guild.name}** إلى رتبة `{target_role.name}` بواسطة {ctx.author.name}.")
-        except:
-            pass
-
-    except Exception as e:
-        await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الترقية: {e}")
+    view = ManualPromotionView(admin=ctx.author, target=member, target_role=target_role, role_category_name=role_category_name)
+    await ctx.send(embed=embed, view=view)
 
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
@@ -1615,9 +1685,6 @@ async def owner_call_cmd(ctx):
         embed.set_footer(text="منتدى النظيم | نداء الأونرات السريع")
         await ctx.send(content=role_mention, embed=embed)
 
-# ----------------------------------------------------
-# 🏆 أمر .فعاليات (يعرض الإمبيد وزر بدء الفعالية)
-# ----------------------------------------------------
 @bot.command(name="فعاليات", aliases=["فعالية"])
 async def events_panel_command(ctx):
     if ctx.author.id not in OWNER_IDS:
@@ -1706,10 +1773,6 @@ async def on_ready():
     except Exception as e:
         print(f"❌ خطأ في مزامنة أوامر السلاش: {e}")
     print(f"🚀 [بوت منتدى النظيم شغّال بنجاح تام] باسم: {bot.user}")
-
-# ----------------------------------------------------
-# 🛡️ أوامر العقوبات والسلاش المبسطة والكاملة
-# ----------------------------------------------------
 
 @bot.tree.command(name="أداء", description="عرض تقارير أداء ومقارنة الفرق ونقاطهم وعدد ترقياتهم")
 async def performance_slash(interaction: discord.Interaction):
@@ -2011,7 +2074,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية إدارية يدوية وتصفير النقاط للأدمن)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأอนر)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية إدارية يدوية بأخذ الإذن وتنبيهات الأونر)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
