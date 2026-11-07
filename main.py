@@ -66,8 +66,11 @@ POINTS_CONFIG = {
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
 
+# الرتبة الإضافية الجديدة المطلوبة عند التوظيف
+NEW_HIRE_EXTRA_ROLE_ID = 1540839564506300476
+
 JUNIOR_ROLES_LIST = [
-    1548407040014155806, # أول رتبة في الإدارة
+    1548407040014155806, # أول رتبة في الإدارة الصغرى
     1548407479396991047,
     1548407580131336283,
     1548407675048689715,
@@ -608,21 +611,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v21")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v22")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v21")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v22")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v21")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v22")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -636,21 +639,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v21")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v22")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v21")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v22")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v21")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v22")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -668,7 +671,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v28")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v29")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -997,7 +1000,7 @@ class EventDistributeView(discord.ui.View):
         self.ping_str = ping_str
         self.announce_channel = announce_channel
 
-    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v10")
+    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v11")
     async def distribute_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in OWNER_IDS:
             await interaction.response.send_message("❌ هذا الزر مخصص للأونرات فقط!", ephemeral=True)
@@ -1012,7 +1015,7 @@ class StartEventPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🚀 بدء فعالية جديدة", style=discord.ButtonStyle.green, custom_id="open_event_setup_modal_btn_v6")
+    @discord.ui.button(label="🚀 بدء فعالية جديدة", style=discord.ButtonStyle.green, custom_id="open_event_setup_modal_btn_v7")
     async def open_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in OWNER_IDS:
             await interaction.response.send_message("❌ هذا الزر مخصص للأونرات فقط!", ephemeral=True)
@@ -1107,7 +1110,7 @@ class ApplyReviewView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v21")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v22")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
@@ -1153,7 +1156,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v21")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v22")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
@@ -1192,7 +1195,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v21")
+    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v22")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -1362,7 +1365,7 @@ async def verify_all_cmd(ctx):
     await msg.edit(content=f"✅ **تم إتمام التفعيل الجماعي بنجاح!**\nتم منح رتبة التفعيل لـ **`{count}`** عضو.")
 
 # ----------------------------------------------------
-# 👑 أمر توظيف إداري معدل (.توظيف @الشخص الرقم)
+# 👑 أمر توظيف إداري معدل (.توظيف @الشخص الرقم) مع الرتبة الإضافية
 # ----------------------------------------------------
 @bot.command(name="توظيف", aliases=["hire"])
 async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
@@ -1372,10 +1375,11 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
 
     guild = ctx.guild
     staff_role = guild.get_role(ADMIN_ROLE_PENG_ID) # رتبة طاقم الإدارة (1545520633939624006)
-    first_junior_role = guild.get_role(JUNIOR_ROLES_LIST[0]) # أول رتبة في الإدارة (1548407040014155806)
+    first_junior_role = guild.get_role(JUNIOR_ROLES_LIST[0]) # أول رتبة في الإدارة الصغرى (1548407040014155806)
+    extra_role = guild.get_role(NEW_HIRE_EXTRA_ROLE_ID) # الرتبة الإضافية الجديدة (1540839564506300476)
 
-    if not staff_role or not first_junior_role:
-        await ctx.send("❌ خطأ: إحدى رتب التوظيف الأساسية غير موجودة بالسيرفر!")
+    if not staff_role or not first_junior_role or not extra_role:
+        await ctx.send("❌ خطأ: إحدى رتب التوظيف الأساسية أو الإضافية غير موجودة بالسيرفر وتأكد من الآديات!")
         return
 
     # تنظيف اسم العضو وإزالة NZM | لو كانت موجودة واستبدالها بـ NZ ﹝الرقم﹞
@@ -1391,7 +1395,7 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
         new_nickname = new_nickname[:32]
 
     try:
-        # تعديل الاسم وإعطاء الرتب
+        # تعديل الاسم وإعطاء الرتب الثلاث
         await member.edit(nick=new_nickname, reason=f"توظيف إداري برقم الهوية بواسطة الأونر {ctx.author.name}")
 
         roles_to_add = []
@@ -1399,18 +1403,20 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
             roles_to_add.append(staff_role)
         if first_junior_role not in member.roles:
             roles_to_add.append(first_junior_role)
+        if extra_role not in member.roles:
+            roles_to_add.append(extra_role)
 
         if roles_to_add:
             await member.add_roles(*roles_to_add, reason=f"توظيف إداري بواسطة الأونر {ctx.author.name}")
 
-        await ctx.send(f"🎉 **مبروك للمطنوخ {member.mention}!** تم توظيفه وتعديل اسمه إلى `{new_nickname}` ونزلت رتب الإدارة بنجاح.")
+        await ctx.send(f"🎉 **مبروك للمطنوخ {member.mention}!** تم توظيفه وتعديل اسمه إلى `{new_nickname}` ونزلت رتب الإدارة الثلاث بنجاح.")
 
         # إرسال لوق التوظيف
         log_channel = guild.get_channel(LOG_CHANNEL_ID)
         if log_channel:
             embed = discord.Embed(
                 title="💼 | توظيف إداري جديد",
-                description=f"**الأونر المسؤول:** {ctx.author.mention}\n**العضو المُوَظَّف:** {member.mention}\n**الاسم الجديد:** `{new_nickname}`\n**الرتب الممنوحة:**\n▫️ {staff_role.mention}\n▫️ {first_junior_role.mention}",
+                description=f"**الأونر المسؤول:** {ctx.author.mention}\n**العضو المُوَظَّف:** {member.mention}\n**الاسم الجديد:** `{new_nickname}`\n**الرتب الممنوحة:**\n▫️ {staff_role.mention}\n▫️ {first_junior_role.mention}\n▫️ {extra_role.mention}",
                 color=discord.Color.from_rgb(46, 204, 113),
                 timestamp=discord.utils.utcnow()
             )
@@ -1423,6 +1429,110 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
 
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء توظيف العضو: {e}")
+
+# ----------------------------------------------------
+# ⬆️ أمر ترقية إداري يدوي (.ترقية @الشخص) للأدمنستريتر
+# ----------------------------------------------------
+@bot.command(name="ترقية", aliases=["promote"])
+async def manual_promote_cmd(ctx, member: discord.Member):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+        return
+
+    guild = ctx.guild
+    notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
+    
+    target_role = None
+    role_category_name = ""
+    required_points = 0
+
+    is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
+
+    if is_senior_higher:
+        current_senior_idx = -1
+        for idx, s_info in enumerate(SENIOR_HIGHER_ROLES):
+            if any(r.id == s_info["role_id"] for r in member.roles):
+                current_senior_idx = idx
+                break
+        
+        next_idx = current_senior_idx + 1
+        if next_idx < len(SENIOR_HIGHER_ROLES):
+            target_info = SENIOR_HIGHER_ROLES[next_idx]
+            required_points = target_info["points"]
+            target_role = guild.get_role(target_info["role_id"])
+            role_category_name = "الإدارة العليا المتقدمة"
+    else:
+        is_middle = any(r.id in MIDDLE_ROLES_LIST for r in member.roles)
+        current_idx = -1
+        master_list = JUNIOR_ROLES_LIST
+        
+        for idx, rid in enumerate(JUNIOR_ROLES_LIST):
+            if any(r.id == rid for r in member.roles):
+                current_idx = idx
+                master_list = JUNIOR_ROLES_LIST
+                break
+        
+        if current_idx == -1:
+            for idx, rid in enumerate(MIDDLE_ROLES_LIST):
+                if any(r.id == rid for r in member.roles):
+                    current_idx = idx
+                    master_list = MIDDLE_ROLES_LIST
+                    break
+        
+        if current_idx != -1 and current_idx < len(master_list) - 1:
+            next_role_id = master_list[current_idx + 1]
+            target_role = guild.get_role(next_role_id)
+            role_category_name = "الإدارة الصغرى / الوسطى"
+        
+        if not target_role and not is_middle and JUNIOR_ROLES_LIST:
+            target_role = guild.get_role(JUNIOR_ROLES_LIST[0])
+            role_category_name = "الإدارة الصغرى"
+
+    if not target_role:
+        await ctx.send(f"❌ العضو {member.mention} وصل لأعلى رتبة إدارية موجودة ولا يمكن ترقيته أكثر!")
+        return
+
+    try:
+        all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
+        roles_to_remove = [
+            r for r in member.roles 
+            if r.id in all_managed_ids and r.id != target_role.id
+        ]
+        if roles_to_remove:
+            await member.remove_roles(*roles_to_remove, reason=f"ترقية يدوية بواسطة الأدمن {ctx.author.name}: سحب الرتبة القديمة")
+        
+        await member.add_roles(target_role, reason=f"ترقية يدوية بواسطة الأدمن {ctx.author.name}")
+        
+        # تصفير النقاط الشخصية
+        data = load_data()
+        user_id = str(member.id)
+        if user_id not in data or not isinstance(data[user_id], dict):
+            data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
+        
+        data[user_id]["points"] = 0
+        data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
+        save_data(data, guild)
+
+        role_ping_str = notif_role.mention if notif_role else ""
+        success_msg = (
+            f"{role_ping_str} 👑 **يا فخر الإدارة ويا كفو! ترقية يدوية وتصفير نقاط شخصية:**\n"
+            f"تمت ترقية المطنوخ {member.mention} بواسطة {ctx.author.mention} إلى `{target_role.name}` ضمن **{role_category_name}**!\n"
+            f"🔄 **ملاحظة:** تم تصفير نقاطه الشخصية لانطلاق تحدٍ جديد، ونقاط فريقه (التيم) محفوظة بالكامل."
+        )
+        
+        await ctx.send(success_msg)
+        
+        log_channel = guild.get_channel(LOG_CHANNEL_ID)
+        if log_channel:
+            await log_channel.send(success_msg)
+
+        try:
+            await member.send(f"🎉 **يا هلا يا الذيب!** تم ترقيتك في سيرفر **{guild.name}** إلى رتبة `{target_role.name}` بواسطة {ctx.author.name}.")
+        except:
+            pass
+
+    except Exception as e:
+        await ctx.send(f"❌ حدث خطأ أثناء تنفيذ الترقية: {e}")
 
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
@@ -1901,7 +2011,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأอนر)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية إدارية يدوية وتصفير النقاط للأدمن)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأอนر)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
