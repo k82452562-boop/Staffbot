@@ -17,8 +17,8 @@ PREFIX = ("!", ".")
 # الأونرات والمسؤولون بصلاحيات كاملة على كل شيء
 OWNER_IDS = [
     917414299184533515,  # حسابك الأساسي (الحاكم ريان)
-    391638472022163456,  # الأيدي الجديد الأول
-    1526761757497098335  # الأيدي الجديد الثاني
+    391638472022163456,  # الأيدي الأول
+    1526761757497098335  # الأيدي الثاني
 ]
 
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
@@ -608,21 +608,21 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v17")
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v18")
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v17")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v18")
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v17")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v18")
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -636,21 +636,21 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v17")
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v18")
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v17")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v18")
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v17")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v18")
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -668,7 +668,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v24")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v25")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -997,7 +997,7 @@ class EventDistributeView(discord.ui.View):
         self.ping_str = ping_str
         self.announce_channel = announce_channel
 
-    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v6")
+    @discord.ui.button(label="🎁 توزيع النقاط والجوائز حسب المراكز (توب)", style=discord.ButtonStyle.green, custom_id="distribute_event_rewards_btn_v7")
     async def distribute_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in OWNER_IDS:
             await interaction.response.send_message("❌ هذا الزر مخصص للأونرات فقط!", ephemeral=True)
@@ -1012,7 +1012,7 @@ class StartEventPanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🚀 بدء فعالية جديدة", style=discord.ButtonStyle.green, custom_id="open_event_setup_modal_btn_v2")
+    @discord.ui.button(label="🚀 بدء فعالية جديدة", style=discord.ButtonStyle.green, custom_id="open_event_setup_modal_btn_v3")
     async def open_modal_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id not in OWNER_IDS:
             await interaction.response.send_message("❌ هذا الزر مخصص للأونرات فقط!", ephemeral=True)
@@ -1107,7 +1107,7 @@ class ApplyReviewView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v17")
+    @discord.ui.button(label="قبول التقديم", style=discord.ButtonStyle.green, custom_id="accept_apply_persistent_v18")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية تقبل التقديمات يا الغالي.", ephemeral=True)
@@ -1153,7 +1153,7 @@ class ApplyReviewView(discord.ui.View):
         except Exception:
             pass
 
-    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v17")
+    @discord.ui.button(label="رفض التقديم", style=discord.ButtonStyle.red, custom_id="reject_apply_persistent_v18")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction) and not any(r.id in ALLOWED_ROLE_IDS for r in interaction.user.roles):
             await interaction.response.send_message("❌ ما عندك صلاحية ترفض التقديمات.", ephemeral=True)
@@ -1192,7 +1192,7 @@ class ApplyButtonView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v17")
+    @discord.ui.button(label="تقديم الهوية", style=discord.ButtonStyle.blurple, emoji="📝", custom_id="start_apply_persistent_view_v18")
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
@@ -1290,6 +1290,40 @@ async def panel_apply(ctx):
     )
     embed.set_footer(text="منتدى النظيم | قيادة السيرفر العليا")
     await ctx.send(embed=embed, view=ApplyButtonView())
+
+# ----------------------------------------------------
+# 🔍 أمر فحص الأعضاء وإعطاء رتبة 1545695261446250516 لغير الرتب
+# ----------------------------------------------------
+@bot.command(name="فحص_الرتب", aliases=["فحص", "check_roles"])
+async def check_roles_cmd(ctx):
+    if ctx.author.id not in OWNER_IDS:
+        await ctx.send("❌ عذراً، هذا الأمر مخصص للأونرات فقط!", delete_after=5)
+        return
+
+    msg = await ctx.send("🔍 **جاري فحص جميع أعضاء السيرفر وتوزيع الرتب على من ليس لديهم أي رتبة... انتظر شوي!**")
+    
+    guild = ctx.guild
+    target_role = guild.get_role(UNVERIFIED_ROLE_ID)
+    
+    if not target_role:
+        await msg.edit(content="❌ خطأ: الرتبة المستهدفة (`1545695261446250516`) غير موجودة بالسيرفر!")
+        return
+
+    count = 0
+    for member in guild.members:
+        if member.bot:
+            continue
+        
+        # تحقق إذا كان العضو لا يمتلك سوى رتبة everyone الأساسية
+        if len(member.roles) <= 1:
+            try:
+                await member.add_roles(target_role, reason="فحص تلقائي: منح الرتبة للأعضاء الذين بلا رتب")
+                count += 1
+                await asyncio.sleep(0.5) # لتجنب الضغط على حدود ديسكورد (Rate Limit)
+            except Exception as e:
+                print(f"خطأ في إعطاء الرتبة لـ {member.name}: {e}")
+
+    await msg.edit(content=f"✅ **تم الانتهاء من الفحص بنجاح!**\nتم إعطاء رتبة العضو غير الموثق لـ **`{count}`** عضو ممن لم يكونوا يمتلكون أي رتبة.")
 
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
 async def penalties_cmd(ctx):
@@ -1767,8 +1801,8 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
-        name="🛡️ ┋ أوامر العقوبات والفعاليات ونداء الأอนر",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لإظهار لوحة الفعاليات وزر بدء فعالية للأونرات)\n▫️ `!اونر` (لاستدعاء الأอนر وتحتوي على حماية رتبة الإدارة)",
+        name="🛡️ ┋ أوامر العقوبات والفعاليات وفحص الرتب",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.فحص_الرتب` (لفحص جميع الأعضاء وإعطاء رتبة غير الموثق لمن ليس لديه رتبة)\n▫️ `!اونر` (لاستدعاء الأอนر)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
