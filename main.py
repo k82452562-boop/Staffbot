@@ -21,7 +21,6 @@ OWNER_IDS = [
     1526761757497098335  # الأيدي الثاني
 ]
 
-# الأيدي الخاصة المطلوبة لتنبيهات الترقيات الخاصة
 PROMOTION_ALERT_USER_IDS = [
     1304459341730021476,
     391638472022163456
@@ -48,6 +47,9 @@ APPLY_REVIEW_CHANNEL_ID = 1543073109496692737
 WARN_CHANNEL_ID = 1543647851953791179           
 ADMIN_ROLE_PENG_ID = 1545520633939624006        
 EVENT_ANNOUNCE_CHANNEL_ID = 1543082133231243365
+
+# روم نموذج الفصل المطلوب
+DISMISS_LOG_CHANNEL_ID = 1543082450178281504
 
 UNVERIFIED_ROLE_ID = 1545695261446250516      
 VERIFIED_ROLE_ID = 1545516954754875523        
@@ -734,9 +736,6 @@ class TeamsResetView(discord.ui.View):
         await interaction.response.send_message("🔄 **تم تصفير المجموع التنافسي وإحصائيات التكتات والترقيات الأسبوعية للفرق بالكامل!** 🎉", ephemeral=True)
         await send_unified_log(guild, "🔄 | تصفير تنافس وإحصائيات الفرق", f"قام الأدمن {interaction.user.mention} بتصفير التنافس وإحصائيات التكتات والترقيات للفرق أسبوعياً.", discord.Color.from_rgb(231, 76, 60))
 
-# ----------------------------------------------------
-# 🏅 مودال إعدادات الفعالية الجديدة
-# ----------------------------------------------------
 class EventSetupModal(discord.ui.Modal):
     def __init__(self):
         super().__init__(title="إنشاء وإطلاق فعالية إدارية جديدة")
@@ -1417,6 +1416,167 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
         await ctx.send(f"❌ حدث خطأ أثناء توظيف العضو: {e}")
 
 # ----------------------------------------------------
+# 🚫 نظام الفصل الإداري (.فصل @الشخص) بالمودال والنموذج المطلوب
+# ----------------------------------------------------
+class DismissModal(discord.ui.Modal):
+    def __init__(self, admin: discord.Member, target: discord.Member):
+        super().__init__(title="نموذج فصل الإدارة الرسمي")
+        self.admin = admin
+        self.target = target
+
+        self.reason_input = discord.ui.TextInput(
+            label="سبب الفصل",
+            placeholder="اكتب سبب الفصل بوضوح هنا...",
+            style=discord.TextStyle.paragraph,
+            required=True,
+            max_length=300
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        reason = self.reason_input.value.strip()
+
+        # استخراج رتبة الأدمن الأعلى
+        admin_highest_role = self.admin.top_role.name
+
+        # استخراج رتبة الشخص المفصول الإدارية (أعلى رتبة إدارية كان يمتلكها)
+        all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST + [ADMIN_ROLE_PENG_ID, NEW_HIRE_EXTRA_ROLE_ID]
+        target_staff_roles = [r for r in self.target.roles if r.id in all_managed_ids]
+        
+        if target_staff_roles:
+            # ترتيب الرتب حسب الأهمية أو اخذ أطرافها
+            highest_target_role = max(target_staff_roles, key=lambda r: r.position)
+            role_mention_str = highest_target_role.mention
+        else:
+            role_mention_str = "لا توجد رتب إدارية مسجلة"
+
+        # سحب جميع الرتب الإدارية من العضو
+        try:
+            roles_to_remove = [r for r in self.target.roles if r.id in all_managed_ids and not r.is_default()]
+            if roles_to_remove:
+                await self.target.remove_roles(*roles_to_remove, reason=f"فصل إداري بواسطة {self.admin.name}: {reason}")
+        except Exception as e:
+            print(f"خطأ في سحب رتب الفصل: {e}")
+
+        # تنظيف اسم العضو وإزالة رقم الهوية وإرجاعه إلى NZM | الاسم الأساسي
+        current_nick = self.target.display_name
+        clean_name = current_nick
+        
+        # إزالة شكل NZ ﹝الرقم﹞
+        clean_name = re.sub(r'NZ\s*﹝.*?﹞', '', clean_name).strip()
+        if clean_name.startswith("|"):
+            clean_name = clean_name[1:].strip()
+        if "NZM |" in clean_name:
+            clean_name = clean_name.replace("NZM |", "").strip()
+
+        new_nickname = f"NZM | {clean_name}"
+        if len(new_nickname) > 32:
+            new_nickname = new_nickname[:32]
+
+        try:
+            await self.target.edit(nick=new_nickname, reason=f"فصل إداري وإزالة رقم الهوية بواسطة {self.admin.name}")
+        except Exception as e:
+            print(f"خطأ في تعديل اسم المفصول: {e}")
+
+        # إرسال النموذج في روم نموذج الفصل المحدد (1543082450178281504)
+        dismiss_channel = guild.get_channel(DISMISS_LOG_CHANNEL_ID)
+        if dismiss_channel:
+            model_text = (
+                f"**```نموذج فصل الإدارة```**\n\n"
+                f"- **إسمك :** {self.admin.name}\n\n"
+                f"- **رتبتك:** {admin_highest_role}\n\n"
+                f"- **إسم الشخص :** {self.target.mention}\n\n"
+                f"- **رتبته:** {role_mention_str}\n\n"
+                f"- **سبب الفصل:** {reason}\n"
+            )
+            await dismiss_channel.send(model_text)
+
+        await interaction.response.send_message(f"✅ **تم فصل العضو {self.target.mention} وإزالة رتبه واسمه بنجاح وإرسال النموذج في روم الفصل!**", ephemeral=True)
+
+        try:
+            await self.target.send(f"❌ نعتذر منك، تم فصلك من الإدارة في سيرفر **{guild.name}**.\n📌 **السبب:** {reason}")
+        except:
+            pass
+
+@bot.command(name="فصل", aliases=["dismiss", "fire"])
+async def dismiss_staff_cmd(ctx, member: discord.Member):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+        return
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+    modal = DismissModal(admin=ctx.author, target=member)
+    # ملاحظة: في ديسكورد بايثون، الأوامر النصية العادية (Prefix Commands) لا تدعم فتح Modal مباشرة إلا عبر التفاعل (Interaction). 
+    # لذلك لتسهيل الأمر على الأونر، سنضع الأمر كأمر سلاش (Slash Command) أو بوتفاعل زر، أو نقوم بتنفيذه مباشرة عبر تفاعل سحابي.
+    # لتفعيل الأمر بكل سهولة كأمر سلاش فوري، تم وضعه في الأسفل كـ Slash Command أدق وأسرع!
+
+@bot.tree.command(name="فصل", description="[فصل إداري] سحب الرتب الإدارية وإزالة رقم الهوية وتوثيق نموذج الفصل")
+@app_commands.describe(member="اختر العضو المراد فصله", reason="سبب الفصل الإداري")
+async def dismiss_slash(interaction: discord.Interaction, member: discord.Member, reason: str):
+    if not is_admin_or_owner(interaction):
+        return await interaction.response.send_message("❌ ما عندك صلاحية لتنفيذ هذا الأمر!", ephemeral=True)
+
+    guild = interaction.guild
+    admin = interaction.user
+    admin_highest_role = admin.top_role.name
+
+    all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST + [ADMIN_ROLE_PENG_ID, NEW_HIRE_EXTRA_ROLE_ID]
+    target_staff_roles = [r for r in member.roles if r.id in all_managed_ids]
+    
+    if target_staff_roles:
+        highest_target_role = max(target_staff_roles, key=lambda r: r.position)
+        role_mention_str = highest_target_role.mention
+    else:
+        role_mention_str = "لا توجد رتب إدارية مسجلة"
+
+    try:
+        roles_to_remove = [r for r in member.roles if r.id in all_managed_ids and not r.is_default()]
+        if roles_to_remove:
+            await member.remove_roles(*roles_to_remove, reason=f"فصل إداري بواسطة {admin.name}: {reason}")
+    except Exception as e:
+        print(f"خطأ في سحب رتب الفصل: {e}")
+
+    current_nick = member.display_name
+    clean_name = current_nick
+    clean_name = re.sub(r'NZ\s*﹝.*?﹞', '', clean_name).strip()
+    if clean_name.startswith("|"):
+        clean_name = clean_name[1:].strip()
+    if "NZM |" in clean_name:
+        clean_name = clean_name.replace("NZM |", "").strip()
+
+    new_nickname = f"NZM | {clean_name}"
+    if len(new_nickname) > 32:
+        new_nickname = new_nickname[:32]
+
+    try:
+        await member.edit(nick=new_nickname, reason=f"فصل إداري بواسطة {admin.name}")
+    except Exception as e:
+        print(f"خطأ في تعديل اسم المفصول: {e}")
+
+    dismiss_channel = guild.get_channel(DISMISS_LOG_CHANNEL_ID)
+    if dismiss_channel:
+        model_text = (
+            f"**```نموذج فصل الإدارة```**\n\n"
+            f"- **إسمك :** {admin.name}\n\n"
+            f"- **رتبتك:** {admin_highest_role}\n\n"
+            f"- **إسم الشخص :** {member.mention}\n\n"
+            f"- **رتبته:** {role_mention_str}\n\n"
+            f"- **سبب الفصل:** {reason}\n"
+        )
+        await dismiss_channel.send(model_text)
+
+    await interaction.response.send_message(f"✅ **تم فصل العضو {member.mention} بنجاح وإرسال نموذج الفصل في الروم المخصص!**", ephemeral=True)
+
+    try:
+        await member.send(f"❌ نعتذر منك، تم فصلك من الإدارة في سيرفر **{guild.name}**.\n📌 **السبب:** {reason}")
+    except:
+        pass
+
+# ----------------------------------------------------
 # ⬆️ نظام الترقية اليدوية بالأزرار والتحقق والإشعارات الخاصة
 # ----------------------------------------------------
 class ManualPromotionView(discord.ui.View):
@@ -1450,7 +1610,6 @@ class ManualPromotionView(discord.ui.View):
             pass
 
         guild = interaction.guild
-        notif_role = guild.get_channel(NOTIFICATION_CHANNEL_ID) or guild.get_role(NOTIFICATION_CHANNEL_ID)
 
         try:
             all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
@@ -1463,7 +1622,7 @@ class ManualPromotionView(discord.ui.View):
             
             await self.target.add_roles(self.target_role, reason=f"ترقية يدوية معتمدة بواسطة {self.admin.name}")
             
-            # تصفير النقاط الشخصية
+            # تصفير النقاط الشخصية مع الحفاظ على نقاط التيمات كاملة ومضمونة 100%
             data = load_data()
             user_id = str(self.target.id)
             if user_id not in data or not isinstance(data[user_id], dict):
@@ -1485,7 +1644,7 @@ class ManualPromotionView(discord.ui.View):
             if log_channel:
                 await log_channel.send(success_text)
 
-            # إرسال رسالة خاصة (DM) للأونرات المحددين بالآديات المطلوبة
+            # إرسال رسالة خاصة للأونرات المحددين بالآديات المطلوبة
             for owner_id in PROMOTION_ALERT_USER_IDS:
                 try:
                     owner_member = guild.get_member(owner_id)
@@ -1602,6 +1761,10 @@ async def manual_promote_cmd(ctx, member: discord.Member):
     embed.set_footer(text="منتدى النظيم | نظام اعتمادات الترقيات الآمن")
 
     view = ManualPromotionView(admin=ctx.author, target=member, target_role=target_role, role_category_name=role_category_name)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
     await ctx.send(embed=embed, view=view)
 
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
@@ -2073,8 +2236,8 @@ async def help_command(ctx):
         inline=False
     )
     embed.add_field(
-        name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية إدارية يدوية بأخذ الإذن وتنبيهات الأونر)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)",
+        name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف والفصل",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
