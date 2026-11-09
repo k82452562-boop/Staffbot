@@ -47,8 +47,6 @@ APPLY_REVIEW_CHANNEL_ID = 1543073109496692737
 WARN_CHANNEL_ID = 1543647851953791179           
 ADMIN_ROLE_PENG_ID = 1545520633939624006        
 EVENT_ANNOUNCE_CHANNEL_ID = 1543082133231243365
-
-# روم نموذج الفصل المطلوب
 DISMISS_LOG_CHANNEL_ID = 1543082450178281504
 
 UNVERIFIED_ROLE_ID = 1545695261446250516      
@@ -120,6 +118,7 @@ TEAMS_RESET_FILE = "teams_reset.json"
 TEAM_BONUS_FILE = "team_bonuses.json"
 TEAM_PERSISTENT_FILE = "team_persistent_scores.json"
 TEAM_STATS_RESET_FILE = "team_stats_resets.json"
+RATINGS_FILE = "ratings.json"
 
 double_points_end_time = 0
 processed_tickets = set()
@@ -176,6 +175,12 @@ def save_data(data, guild=None):
     save_json(DATA_FILE, data)
     if guild:
         bot.loop.create_task(save_points_to_discord(guild))
+
+def load_ratings():
+    return load_json(RATINGS_FILE)
+
+def save_ratings(data):
+    save_json(RATINGS_FILE, data)
 
 def load_teams_reset():
     return load_json(TEAMS_RESET_FILE)
@@ -561,6 +566,182 @@ async def calculate_teams_performance(guild: discord.Guild):
     
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الموحد")
     return embed
+
+# ----------------------------------------------------
+# ⭐ نظام التقييم التفاعلي الجديد (سحب رتبة 1545520633939624006 تلقائياً)
+# ----------------------------------------------------
+class RatingSelectModal(discord.ui.Modal):
+    def __init__(self, staff_member: discord.Member, stars: int):
+        super().__init__(title=f"تقييم الإداري: {staff_member.display_name} ({stars} نجوم ⭐)")
+        self.staff_member = staff_member
+        self.stars = stars
+
+        self.comment_input = discord.ui.TextInput(
+            label="سبب أو ملاحظة التقييم (اختياري)",
+            placeholder="اكتب رأيك أو سبب التقييم هنا...",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            max_length=200
+        )
+        self.add_item(self.comment_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        voter = interaction.user
+        comment = self.comment_input.value.strip() if self.comment_input.value else "بدون ملاحظة"
+
+        ratings = load_ratings()
+        staff_id_str = str(self.staff_member.id)
+
+        if staff_id_str not in ratings:
+            ratings[staff_id_str] = {"total_stars": 0, "count": 0, "reviews": []}
+
+        ratings[staff_id_str]["total_stars"] += self.stars
+        ratings[staff_id_str]["count"] += 1
+        ratings[staff_id_str]["reviews"].append({
+            "voter_id": voter.id,
+            "voter_name": voter.name,
+            "stars": self.stars,
+            "comment": comment,
+            "time": datetime.now().strftime('%Y-%m-%d %H:%M')
+        })
+        save_ratings(ratings)
+
+        await interaction.response.send_message(f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)! شكراً لمشاركتك.**", ephemeral=True)
+
+        await send_unified_log(
+            guild,
+            "⭐ | تقييم إداري جديد",
+            f"👤 **الإداري المُقيَّم:** {self.staff_member.mention}\n"
+            f"⭐ **التقييم:** `{'⭐' * self.stars}` ({self.stars}/5)\n"
+            f"✍️ **الملاحظة:** `{comment}`\n"
+            f"🛡️ **المُقيِّم:** {voter.mention}",
+            discord.Color.gold()
+        )
+
+class RatingStarsSelect(discord.ui.Select):
+    def __init__(self, staff_member: discord.Member):
+        self.staff_member = staff_member
+        options = [
+            discord.SelectOption(label="⭐⭐⭐⭐⭐ 5 نجوم (ممتاز جداً)", value="5", description="أداء فائق وإنجاز رائع"),
+            discord.SelectOption(label="⭐⭐⭐⭐ 4 نجوم (جيد جداً)", value="4", description="أداء ممتاز ومميز"),
+            discord.SelectOption(label="⭐⭐⭐ 3 نجوم (جيد)", value="3", description="أداء متوسط ومقبول"),
+            discord.SelectOption(label="⭐⭐ 2 نجوم (مقبول)", value="2", description="يحتاج تحسين"),
+            discord.SelectOption(label="⭐ نجمة واحدة (ضعيف)", value="1", description="أداء ضعيف جداً")
+        ]
+        super().__init__(placeholder=f"اختر عدد النجوم لتقييم {staff_member.display_name}...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        stars = int(self.values[0])
+        await interaction.response.send_modal(RatingSelectModal(self.staff_member, stars))
+
+class RatingStarsView(discord.ui.View):
+    def __init__(self, staff_member: discord.Member):
+        super().__init__(timeout=60)
+        self.add_item(RatingStarsSelect(staff_member))
+
+class StaffRatingSelect(discord.ui.Select):
+    def __init__(self, staff_members: list):
+        options = []
+        for member in staff_members[:25]:
+            options.append(discord.SelectOption(
+                label=member.display_name[:50],
+                value=str(member.id),
+                description=f"تقييم الإداري {member.name}",
+                emoji="⭐"
+            ))
+        super().__init__(placeholder="اضغط هنا لاختيار الإداري المراد تقييمه...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        staff_id = int(self.values[0])
+        staff_member = guild.get_member(staff_id)
+
+        if not staff_member:
+            await interaction.response.send_message("❌ عذراً، الإداري غير موجود بالسيرفر حالياً.", ephemeral=True)
+            return
+
+        view = RatingStarsView(staff_member)
+        await interaction.response.send_message(f"⭐ **تقييم الإداري:** {staff_member.mention}\nالرجاء اختيار عدد النجوم من القائمة أدناه:", view=view, ephemeral=True)
+
+class RatingPanelView(discord.ui.View):
+    def __init__(self, staff_members: list):
+        super().__init__(timeout=None)
+        if staff_members:
+            self.add_item(StaffRatingSelect(staff_members))
+
+@bot.command(name="بانل_تقييم", aliases=["rating_panel"])
+async def rating_panel_cmd(ctx):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+        return
+    try: await ctx.message.delete()
+    except: pass
+
+    guild = ctx.guild
+    target_role_id = 1545520633939624006
+    staff_role = guild.get_role(target_role_id)
+
+    if not staff_role:
+        await ctx.send("❌ خطأ: رتبة الإدارة المستهدفة غير موجودة بالسيرفر!")
+        return
+
+    staff_members = [m for m in guild.members if staff_role in m.roles and not m.bot]
+
+    embed = discord.Embed(
+        title="⭐ | تقييم • الإدارة والدعم الفني",
+        description=(
+            "**أهلاً بك يا visitor في قسم تقييم الإدارة الرسمية لنادي منتدى النظيم.**\n\n"
+            "اضغط على القائمة أدناه، اختر اسم الإداري الذي تريد تقييمه، ثم حدد النجوم واكتب ملاحظتك بكل شفافية لتحسين مستوى الأداء باستمرار!\n\n"
+            f"👥 **عدد الإداريين المتاحين للتقييم حالياً:** `{len(staff_members)}` إداري."
+        ),
+        color=discord.Color.gold(),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الإداري الموحد")
+
+    view = RatingPanelView(staff_members)
+    await ctx.send(embed=embed, view=view)
+
+@bot.command(name="تقييمات", aliases=["ratings", "تقييم"])
+async def show_ratings_cmd(ctx):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ عذراً، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+        return
+
+    ratings = load_ratings()
+    if not ratings:
+        await ctx.send("📊 **لا توجد أي تقييمات مسجلة حتى الآن.**", delete_after=10)
+        return
+
+    guild = ctx.guild
+    embed = discord.Embed(
+        title="📊 | تقارير تقييمات الإدارة الشاملة",
+        description="إليك ملخص تقييمات الأعضاء لجميع طاقم الإدارة:",
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
+    )
+
+    for staff_id_str, data in ratings.items():
+        member = guild.get_member(int(staff_id_str))
+        name = member.mention if member else f"<@{staff_id_str}>"
+        count = data["count"]
+        total = data["total_stars"]
+        avg = round(total / count, 1) if count > 0 else 0
+        stars_str = '⭐' * round(avg)
+
+        embed.add_field(
+            name=f"🛡️ الإداري: {name}",
+            value=(
+                f"📈 **عدد المُقيمين:** `{count}` شخص\n"
+                f"⭐ **متوسط التقييم:** `{avg} / 5` {stars_str}\n"
+                f"💬 **آخر ملاحظة:** *{data['reviews'][-1]['comment'] if data['reviews'] else 'لا يوجد'}*"
+            ),
+            inline=False
+        )
+
+    embed.set_footer(text="منتدى النظيم | لوحة الرقابة الإدارية")
+    await ctx.send(embed=embed)
 
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
@@ -1415,105 +1596,6 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
     except Exception as e:
         await ctx.send(f"❌ حدث خطأ أثناء توظيف العضو: {e}")
 
-# ----------------------------------------------------
-# 🚫 نظام الفصل الإداري (.فصل @الشخص) بالمودال والنموذج المطلوب
-# ----------------------------------------------------
-class DismissModal(discord.ui.Modal):
-    def __init__(self, admin: discord.Member, target: discord.Member):
-        super().__init__(title="نموذج فصل الإدارة الرسمي")
-        self.admin = admin
-        self.target = target
-
-        self.reason_input = discord.ui.TextInput(
-            label="سبب الفصل",
-            placeholder="اكتب سبب الفصل بوضوح هنا...",
-            style=discord.TextStyle.paragraph,
-            required=True,
-            max_length=300
-        )
-        self.add_item(self.reason_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        reason = self.reason_input.value.strip()
-
-        # استخراج رتبة الأدمن الأعلى
-        admin_highest_role = self.admin.top_role.name
-
-        # استخراج رتبة الشخص المفصول الإدارية (أعلى رتبة إدارية كان يمتلكها)
-        all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST + [ADMIN_ROLE_PENG_ID, NEW_HIRE_EXTRA_ROLE_ID]
-        target_staff_roles = [r for r in self.target.roles if r.id in all_managed_ids]
-        
-        if target_staff_roles:
-            # ترتيب الرتب حسب الأهمية أو اخذ أطرافها
-            highest_target_role = max(target_staff_roles, key=lambda r: r.position)
-            role_mention_str = highest_target_role.mention
-        else:
-            role_mention_str = "لا توجد رتب إدارية مسجلة"
-
-        # سحب جميع الرتب الإدارية من العضو
-        try:
-            roles_to_remove = [r for r in self.target.roles if r.id in all_managed_ids and not r.is_default()]
-            if roles_to_remove:
-                await self.target.remove_roles(*roles_to_remove, reason=f"فصل إداري بواسطة {self.admin.name}: {reason}")
-        except Exception as e:
-            print(f"خطأ في سحب رتب الفصل: {e}")
-
-        # تنظيف اسم العضو وإزالة رقم الهوية وإرجاعه إلى NZM | الاسم الأساسي
-        current_nick = self.target.display_name
-        clean_name = current_nick
-        
-        # إزالة شكل NZ ﹝الرقم﹞
-        clean_name = re.sub(r'NZ\s*﹝.*?﹞', '', clean_name).strip()
-        if clean_name.startswith("|"):
-            clean_name = clean_name[1:].strip()
-        if "NZM |" in clean_name:
-            clean_name = clean_name.replace("NZM |", "").strip()
-
-        new_nickname = f"NZM | {clean_name}"
-        if len(new_nickname) > 32:
-            new_nickname = new_nickname[:32]
-
-        try:
-            await self.target.edit(nick=new_nickname, reason=f"فصل إداري وإزالة رقم الهوية بواسطة {self.admin.name}")
-        except Exception as e:
-            print(f"خطأ في تعديل اسم المفصول: {e}")
-
-        # إرسال النموذج في روم نموذج الفصل المحدد (1543082450178281504)
-        dismiss_channel = guild.get_channel(DISMISS_LOG_CHANNEL_ID)
-        if dismiss_channel:
-            model_text = (
-                f"**```نموذج فصل الإدارة```**\n\n"
-                f"- **إسمك :** {self.admin.name}\n\n"
-                f"- **رتبتك:** {admin_highest_role}\n\n"
-                f"- **إسم الشخص :** {self.target.mention}\n\n"
-                f"- **رتبته:** {role_mention_str}\n\n"
-                f"- **سبب الفصل:** {reason}\n"
-            )
-            await dismiss_channel.send(model_text)
-
-        await interaction.response.send_message(f"✅ **تم فصل العضو {self.target.mention} وإزالة رتبه واسمه بنجاح وإرسال النموذج في روم الفصل!**", ephemeral=True)
-
-        try:
-            await self.target.send(f"❌ نعتذر منك، تم فصلك من الإدارة في سيرفر **{guild.name}**.\n📌 **السبب:** {reason}")
-        except:
-            pass
-
-@bot.command(name="فصل", aliases=["dismiss", "fire"])
-async def dismiss_staff_cmd(ctx, member: discord.Member):
-    if not is_admin_or_owner(ctx):
-        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
-        return
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-
-    modal = DismissModal(admin=ctx.author, target=member)
-    # ملاحظة: في ديسكورد بايثون، الأوامر النصية العادية (Prefix Commands) لا تدعم فتح Modal مباشرة إلا عبر التفاعل (Interaction). 
-    # لذلك لتسهيل الأمر على الأونر، سنضع الأمر كأمر سلاش (Slash Command) أو بوتفاعل زر، أو نقوم بتنفيذه مباشرة عبر تفاعل سحابي.
-    # لتفعيل الأمر بكل سهولة كأمر سلاش فوري، تم وضعه في الأسفل كـ Slash Command أدق وأسرع!
-
 @bot.tree.command(name="فصل", description="[فصل إداري] سحب الرتب الإدارية وإزالة رقم الهوية وتوثيق نموذج الفصل")
 @app_commands.describe(member="اختر العضو المراد فصله", reason="سبب الفصل الإداري")
 async def dismiss_slash(interaction: discord.Interaction, member: discord.Member, reason: str):
@@ -1570,15 +1652,11 @@ async def dismiss_slash(interaction: discord.Interaction, member: discord.Member
         await dismiss_channel.send(model_text)
 
     await interaction.response.send_message(f"✅ **تم فصل العضو {member.mention} بنجاح وإرسال نموذج الفصل في الروم المخصص!**", ephemeral=True)
-
     try:
         await member.send(f"❌ نعتذر منك، تم فصلك من الإدارة في سيرفر **{guild.name}**.\n📌 **السبب:** {reason}")
     except:
         pass
 
-# ----------------------------------------------------
-# ⬆️ نظام الترقية اليدوية بالأزرار والتحقق والإشعارات الخاصة
-# ----------------------------------------------------
 class ManualPromotionView(discord.ui.View):
     def __init__(self, admin: discord.Member, target: discord.Member, target_role: discord.Role, role_category_name: str):
         super().__init__(timeout=60)
@@ -1622,7 +1700,6 @@ class ManualPromotionView(discord.ui.View):
             
             await self.target.add_roles(self.target_role, reason=f"ترقية يدوية معتمدة بواسطة {self.admin.name}")
             
-            # تصفير النقاط الشخصية مع الحفاظ على نقاط التيمات كاملة ومضمونة 100%
             data = load_data()
             user_id = str(self.target.id)
             if user_id not in data or not isinstance(data[user_id], dict):
@@ -1644,12 +1721,9 @@ class ManualPromotionView(discord.ui.View):
             if log_channel:
                 await log_channel.send(success_text)
 
-            # إرسال رسالة خاصة للأونرات المحددين بالآديات المطلوبة
             for owner_id in PROMOTION_ALERT_USER_IDS:
                 try:
-                    owner_member = guild.get_member(owner_id)
-                    if not owner_member:
-                        owner_member = await bot.fetch_user(owner_id)
+                    owner_member = guild.get_member(owner_id) or await bot.fetch_user(owner_id)
                     if owner_member:
                         dm_embed = discord.Embed(
                             title="🚨 | إشعار ترقية إدارية قيادية",
@@ -1761,10 +1835,8 @@ async def manual_promote_cmd(ctx, member: discord.Member):
     embed.set_footer(text="منتدى النظيم | نظام اعتمادات الترقيات الآمن")
 
     view = ManualPromotionView(admin=ctx.author, target=member, target_role=target_role, role_category_name=role_category_name)
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+    try: await ctx.message.delete()
+    except: pass
     await ctx.send(embed=embed, view=view)
 
 @bot.command(name="عقوبات", aliases=["عقوبة", "penalties"])
@@ -1783,10 +1855,8 @@ async def penalties_cmd(ctx):
         color=discord.Color.from_rgb(241, 196, 15)
     )
     embed.set_footer(text="منتدى النظيم | النظام الإداري الموحد")
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+    try: await ctx.message.delete()
+    except: pass
     await ctx.send(embed=embed, delete_after=15)
 
 @bot.command(name="حذف", aliases=["delete", "del"])
@@ -1807,17 +1877,13 @@ async def owner_call_cmd(ctx):
     has_staff_role = any(role.id == required_staff_role_id for role in ctx.author.roles)
 
     if not has_staff_role and not is_admin_or_owner(ctx):
-        try:
-            await ctx.message.delete()
-        except:
-            pass
+        try: await ctx.message.delete()
+        except: pass
         await ctx.send(f"{ctx.author.mention} ماتقدر تمنشن ياهطف !!!", delete_after=7)
         return
 
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+    try: await ctx.message.delete()
+    except: pass
 
     target_role_id = 1567062184004026488
     role = ctx.guild.get_role(target_role_id)
@@ -1854,10 +1920,8 @@ async def events_panel_command(ctx):
         await ctx.send("❌ هذا الأمر مخصص للأونرات فقط يا الذيب!", delete_after=5)
         return
 
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+    try: await ctx.message.delete()
+    except: pass
 
     embed = discord.Embed(
         title="🎉 | لوحة إدارة وتحكم الفعاليات الإدارية",
@@ -1949,10 +2013,8 @@ async def teams_panel_cmd(ctx):
     if ctx.author.id not in OWNER_IDS:
         await ctx.send("❌ عذراً يا الحبيب، هذه القائمة مخصصة للأونرات فقط!", delete_after=5)
         return
-    try:
-        await ctx.message.delete()
-    except:
-        pass
+    try: await ctx.message.delete()
+    except: pass
 
     guild = ctx.guild
     t1_role = guild.get_role(TEAM_1_ROLE_ID)
@@ -2229,6 +2291,11 @@ async def help_command(ctx):
         description="يا هلا ومرحبابك يا ريس! هذي قائمة الأوامر والأنظمة كاملة:",
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
+    )
+    embed.add_field(
+        name="⭐ نظام التقييم الإداري",
+        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي)\n▫️ `.تقييمات` (لعرض تقارير وتقييمات الإدارة)",
+        inline=False
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
