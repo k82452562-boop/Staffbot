@@ -703,6 +703,82 @@ async def rating_panel_cmd(ctx):
     view = RatingPanelView(staff_members)
     await ctx.send(embed=embed, view=view)
 
+# ----------------------------------------------------
+# ⭐ نظام استعراض وتقييمات الإدارة (المحدث بلوحة تفاعلية)
+# ----------------------------------------------------
+class ViewStaffRatingsSelect(discord.ui.Select):
+    def __init__(self, ratings_data: dict, guild: discord.Guild):
+        options = []
+        for staff_id_str, data in ratings_data.items():
+            member = guild.get_member(int(staff_id_str))
+            name = member.display_name if member else f"إداري (ID: {staff_id_str})"
+            count = data.get("count", 0)
+            total = data.get("total_stars", 0)
+            avg = round(total / count, 1) if count > 0 else 0
+            
+            options.append(discord.SelectOption(
+                label=name[:50],
+                value=staff_id_str,
+                description=f"التقييم العام: {avg}⭐ | عدد المُقيمين: {count}",
+                emoji="📊"
+            ))
+            
+        super().__init__(placeholder="اختر الإداري لعرض تفاصيل تقييماته...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        staff_id_str = self.values[0]
+        ratings = load_ratings()
+        
+        if staff_id_str not in ratings:
+            await interaction.response.send_message("❌ عذراً، لا توجد تقييمات مسجلة لهذا الإداري.", ephemeral=True)
+            return
+
+        staff_data = ratings[staff_id_str]
+        member = guild.get_member(int(staff_id_str))
+        staff_name = member.mention if member else f"<@{staff_id_str}>"
+        
+        count = staff_data["count"]
+        total = staff_data["total_stars"]
+        avg = round(total / count, 1) if count > 0 else 0
+        stars_str = '⭐' * round(avg)
+
+        embed = discord.Embed(
+            title=f"📊 | سجل تقييمات الإداري: {member.name if member else staff_id_str}",
+            description=(
+                f"👤 **الإداري:** {staff_name}\n"
+                f"⭐ **متوسط التقييم العام:** `{avg} / 5` {stars_str}\n"
+                f"📈 **إجمالي عدد المُقيمين:** `{count}` شخص\n\n"
+                f"📜 **سجل الملاحظات والتقييمات التفصيلية:**"
+            ),
+            color=discord.Color.gold(),
+            timestamp=discord.utils.utcnow()
+        )
+
+        reviews = staff_data.get("reviews", [])
+        if reviews:
+            for idx, rev in enumerate(reviews[-10:], 1):
+                voter_name = rev.get("voter_name", "مستخدم مجهول")
+                rev_stars = rev.get("stars", 0)
+                rev_comment = rev.get("comment", "بدون ملاحظة")
+                rev_time = rev.get("time", "وقت غير محدد")
+                
+                embed.add_field(
+                    name=f"#{idx} | تقييم من: {voter_name} ({'⭐' * rev_stars})",
+                    value=f"💬 **الملاحظة:** *{rev_comment}*\n⏱️ **الوقت:** `{rev_time}`",
+                    inline=False
+                )
+        else:
+            embed.add_field(name="الملاحظات", value="لا توجد ملاحظات كتابية مسجلة.", inline=False)
+
+        embed.set_footer(text="منتدى النظيم | لوحة تفاصيل تقييمات الإدارة")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class ViewStaffRatingsView(discord.ui.View):
+    def __init__(self, ratings_data: dict, guild: discord.Guild):
+        super().__init__(timeout=60)
+        self.add_item(ViewStaffRatingsSelect(ratings_data, guild))
+
 @bot.command(name="تقييمات", aliases=["ratings", "تقييم"])
 async def show_ratings_cmd(ctx):
     if not is_admin_or_owner(ctx):
@@ -711,37 +787,25 @@ async def show_ratings_cmd(ctx):
 
     ratings = load_ratings()
     if not ratings:
-        await ctx.send("📊 **لا توجد أي تقييمات مسجلة حتى الآن.**", delete_after=10)
+        await ctx.send("📊 **لا توجد أي تقييمات مسجلة في السيرفر حتى الآن.**", delete_after=10)
         return
 
     guild = ctx.guild
     embed = discord.Embed(
-        title="📊 | تقارير تقييمات الإدارة الشاملة",
-        description="إليك ملخص تقييمات الأعضاء لجميع طاقم الإدارة:",
+        title="📊 | استعراض تقييمات طاقم الإدارة",
+        description="اختر الإداري من القائمة أدناه لعرض **جميع تقييماته وملاحظاته التفصيلية** في الشات:",
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
-
-    for staff_id_str, data in ratings.items():
-        member = guild.get_member(int(staff_id_str))
-        name = member.mention if member else f"<@{staff_id_str}>"
-        count = data["count"]
-        total = data["total_stars"]
-        avg = round(total / count, 1) if count > 0 else 0
-        stars_str = '⭐' * round(avg)
-
-        embed.add_field(
-            name=f"🛡️ الإداري: {name}",
-            value=(
-                f"📈 **عدد المُقيمين:** `{count}` شخص\n"
-                f"⭐ **متوسط التقييم:** `{avg} / 5` {stars_str}\n"
-                f"💬 **آخر ملاحظة:** *{data['reviews'][-1]['comment'] if data['reviews'] else 'لا يوجد'}*"
-            ),
-            inline=False
-        )
-
     embed.set_footer(text="منتدى النظيم | لوحة الرقابة الإدارية")
-    await ctx.send(embed=embed)
+
+    view = ViewStaffRatingsView(ratings, guild)
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+        
+    await ctx.send(embed=embed, view=view)
 
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
@@ -794,7 +858,7 @@ class TeamsControlView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id not in OWNER_IDS:
-            await interaction.response.send_message("❌ هذه الأزرار مخصصة للأونرات فقط ولا تتدخل بشي يا الذيب!", ephemeral=True)
+            await interaction.response.send_message("❌ هذه الأزرار مخصصة للأونرات فقط!", ephemeral=True)
             return False
         return True
 
@@ -2294,7 +2358,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="⭐ نظام التقييم الإداري",
-        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي)\n▫️ `.تقييمات` (لعرض تقارير وتقييمات الإدارة)",
+        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي)\n▫️ `.تقييمات` (لاختيار الإداري وعرض تفاصيل تقييماته وملاحظاته في الشات)",
         inline=False
     )
     embed.add_field(
