@@ -568,7 +568,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي الجديد (سحب رتبة 1545520633939624006 تلقائياً)
+# ⭐ نظام التقييم التفاعلي الآمن والمستقر (دائم بدون انتهاء صلاحية + حفظ سحابي محلي)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
     def __init__(self, staff_member: discord.Member, stars: int):
@@ -605,6 +605,8 @@ class RatingSelectModal(discord.ui.Modal):
             "comment": comment,
             "time": datetime.now().strftime('%Y-%m-%d %H:%M')
         })
+        
+        # حفظ فوري لضمان عدم ضياع التقييمات حتى لو طفى البوت
         save_ratings(ratings)
 
         await interaction.response.send_message(f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)! شكراً لمشاركتك.**", ephemeral=True)
@@ -637,7 +639,7 @@ class RatingStarsSelect(discord.ui.Select):
 
 class RatingStarsView(discord.ui.View):
     def __init__(self, staff_member: discord.Member):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None) # مهلة مفتوحة لضمان عدم حدوث Interaction Failed
         self.add_item(RatingStarsSelect(staff_member))
 
 class StaffRatingSelect(discord.ui.Select):
@@ -650,7 +652,7 @@ class StaffRatingSelect(discord.ui.Select):
                 description=f"تقييم الإداري {member.name}",
                 emoji="⭐"
             ))
-        super().__init__(placeholder="اضغط هنا لاختيار الإداري المراد تقييمه...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اضغط هنا لاختيار الإداري المراد تقييمه...", min_values=1, max_values=1, options=options, custom_id="persistent_staff_rating_select_v99")
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -666,7 +668,7 @@ class StaffRatingSelect(discord.ui.Select):
 
 class RatingPanelView(discord.ui.View):
     def __init__(self, staff_members: list):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None) # دائم ومستقر لا ينتهي
         if staff_members:
             self.add_item(StaffRatingSelect(staff_members))
 
@@ -704,7 +706,7 @@ async def rating_panel_cmd(ctx):
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
-# ⭐ نظام استعراض وتقييمات الإدارة (المحدث بلوحة تفاعلية)
+# ⭐ نظام استعراض تقييمات الإدارة التفصيلي في الشات
 # ----------------------------------------------------
 class ViewStaffRatingsSelect(discord.ui.Select):
     def __init__(self, ratings_data: dict, guild: discord.Guild):
@@ -723,7 +725,7 @@ class ViewStaffRatingsSelect(discord.ui.Select):
                 emoji="📊"
             ))
             
-        super().__init__(placeholder="اختر الإداري لعرض تفاصيل تقييماته...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر الإداري لعرض تفاصيل تقييماته...", min_values=1, max_values=1, options=options, custom_id="persistent_view_ratings_select_v99")
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
@@ -776,7 +778,7 @@ class ViewStaffRatingsSelect(discord.ui.Select):
 
 class ViewStaffRatingsView(discord.ui.View):
     def __init__(self, ratings_data: dict, guild: discord.Guild):
-        super().__init__(timeout=60)
+        super().__init__(timeout=None) # دائم ومستقر
         self.add_item(ViewStaffRatingsSelect(ratings_data, guild))
 
 @bot.command(name="تقييمات", aliases=["ratings", "تقييم"])
@@ -1539,7 +1541,7 @@ async def panel_apply(ctx):
 @bot.command(name="فحص_الرتب", aliases=["فحص", "check_roles"])
 async def check_roles_cmd(ctx):
     if ctx.author.id not in OWNER_IDS:
-        await ctx.send("❌ عذراً، هذا الأمر مخصص للأونرات فقط!", delete_after=5)
+        await ctx.send("❌ عذراً، هذا الأمر مخصص للأอนرات فقط!", delete_after=5)
         return
 
     msg = await ctx.send("🔍 **جاري فحص جميع أعضاء السيرفر وتوزيع الرتب على من ليس لديهم أي رتبة... انتظر شوي!**")
@@ -2052,6 +2054,18 @@ async def on_ready():
     bot.add_view(TeamsControlView())
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
+    
+    # تفعيل Views التقييم الدائمة لكي لا تواجه مشكلة Interaction Failed أبداً
+    try:
+        ratings = load_ratings()
+        target_role = discord.utils.get(bot.guilds[0].roles, id=1545520633939624006) if bot.guilds else None
+        if target_role and bot.guilds:
+            staff_members = [m for m in bot.guilds[0].members if target_role in m.roles and not m.bot]
+            bot.add_view(RatingPanelView(staff_members))
+            bot.add_view(ViewStaffRatingsView(ratings, bot.guilds[0]))
+    except Exception as e:
+        print(f"⚠️ ملاحظة تفعيل تبييت فيوز التقييمات: {e}")
+
     if not check_expired_bans.is_running():
         check_expired_bans.start()
         
@@ -2358,7 +2372,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="⭐ نظام التقييم الإداري",
-        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي)\n▫️ `.تقييمات` (لاختيار الإداري وعرض تفاصيل تقييماته وملاحظاته في الشات)",
+        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي الدائم)\n▫️ `.تقييمات` (لاختيار الإداري وعرض تفاصيل تقييماته وملاحظاته في الشات)",
         inline=False
     )
     embed.add_field(
