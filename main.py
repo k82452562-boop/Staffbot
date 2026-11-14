@@ -561,7 +561,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي بأزرار أفقية مرتبة (بحيث يوزع 5 أزرار بكل صف أفقي تلقائياً)
+# ⭐ نظام التقييم التفاعلي (أزرار أفقية موزعة بذكاء بحيث لا تتجاوز 5 أزرار في كل صف)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
     def __init__(self, staff_member: discord.Member, stars: int):
@@ -665,7 +665,7 @@ class DirectStaffRatingButton(discord.ui.Button):
             style=discord.ButtonStyle.secondary,
             emoji="⭐",
             custom_id=f"direct_rate_btn_{staff_member.id}",
-            row=row_idx
+            row=row_idx  # التوزيع الأفقي المنظم لكل 5 أزرار بصف مستقل
         )
         self.staff_member_id = staff_member.id
 
@@ -694,7 +694,7 @@ class DirectStaffRatingButton(discord.ui.Button):
         )
 
 class DirectRatingPanelView(discord.ui.View):
-    """فيو يولد أزرار التقييم أفقياً (كل 5 أزرار في صف أفقي واحد متناسق)"""
+    """فيو يوزع أزرار التقييم أفقياً (كل 5 أزرار في صف مستقل تلقائياً)"""
     def __init__(self, guild: discord.Guild):
         super().__init__(timeout=None)
         staff_role_id = ADMIN_ROLE_PENG_ID # 1545520633939624006
@@ -704,7 +704,7 @@ class DirectRatingPanelView(discord.ui.View):
         if staff_role:
             for member in guild.members:
                 if staff_role in member.roles and not member.bot and count < 25:
-                    row_idx = count // 5  # يوزع الأزرار تلقائياً على صفوف أفقية (أقصى شيء 5 أزرار بالصف)
+                    row_idx = count // 5  # تقسيم أزرار الإداريين بحيث كل 5 أزرار تجي بصف أفقي واحد
                     self.add_item(DirectStaffRatingButton(member, row_idx))
                     count += 1
 
@@ -888,7 +888,6 @@ class TeamPointsModal(discord.ui.Modal):
         await interaction.response.send_message(msg, ephemeral=True)
 
 class TeamsControlView(discord.ui.View):
-    """أزرار تحكم التيمات مرتبة في صفوف أفقية متناسقة"""
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -2402,7 +2401,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="⭐ نظام التقييم الإداري",
-        value="▫️ `.بانل_تقييم` (لنشر بانل أزرار التقييم الفردية لكل إداري أفقياً ومنظماً)\n▫️ `.تقييمات` (لعرض سجل تقييمات أي إداري وملاحظاته مع بحث فوري)",
+        value="▫️ `.بانل_تقييم` (لنشر بانل أزرار التقييم الفردية لكل إداري بشكل أفقي ومنظم)\n▫️ `.تقييمات` (لعرض سجل تقييمات أي إداري وملاحظاته مع بحث فوري)",
         inline=False
     )
     embed.add_field(
