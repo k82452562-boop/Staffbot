@@ -166,7 +166,7 @@ def save_json(filename, data):
             os.fsync(f.fileno())
         os.replace(temp_file, filename)
     except Exception as e:
-        print(f"❌ خطأ بالحفظ: {e}")
+        print(f"❌ خطأ بالحفظ الآمن لملف {filename}: {e}")
 
 def load_data():
     return load_json(DATA_FILE)
@@ -174,13 +174,15 @@ def load_data():
 def save_data(data, guild=None):
     save_json(DATA_FILE, data)
     if guild:
-        bot.loop.create_task(save_points_to_discord(guild))
+        bot.loop.create_task(save_file_to_discord(guild, DATA_FILE, "points_backup.json", "النقاط الشخصية"))
 
 def load_ratings():
     return load_json(RATINGS_FILE)
 
-def save_ratings(data):
+def save_ratings(data, guild=None):
     save_json(RATINGS_FILE, data)
+    if guild:
+        bot.loop.create_task(save_file_to_discord(guild, RATINGS_FILE, "ratings_backup.json", "سجل التقييمات"))
 
 def load_teams_reset():
     return load_json(TEAMS_RESET_FILE)
@@ -197,9 +199,14 @@ def save_team_bonuses(data):
 def load_team_persistent():
     return load_json(TEAM_PERSISTENT_FILE)
 
-def save_team_persistent(data):
+def save_team_persistent(data, guild=None):
     save_json(TEAM_PERSISTENT_FILE, data)
-    bot.loop.create_task(save_teams_persistent_to_discord())
+    if guild:
+        bot.loop.create_task(save_file_to_discord(guild, TEAM_PERSISTENT_FILE, "team_persistent_scores.json", "نقاط التيمات الإجمالية"))
+    else:
+        for g in bot.guilds:
+            bot.loop.create_task(save_file_to_discord(g, TEAM_PERSISTENT_FILE, "team_persistent_scores.json", "نقاط التيمات الإجمالية"))
+            break
 
 def load_team_stats_reset():
     return load_json(TEAM_STATS_RESET_FILE)
@@ -236,58 +243,45 @@ def parse_duration_to_seconds(duration_str: str) -> int:
         return val * 86400 * 30
     return val * 86400
 
-async def fetch_points_from_discord():
+async def fetch_data_from_discord():
+    """استرجاع أحدث النسخ الاحتياطية السحابية تلقائياً عند الإقلاع لتجنب ضياع أي بيانات نهائياً"""
     try:
-        channel = bot.get_channel(BACKUP_CHANNEL_ID)
-        if not channel:
-            return
-        async for message in channel.history(limit=30):
-            if message.attachments:
-                for att in message.attachments:
-                    if att.filename == "points_backup.json":
-                        await att.save(DATA_FILE)
-                    elif att.filename == "team_persistent_scores.json":
-                        await att.save(TEAM_PERSISTENT_FILE)
+        for guild in bot.guilds:
+            channel = guild.get_channel(BACKUP_CHANNEL_ID)
+            if not channel:
+                continue
+            async for message in channel.history(limit=50):
+                if message.attachments:
+                    for att in message.attachments:
+                        if att.filename == "points_backup.json" and not os.path.exists(DATA_FILE):
+                            await att.save(DATA_FILE)
+                        elif att.filename == "team_persistent_scores.json" and not os.path.exists(TEAM_PERSISTENT_FILE):
+                            await att.save(TEAM_PERSISTENT_FILE)
+                        elif att.filename == "ratings_backup.json" and not os.path.exists(RATINGS_FILE):
+                            await att.save(RATINGS_FILE)
+        print("✅ تم استرجاع النسخ الاحتياطية السحابية بنجاح تام!")
     except Exception as e:
         print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية: {e}")
 
-async def save_points_to_discord(guild):
+async def save_file_to_discord(guild, local_path, target_filename, label_name):
+    """رفع نسخة احتياطية سحابية فورية لكل ملف يتم تعديله"""
     try:
         channel = guild.get_channel(BACKUP_CHANNEL_ID)
         if not channel:
             return
-        if os.path.exists(DATA_FILE):
-            async for message in channel.history(limit=15):
+        if os.path.exists(local_path):
+            async for message in channel.history(limit=20):
                 if message.author == bot.user and message.attachments:
                     for att in message.attachments:
-                        if att.filename == "points_backup.json":
+                        if att.filename == target_filename:
                             try:
                                 await message.delete()
                             except:
                                 pass
-            file = discord.File(DATA_FILE, filename="points_backup.json")
-            await channel.send("💾 **[حفظ سحابي فوري] تم تأمين نسخة النقاط:**", file=file)
+            file = discord.File(local_path, filename=target_filename)
+            await channel.send(f"💾 **[حفظ سحابي خارق] تم تأمين نسخة {label_name}:**", file=file)
     except Exception as e:
-        print(f"⚠️ خطأ أثناء رفع النسخة الاحتياطية: {e}")
-
-async def save_teams_persistent_to_discord():
-    try:
-        for guild in bot.guilds:
-            channel = guild.get_channel(BACKUP_CHANNEL_ID)
-            if channel and os.path.exists(TEAM_PERSISTENT_FILE):
-                async for message in channel.history(limit=15):
-                    if message.author == bot.user and message.attachments:
-                        for att in message.attachments:
-                            if att.filename == "team_persistent_scores.json":
-                                try:
-                                    await message.delete()
-                                except:
-                                    pass
-                file = discord.File(TEAM_PERSISTENT_FILE, filename="team_persistent_scores.json")
-                await channel.send("💾 **[حفظ سحابي فوري] تم تأمين نسخة نقاط التيمات الإجمالية:**", file=file)
-                break
-    except Exception as e:
-        print(f"⚠️ خطأ أثناء رفع نسخة التيمات سحابياً: {e}")
+        print(f"⚠️ خطأ أثناء رفع نسخة {label_name} سحابياً: {e}")
 
 async def send_unified_log(guild, title, description, color=discord.Color.from_rgb(30, 144, 255), fields=None):
     log_channel = guild.get_channel(LOG_CHANNEL_ID)
@@ -452,7 +446,8 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
         persistent[guild_id_str]["t1_total"] = persistent[guild_id_str].get("t1_total", 0) + actual_points
     elif team_2_role and team_2_role in staff.roles:
         persistent[guild_id_str]["t2_total"] = persistent[guild_id_str].get("t2_total", 0) + actual_points
-    save_team_persistent(persistent)
+    
+    save_team_persistent(persistent, guild)
     
     double_text = " 🔥 **(الدبل شغال x2 يا وحش!)**" if is_double_active else ""
     await send_unified_log(
@@ -568,7 +563,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي الذكي (مع إشعار خاص DM + بحث فوري)
+# ⭐ نظام التقييم التفاعلي الذكي (مع الحفظ الفوري والسحابي المزدوج)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
     def __init__(self, staff_member: discord.Member, stars: int):
@@ -606,14 +601,14 @@ class RatingSelectModal(discord.ui.Modal):
             "time": datetime.now().strftime('%Y-%m-%d %H:%M')
         })
         
-        save_ratings(ratings)
+        # حفظ فوري وسحابي لضمان عدم ضياع التقييمات نهائياً
+        save_ratings(ratings, guild)
 
         await interaction.response.send_message(
             f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)!**", 
             ephemeral=True
         )
 
-        # إرسال إشعار خاص فوري للإداري المُقيَّم في الـ DM
         try:
             stars_str = '⭐' * self.stars
             dm_embed = discord.Embed(
@@ -1289,7 +1284,7 @@ class EventRewardModal(discord.ui.Modal):
                 
                 save_data(data, self.guild)
 
-        save_team_persistent(persistent)
+        save_team_persistent(persistent, self.guild)
 
         result_embed = discord.Embed(
             title="🏆 | نتائج الفعالية وتتويج الأبطال",
@@ -2115,21 +2110,20 @@ async def check_expired_bans():
 
 @bot.event
 async def on_ready():
+    # استرجاع جميع البيانات السحابية عند الإقلاع لضمان عدم ضياع أي شيء
+    await fetch_data_from_discord()
+
     bot.add_view(TeamsResetView())
     bot.add_view(TeamsControlView())
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
     
-    # تفعيل فيوز التقييمات الدائمة الآمنة ضد الكلام الأحمر
     bot.add_view(RatingPanelView())
     bot.add_view(AdminLookupView())
 
     if not check_expired_bans.is_running():
         check_expired_bans.start()
         
-    for guild in bot.guilds:
-        await fetch_points_from_discord()
-        break
     try:
         synced = await bot.tree.sync()
         print(f"✅ تم مزامنة {len(synced)} أمر سلاش عربي بنجاح!")
