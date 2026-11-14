@@ -561,24 +561,13 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي (أزرار أفقية موزعة بذكاء بحيث لا تتجاوز 5 أزرار في كل صف)
+# ⭐ نظام التقييم التفاعلي (أزرار أفقية موزعة زوجياً 2 في كل صف + نظام صفحات)
 # ----------------------------------------------------
-class DirectRatingPanelView(discord.ui.View):
-    """فيو يوزع أزرار التقييم بحيث كل صف يحتوي على 4 أزرار كحد أقصى بشكل منظم ومضبوط"""
-    def __init__(self, guild: discord.Guild):
-        super().__init__(timeout=None)
-        staff_role_id = ADMIN_ROLE_PENG_ID # 1545520633939624006
-        staff_role = guild.get_role(staff_role_id)
-        
-        count = 0
-        if staff_role:
-            for member in guild.members:
-                if staff_role in member.roles and not member.bot and count < 25:
-                    # تقسيم الأزرار بحيث كل 4 أزرار يجون في صف أفقي واحد (0, 1, 2...)
-                    row_idx = count // 4  
-                    self.add_item(DirectStaffRatingButton(member, row_idx))
-                    count += 1
-
+class RatingSelectModal(discord.ui.Modal):
+    def __init__(self, staff_member: discord.Member, stars: int):
+        super().__init__(title=f"تقييم: {staff_member.display_name[:25]} ({stars} نجوم ⭐)")
+        self.staff_member = staff_member
+        self.stars = stars
 
         self.comment_input = discord.ui.TextInput(
             label="سبب أو ملاحظة التقييم (اختياري)",
@@ -676,7 +665,7 @@ class DirectStaffRatingButton(discord.ui.Button):
             style=discord.ButtonStyle.secondary,
             emoji="⭐",
             custom_id=f"direct_rate_btn_{staff_member.id}",
-            row=row_idx  # التوزيع الأفقي المنظم لكل 5 أزرار بصف مستقل
+            row=row_idx  # زرّين في كل صف بشكل منظم
         )
         self.staff_member_id = staff_member.id
 
@@ -704,20 +693,80 @@ class DirectStaffRatingButton(discord.ui.Button):
             ephemeral=True
         )
 
-class DirectRatingPanelView(discord.ui.View):
-    """فيو يوزع أزرار التقييم أفقياً (كل 5 أزرار في صف مستقل تلقائياً)"""
-    def __init__(self, guild: discord.Guild):
+class PaginatedStaffRatingView(discord.ui.View):
+    """فيو مخصص لبانل التقييمات يوزع الإداريين زرّين في كل صف ويدعم التنقل بين الصفحات"""
+    def __init__(self, guild: discord.Guild, staff_members: list, page: int = 0):
         super().__init__(timeout=None)
-        staff_role_id = ADMIN_ROLE_PENG_ID # 1545520633939624006
-        staff_role = guild.get_role(staff_role_id)
+        self.guild = guild
+        self.staff_members = staff_members
+        self.page = page
+        self.per_page = 6  # 6 إداريين في الصفحة الواحدة (3 صفوف × زرّين)
         
-        count = 0
-        if staff_role:
-            for member in guild.members:
-                if staff_role in member.roles and not member.bot and count < 25:
-                    row_idx = count // 5  # تقسيم أزرار الإداريين بحيث كل 5 أزرار تجي بصف أفقي واحد
-                    self.add_item(DirectStaffRatingButton(member, row_idx))
-                    count += 1
+        self.setup_page()
+
+    def setup_page(self):
+        self.clear_items()
+        
+        start_idx = self.page * self.per_page
+        end_idx = start_idx + self.per_page
+        current_batch = self.staff_members[start_idx:end_idx]
+        
+        # إضافة أزرار الإداريين (زرّين في كل صف: row 0, 1, 2)
+        for idx, member in enumerate(current_batch):
+            row_idx = idx // 2  
+            self.add_item(DirectStaffRatingButton(member, row_idx))
+            
+        # أزرار التنقل بين الصفحات في الصف الأخير (row=3)
+        total_pages = (len(self.staff_members) + self.per_page - 1) // self.per_page
+        
+        if total_pages > 1:
+            prev_button = discord.ui.Button(
+                label="السابق", 
+                style=discord.ButtonStyle.secondary, 
+                emoji="◀️", 
+                disabled=(self.page == 0),
+                row=3,
+                custom_id="rating_prev_page_btn"
+            )
+            prev_button.callback = self.prev_page_callback
+            self.add_item(prev_button)
+            
+            page_indicator = discord.ui.Button(
+                label=f"الصفحة {self.page + 1} من {total_pages}", 
+                style=discord.ButtonStyle.blurple, 
+                disabled=True,
+                row=3,
+                custom_id="rating_page_indicator_btn"
+            )
+            self.add_item(page_indicator)
+            
+            next_button = discord.ui.Button(
+                label="التالي", 
+                style=discord.ButtonStyle.secondary, 
+                emoji="▶️", 
+                disabled=(self.page >= total_pages - 1),
+                row=3,
+                custom_id="rating_next_page_btn"
+            )
+            next_button.callback = self.next_page_callback
+            self.add_item(next_button)
+
+    async def prev_page_callback(self, interaction: discord.Interaction):
+        if self.page > 0:
+            self.page -= 1
+            self.setup_page()
+            await interaction.response.edit_message(view=self)
+        else:
+            await interaction.response.defer()
+
+    async def next_page_callback(self, interaction: discord.Interaction):
+        total_pages = (len(self.staff_members) + self.per_page - 1) // self.per_page
+        if self.page < total_pages - 1:
+            self.page += 1
+            self.setup_page()
+            await interaction.response.edit_message(view=self)
+        else:
+            await interaction.response.defer()
 
 @bot.command(name="بانل_تقييم", aliases=["rating_panel"])
 async def rating_panel_cmd(ctx):
@@ -727,19 +776,33 @@ async def rating_panel_cmd(ctx):
     try: await ctx.message.delete()
     except: pass
 
+    guild = ctx.guild
+    staff_role_id = ADMIN_ROLE_PENG_ID
+    staff_role = guild.get_role(staff_role_id)
+    
+    staff_members = []
+    if staff_role:
+        for member in guild.members:
+            if staff_role in member.roles and not member.bot:
+                staff_members.append(member)
+
+    if not staff_members:
+        await ctx.send("❌ لا يوجد أعضاء طاقم إداري مسجلين حالياً.", delete_after=5)
+        return
+
     embed = discord.Embed(
         title="⭐ | تقييم الإدارة والدعم الفني",
         description=(
             "**اختر زر تقييم بجانب اسم الإداري، ثم اختر من ⭐ إلى ⭐⭐⭐⭐⭐.**\n"
             "بعد اختيار النجوم، يمكنك كتابة سبب التقييم (اختياري).\n\n"
-            "👇 **أزرار تقييم أعضاء طاقم الإدارة (مرتبة أفقياً ومنظمة):**"
+            "👇 **أزرار تقييم أعضاء طاقم الإدارة (مرتبة زوجياً وبنظام الصفحات):**"
         ),
         color=discord.Color.gold(),
         timestamp=discord.utils.utcnow()
     )
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الإداري الموحد")
 
-    view = DirectRatingPanelView(ctx.guild)
+    view = PaginatedStaffRatingView(guild, staff_members, page=0)
     await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
@@ -2102,11 +2165,6 @@ async def on_ready():
     bot.add_view(TeamsControlView())
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
-    
-    for guild in bot.guilds:
-        bot.add_view(DirectRatingPanelView(guild))
-        break
-
     bot.add_view(AdminLookupView())
 
     if not check_expired_bans.is_running():
