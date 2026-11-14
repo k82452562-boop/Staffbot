@@ -563,11 +563,22 @@ async def calculate_teams_performance(guild: discord.Guild):
 # ----------------------------------------------------
 # ⭐ نظام التقييم التفاعلي (أزرار أفقية موزعة بذكاء بحيث لا تتجاوز 5 أزرار في كل صف)
 # ----------------------------------------------------
-class RatingSelectModal(discord.ui.Modal):
-    def __init__(self, staff_member: discord.Member, stars: int):
-        super().__init__(title=f"تقييم: {staff_member.display_name[:25]} ({stars} نجوم ⭐)")
-        self.staff_member = staff_member
-        self.stars = stars
+class DirectRatingPanelView(discord.ui.View):
+    """فيو يوزع أزرار التقييم بحيث كل صف يحتوي على 4 أزرار كحد أقصى بشكل منظم ومضبوط"""
+    def __init__(self, guild: discord.Guild):
+        super().__init__(timeout=None)
+        staff_role_id = ADMIN_ROLE_PENG_ID # 1545520633939624006
+        staff_role = guild.get_role(staff_role_id)
+        
+        count = 0
+        if staff_role:
+            for member in guild.members:
+                if staff_role in member.roles and not member.bot and count < 25:
+                    # تقسيم الأزرار بحيث كل 4 أزرار يجون في صف أفقي واحد (0, 1, 2...)
+                    row_idx = count // 4  
+                    self.add_item(DirectStaffRatingButton(member, row_idx))
+                    count += 1
+
 
         self.comment_input = discord.ui.TextInput(
             label="سبب أو ملاحظة التقييم (اختياري)",
