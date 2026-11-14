@@ -568,11 +568,11 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي الآمن والمستقر (دائم بدون انتهاء صلاحية + حفظ سحابي محلي)
+# ⭐ نظام التقييم التفاعلي الذكي (مع إشعار خاص DM + بحث فوري)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
     def __init__(self, staff_member: discord.Member, stars: int):
-        super().__init__(title=f"تقييم الإداري: {staff_member.display_name} ({stars} نجوم ⭐)")
+        super().__init__(title=f"تقييم: {staff_member.display_name[:25]} ({stars} نجوم ⭐)")
         self.staff_member = staff_member
         self.stars = stars
 
@@ -606,10 +606,33 @@ class RatingSelectModal(discord.ui.Modal):
             "time": datetime.now().strftime('%Y-%m-%d %H:%M')
         })
         
-        # حفظ فوري لضمان عدم ضياع التقييمات حتى لو طفى البوت
         save_ratings(ratings)
 
-        await interaction.response.send_message(f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)! شكراً لمشاركتك.**", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)!**", 
+            ephemeral=True
+        )
+
+        # إرسال إشعار خاص فوري للإداري المُقيَّم في الـ DM
+        try:
+            stars_str = '⭐' * self.stars
+            dm_embed = discord.Embed(
+                title="⭐ | وصلك تقييم إداري جديد!",
+                description=(
+                    f"يا هلا بالمطنوخ **{self.staff_member.display_name}**,\n"
+                    f"لقد تلقيت تقييماً جديداً داخل سيرفر **{guild.name}**:\n\n"
+                    f"⭐ **التقييم:** `{self.stars}/5` ({stars_str})\n"
+                    f"💬 **السبب / الملاحظة:** *{comment}*\n"
+                    f"👤 **المُقيِّم:** {voter.mention} (`{voter.name}`)\n"
+                    f"⏱️ **الوقت:** `{datetime.now().strftime('%Y-%m-%d %H:%M')}`"
+                ),
+                color=discord.Color.gold(),
+                timestamp=discord.utils.utcnow()
+            )
+            dm_embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الإداري")
+            await self.staff_member.send(embed=dm_embed)
+        except Exception as e:
+            print(f"⚠️ تعذر إرسال إشعار التقييم بالخاص للإداري {self.staff_member.name}: {e}")
 
         await send_unified_log(
             guild,
@@ -631,7 +654,7 @@ class RatingStarsSelect(discord.ui.Select):
             discord.SelectOption(label="⭐⭐ 2 نجوم (مقبول)", value="2", description="يحتاج تحسين"),
             discord.SelectOption(label="⭐ نجمة واحدة (ضعيف)", value="1", description="أداء ضعيف جداً")
         ]
-        super().__init__(placeholder=f"اختر عدد النجوم لتقييم {staff_member.display_name}...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="اختر عدد النجوم من هنا...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         stars = int(self.values[0])
@@ -639,38 +662,81 @@ class RatingStarsSelect(discord.ui.Select):
 
 class RatingStarsView(discord.ui.View):
     def __init__(self, staff_member: discord.Member):
-        super().__init__(timeout=None) # مهلة مفتوحة لضمان عدم حدوث Interaction Failed
+        super().__init__(timeout=None)
         self.add_item(RatingStarsSelect(staff_member))
 
-class StaffRatingSelect(discord.ui.Select):
-    def __init__(self, staff_members: list):
-        options = []
-        for member in staff_members[:25]:
-            options.append(discord.SelectOption(
-                label=member.display_name[:50],
-                value=str(member.id),
-                description=f"تقييم الإداري {member.name}",
-                emoji="⭐"
-            ))
-        super().__init__(placeholder="اضغط هنا لاختيار الإداري المراد تقييمه...", min_values=1, max_values=1, options=options, custom_id="persistent_staff_rating_select_v99")
+class StaffUserSearchSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="اكتب اسم الإداري أو اختره من القائمة...",
+            min_values=1,
+            max_values=1
+        )
 
     async def callback(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        staff_id = int(self.values[0])
-        staff_member = guild.get_member(staff_id)
+        await interaction.response.defer(ephemeral=True)
 
-        if not staff_member:
-            await interaction.response.send_message("❌ عذراً، الإداري غير موجود بالسيرفر حالياً.", ephemeral=True)
-            return
+        try:
+            selected_user = self.values[0]
+            guild = interaction.guild
+            
+            staff_member = guild.get_member(selected_user.id)
+            if not staff_member:
+                try:
+                    staff_member = await guild.fetch_member(selected_user.id)
+                except Exception:
+                    pass
 
-        view = RatingStarsView(staff_member)
-        await interaction.response.send_message(f"⭐ **تقييم الإداري:** {staff_member.mention}\nالرجاء اختيار عدد النجوم من القائمة أدناه:", view=view, ephemeral=True)
+            if not staff_member or staff_member.bot:
+                await interaction.followup.send("❌ عذراً، يجب اختيار عضو إداري حقيقي داخل السيرفر.", ephemeral=True)
+                return
+
+            if staff_member.id == interaction.user.id:
+                await interaction.followup.send("❌ ما تقدر تقيم نفسك يا الحبيب!", ephemeral=True)
+                return
+
+            staff_role_id = 1545520633939624006
+            has_staff_role = any(role.id == staff_role_id for role in staff_member.roles)
+            
+            if not has_staff_role and staff_member.id not in OWNER_IDS:
+                await interaction.followup.send(
+                    f"❌ العضو {staff_member.mention} **ليس ضمن طاقم الإدارة** ولا يمكن تقييمه.", 
+                    ephemeral=True
+                )
+                return
+
+            view = RatingStarsView(staff_member)
+            await interaction.followup.send(
+                content=f"⭐ **تقييم الإداري:** {staff_member.mention}\nالآن اختر عدد النجوم المناسبة لأدائه:",
+                view=view,
+                ephemeral=True
+            )
+        except Exception as e:
+            print(f"❌ خطأ في معالجة اختيار التقييم: {e}")
+            await interaction.followup.send("❌ حدث خطأ غير متوقع أثناء معالجة التقييم، حاول مرة أخرى.", ephemeral=True)
+
+class StaffSearchView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(StaffUserSearchSelect())
 
 class RatingPanelView(discord.ui.View):
-    def __init__(self, staff_members: list):
-        super().__init__(timeout=None) # دائم ومستقر لا ينتهي
-        if staff_members:
-            self.add_item(StaffRatingSelect(staff_members))
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="ابدأ تقييم إداري الآن", 
+        style=discord.ButtonStyle.green, 
+        emoji="⭐", 
+        custom_id="persistent_start_rating_btn_v100"
+    )
+    async def start_rating_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = StaffSearchView()
+        await interaction.response.send_message(
+            "🔍 **ابحث عن الإداري بالاسم أو اختره من القائمة أدناه لتقييمه:**", 
+            view=view, 
+            ephemeral=True
+        )
 
 @bot.command(name="بانل_تقييم", aliases=["rating_panel"])
 async def rating_panel_cmd(ctx):
@@ -680,78 +746,60 @@ async def rating_panel_cmd(ctx):
     try: await ctx.message.delete()
     except: pass
 
-    guild = ctx.guild
-    target_role_id = 1545520633939624006
-    staff_role = guild.get_role(target_role_id)
-
-    if not staff_role:
-        await ctx.send("❌ خطأ: رتبة الإدارة المستهدفة غير موجودة بالسيرفر!")
-        return
-
-    staff_members = [m for m in guild.members if staff_role in m.roles and not m.bot]
-
     embed = discord.Embed(
         title="⭐ | تقييم • الإدارة والدعم الفني",
         description=(
-            "**أهلاً بك يا visitor في قسم تقييم الإدارة الرسمية لنادي منتدى النظيم.**\n\n"
-            "اضغط على القائمة أدناه، اختر اسم الإداري الذي تريد تقييمه، ثم حدد النجوم واكتب ملاحظتك بكل شفافية لتحسين مستوى الأداء باستمرار!\n\n"
-            f"👥 **عدد الإداريين المتاحين للتقييم حالياً:** `{len(staff_members)}` إداري."
+            "**أهلاً بك في قسم تقييم الإدارة الرسمية لنادي منتدى النظيم.**\n\n"
+            "لتقييم أي إداري بكل سهولة وسرعة:\n"
+            "1️⃣ اضغط على زر **ابدأ تقييم إداري الآن** بالأسفل.\n"
+            "2️⃣ اكتب اسم الإداري في خانة البحث أو اختره من القائمة.\n"
+            "3️⃣ حدد عدد النجوم واكتب ملاحظتك.\n\n"
+            "✨ *النظام يدعم جميع الإداريين بدون استثناء مع خاصية البحث الفوري.*"
         ),
         color=discord.Color.gold(),
         timestamp=discord.utils.utcnow()
     )
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الإداري الموحد")
 
-    view = RatingPanelView(staff_members)
-    await ctx.send(embed=embed, view=view)
+    await ctx.send(embed=embed, view=RatingPanelView())
 
 # ----------------------------------------------------
-# ⭐ نظام استعراض تقييمات الإدارة التفصيلي في الشات
+# ⭐ نظام استعراض تقييمات الإدارة التفصيلي (بحث فوري)
 # ----------------------------------------------------
-class ViewStaffRatingsSelect(discord.ui.Select):
-    def __init__(self, ratings_data: dict, guild: discord.Guild):
-        options = []
-        for staff_id_str, data in ratings_data.items():
-            member = guild.get_member(int(staff_id_str))
-            name = member.display_name if member else f"إداري (ID: {staff_id_str})"
-            count = data.get("count", 0)
-            total = data.get("total_stars", 0)
-            avg = round(total / count, 1) if count > 0 else 0
-            
-            options.append(discord.SelectOption(
-                label=name[:50],
-                value=staff_id_str,
-                description=f"التقييم العام: {avg}⭐ | عدد المُقيمين: {count}",
-                emoji="📊"
-            ))
-            
-        super().__init__(placeholder="اختر الإداري لعرض تفاصيل تقييماته...", min_values=1, max_values=1, options=options, custom_id="persistent_view_ratings_select_v99")
+class AdminLookupUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="اختر الإداري أو اكتب اسمه لعرض سجل تقييماته...",
+            min_values=1,
+            max_values=1
+        )
 
     async def callback(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        staff_id_str = self.values[0]
+        await interaction.response.defer(ephemeral=True)
+        selected_user = self.values[0]
+        staff_id_str = str(selected_user.id)
         ratings = load_ratings()
-        
-        if staff_id_str not in ratings:
-            await interaction.response.send_message("❌ عذراً، لا توجد تقييمات مسجلة لهذا الإداري.", ephemeral=True)
+
+        if staff_id_str not in ratings or ratings[staff_id_str].get("count", 0) == 0:
+            await interaction.followup.send(
+                f"📊 لا توجد أي تقييمات مسجلة للإداري {selected_user.mention} حتى الآن.", 
+                ephemeral=True
+            )
             return
 
         staff_data = ratings[staff_id_str]
-        member = guild.get_member(int(staff_id_str))
-        staff_name = member.mention if member else f"<@{staff_id_str}>"
-        
         count = staff_data["count"]
         total = staff_data["total_stars"]
         avg = round(total / count, 1) if count > 0 else 0
         stars_str = '⭐' * round(avg)
 
         embed = discord.Embed(
-            title=f"📊 | سجل تقييمات الإداري: {member.name if member else staff_id_str}",
+            title=f"📊 | سجل تقييمات: {selected_user.display_name}",
             description=(
-                f"👤 **الإداري:** {staff_name}\n"
+                f"👤 **الإداري:** {selected_user.mention}\n"
                 f"⭐ **متوسط التقييم العام:** `{avg} / 5` {stars_str}\n"
                 f"📈 **إجمالي عدد المُقيمين:** `{count}` شخص\n\n"
-                f"📜 **سجل الملاحظات والتقييمات التفصيلية:**"
+                f"📜 **آخر 10 تقييمات وملاحظات:**"
             ),
             color=discord.Color.gold(),
             timestamp=discord.utils.utcnow()
@@ -766,48 +814,65 @@ class ViewStaffRatingsSelect(discord.ui.Select):
                 rev_time = rev.get("time", "وقت غير محدد")
                 
                 embed.add_field(
-                    name=f"#{idx} | تقييم من: {voter_name} ({'⭐' * rev_stars})",
+                    name=f"#{idx} | {voter_name} ({'⭐' * rev_stars})",
                     value=f"💬 **الملاحظة:** *{rev_comment}*\n⏱️ **الوقت:** `{rev_time}`",
                     inline=False
                 )
-        else:
-            embed.add_field(name="الملاحظات", value="لا توجد ملاحظات كتابية مسجلة.", inline=False)
 
         embed.set_footer(text="منتدى النظيم | لوحة تفاصيل تقييمات الإدارة")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
-class ViewStaffRatingsView(discord.ui.View):
-    def __init__(self, ratings_data: dict, guild: discord.Guild):
-        super().__init__(timeout=None) # دائم ومستقر
-        self.add_item(ViewStaffRatingsSelect(ratings_data, guild))
+class AdminLookupView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(AdminLookupUserSelect())
 
 @bot.command(name="تقييمات", aliases=["ratings", "تقييم"])
-async def show_ratings_cmd(ctx):
+async def show_ratings_cmd(ctx, member: discord.Member = None):
     if not is_admin_or_owner(ctx):
         await ctx.send("❌ عذراً، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
         return
+
+    try: await ctx.message.delete()
+    except: pass
 
     ratings = load_ratings()
     if not ratings:
         await ctx.send("📊 **لا توجد أي تقييمات مسجلة في السيرفر حتى الآن.**", delete_after=10)
         return
 
-    guild = ctx.guild
+    if member:
+        staff_id_str = str(member.id)
+        if staff_id_str not in ratings or ratings[staff_id_str].get("count", 0) == 0:
+            await ctx.send(f"📊 لا توجد تقييمات مسجلة للإداري {member.mention}.", delete_after=10)
+            return
+        
+        staff_data = ratings[staff_id_str]
+        count = staff_data["count"]
+        total = staff_data["total_stars"]
+        avg = round(total / count, 1)
+        embed = discord.Embed(
+            title=f"📊 | سجل تقييمات: {member.display_name}",
+            description=f"👤 **الإداري:** {member.mention}\n⭐ **المتوسط:** `{avg} / 5` ({'⭐' * round(avg)})\n📈 **عدد المقيمين:** `{count}`",
+            color=discord.Color.gold()
+        )
+        for idx, rev in enumerate(staff_data.get("reviews", [])[-10:], 1):
+            embed.add_field(
+                name=f"#{idx} | {rev.get('voter_name')} ({'⭐' * rev.get('stars', 0)})",
+                value=f"💬 *{rev.get('comment')}* | `{rev.get('time')}`",
+                inline=False
+            )
+        await ctx.send(embed=embed)
+        return
+
     embed = discord.Embed(
         title="📊 | استعراض تقييمات طاقم الإدارة",
-        description="اختر الإداري من القائمة أدناه لعرض **جميع تقييماته وملاحظاته التفصيلية** في الشات:",
+        description="اكتب اسم الإداري في خانة البحث أدناه (أو استخدم `.تقييمات @منشن`) لعرض جميع تقييماته وملاحظاته:",
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
     embed.set_footer(text="منتدى النظيم | لوحة الرقابة الإدارية")
-
-    view = ViewStaffRatingsView(ratings, guild)
-    try:
-        await ctx.message.delete()
-    except:
-        pass
-        
-    await ctx.send(embed=embed, view=view)
+    await ctx.send(embed=embed, view=AdminLookupView())
 
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
@@ -1541,7 +1606,7 @@ async def panel_apply(ctx):
 @bot.command(name="فحص_الرتب", aliases=["فحص", "check_roles"])
 async def check_roles_cmd(ctx):
     if ctx.author.id not in OWNER_IDS:
-        await ctx.send("❌ عذراً، هذا الأمر مخصص للأอนرات فقط!", delete_after=5)
+        await ctx.send("❌ عذراً، هذا الأمر مخصص للأونرات فقط!", delete_after=5)
         return
 
     msg = await ctx.send("🔍 **جاري فحص جميع أعضاء السيرفر وتوزيع الرتب على من ليس لديهم أي رتبة... انتظر شوي!**")
@@ -2055,16 +2120,9 @@ async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
     
-    # تفعيل Views التقييم الدائمة لكي لا تواجه مشكلة Interaction Failed أبداً
-    try:
-        ratings = load_ratings()
-        target_role = discord.utils.get(bot.guilds[0].roles, id=1545520633939624006) if bot.guilds else None
-        if target_role and bot.guilds:
-            staff_members = [m for m in bot.guilds[0].members if target_role in m.roles and not m.bot]
-            bot.add_view(RatingPanelView(staff_members))
-            bot.add_view(ViewStaffRatingsView(ratings, bot.guilds[0]))
-    except Exception as e:
-        print(f"⚠️ ملاحظة تفعيل تبييت فيوز التقييمات: {e}")
+    # تفعيل فيوز التقييمات الدائمة الآمنة ضد الكلام الأحمر
+    bot.add_view(RatingPanelView())
+    bot.add_view(AdminLookupView())
 
     if not check_expired_bans.is_running():
         check_expired_bans.start()
@@ -2372,7 +2430,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="⭐ نظام التقييم الإداري",
-        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي الدائم)\n▫️ `.تقييمات` (لاختيار الإداري وعرض تفاصيل تقييماته وملاحظاته في الشات)",
+        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي الدائم)\n▫️ `.تقييمات` (لاختيار الإداري وعرض تفاصيل تقييماته وملاحظاته في الشات عبر البحث)",
         inline=False
     )
     embed.add_field(
