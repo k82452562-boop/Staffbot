@@ -244,7 +244,6 @@ def parse_duration_to_seconds(duration_str: str) -> int:
     return val * 86400
 
 async def fetch_data_from_discord():
-    """استرجاع أحدث النسخ الاحتياطية السحابية تلقائياً عند الإقلاع لتجنب ضياع أي بيانات نهائياً"""
     try:
         for guild in bot.guilds:
             channel = guild.get_channel(BACKUP_CHANNEL_ID)
@@ -264,7 +263,6 @@ async def fetch_data_from_discord():
         print(f"⚠️ خطأ أثناء استرجاع النسخة الاحتياطية: {e}")
 
 async def save_file_to_discord(guild, local_path, target_filename, label_name):
-    """رفع نسخة احتياطية سحابية فورية لكل ملف يتم تعديله"""
     try:
         channel = guild.get_channel(BACKUP_CHANNEL_ID)
         if not channel:
@@ -563,7 +561,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي الذكي (مع الحفظ الفوري والسحابي المزدوج)
+# ⭐ نظام التقييم التفاعلي بأزرار الإداريين الفردية المباشرة (مثل الصورة)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
     def __init__(self, staff_member: discord.Member, stars: int):
@@ -601,7 +599,6 @@ class RatingSelectModal(discord.ui.Modal):
             "time": datetime.now().strftime('%Y-%m-%d %H:%M')
         })
         
-        # حفظ فوري وسحابي لضمان عدم ضياع التقييمات نهائياً
         save_ratings(ratings, guild)
 
         await interaction.response.send_message(
@@ -660,78 +657,54 @@ class RatingStarsView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(RatingStarsSelect(staff_member))
 
-class StaffUserSearchSelect(discord.ui.UserSelect):
-    def __init__(self):
+class DirectStaffRatingButton(discord.ui.Button):
+    def __init__(self, staff_member: discord.Member):
+        label_text = f"تقييم | {staff_member.display_name[:20]}"
         super().__init__(
-            placeholder="اكتب اسم الإداري أو اختره من القائمة...",
-            min_values=1,
-            max_values=1
+            label=label_text,
+            style=discord.ButtonStyle.secondary,
+            emoji="⭐",
+            custom_id=f"direct_rate_btn_{staff_member.id}"
         )
+        self.staff_member_id = staff_member.id
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        staff_member = guild.get_member(self.staff_member_id)
+        if not staff_member:
+            try:
+                staff_member = await guild.fetch_member(self.staff_member_id)
+            except:
+                pass
 
-        try:
-            selected_user = self.values[0]
-            guild = interaction.guild
-            
-            staff_member = guild.get_member(selected_user.id)
-            if not staff_member:
-                try:
-                    staff_member = await guild.fetch_member(selected_user.id)
-                except Exception:
-                    pass
+        if not staff_member:
+            await interaction.response.send_message("❌ عذراً، هذا الإداري غير موجود بالسيرفر حالياً.", ephemeral=True)
+            return
 
-            if not staff_member or staff_member.bot:
-                await interaction.followup.send("❌ عذراً، يجب اختيار عضو إداري حقيقي داخل السيرفر.", ephemeral=True)
-                return
+        if staff_member.id == interaction.user.id:
+            await interaction.response.send_message("❌ ما تقدر تقيم نفسك يا الحبيب!", ephemeral=True)
+            return
 
-            if staff_member.id == interaction.user.id:
-                await interaction.followup.send("❌ ما تقدر تقيم نفسك يا الحبيب!", ephemeral=True)
-                return
-
-            staff_role_id = 1545520633939624006
-            has_staff_role = any(role.id == staff_role_id for role in staff_member.roles)
-            
-            if not has_staff_role and staff_member.id not in OWNER_IDS:
-                await interaction.followup.send(
-                    f"❌ العضو {staff_member.mention} **ليس ضمن طاقم الإدارة** ولا يمكن تقييمه.", 
-                    ephemeral=True
-                )
-                return
-
-            view = RatingStarsView(staff_member)
-            await interaction.followup.send(
-                content=f"⭐ **تقييم الإداري:** {staff_member.mention}\nالآن اختر عدد النجوم المناسبة لأدائه:",
-                view=view,
-                ephemeral=True
-            )
-        except Exception as e:
-            print(f"❌ خطأ في معالجة اختيار التقييم: {e}")
-            await interaction.followup.send("❌ حدث خطأ غير متوقع أثناء معالجة التقييم، حاول مرة أخرى.", ephemeral=True)
-
-class StaffSearchView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(StaffUserSearchSelect())
-
-class RatingPanelView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="ابدأ تقييم إداري الآن", 
-        style=discord.ButtonStyle.green, 
-        emoji="⭐", 
-        custom_id="persistent_start_rating_btn_v100"
-    )
-    async def start_rating_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        view = StaffSearchView()
+        view = RatingStarsView(staff_member)
         await interaction.response.send_message(
-            "🔍 **ابحث عن الإداري بالاسم أو اختره من القائمة أدناه لتقييمه:**", 
-            view=view, 
+            content=f"⭐ **تقييم الإداري:** {staff_member.mention}\nاختر عدد النجوم المناسبة لأدائه من القائمة أدناه:",
+            view=view,
             ephemeral=True
         )
+
+class DirectRatingPanelView(discord.ui.View):
+    """فيو يولد أزرار التقييم مباشرة لكل الإداريين الموجودين في رتبة الإدارة أو القائمة"""
+    def __init__(self, guild: discord.Guild):
+        super().__init__(timeout=None)
+        staff_role_id = ADMIN_ROLE_PENG_ID # 1545520633939624006
+        staff_role = guild.get_role(staff_role_id)
+        
+        count = 0
+        if staff_role:
+            for member in guild.members:
+                if staff_role in member.roles and not member.bot and count < 25: # حد ديسكورد الأقصى للأزرار 25 زر بالرسالة
+                    self.add_item(DirectStaffRatingButton(member))
+                    count += 1
 
 @bot.command(name="بانل_تقييم", aliases=["rating_panel"])
 async def rating_panel_cmd(ctx):
@@ -742,21 +715,19 @@ async def rating_panel_cmd(ctx):
     except: pass
 
     embed = discord.Embed(
-        title="⭐ | تقييم • الإدارة والدعم الفني",
+        title="⭐ | تقييم الإدارة والدعم الفني",
         description=(
-            "**أهلاً بك في قسم تقييم الإدارة الرسمية لنادي منتدى النظيم.**\n\n"
-            "لتقييم أي إداري بكل سهولة وسرعة:\n"
-            "1️⃣ اضغط على زر **ابدأ تقييم إداري الآن** بالأسفل.\n"
-            "2️⃣ اكتب اسم الإداري في خانة البحث أو اختره من القائمة.\n"
-            "3️⃣ حدد عدد النجوم واكتب ملاحظتك.\n\n"
-            "✨ *النظام يدعم جميع الإداريين بدون استثناء مع خاصية البحث الفوري.*"
+            "**اختر زر تقييم بجانب اسم الإداري، ثم اختر من ⭐ إلى ⭐⭐⭐.**\n"
+            "بعد اختيار النجوم، يمكنك كتابة سبب التقييم (اختياري).\n\n"
+            "👇 **أزرار تقييم أعضاء طاقم الإدارة المتاحة حالياً:**"
         ),
         color=discord.Color.gold(),
         timestamp=discord.utils.utcnow()
     )
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الإداري الموحد")
 
-    await ctx.send(embed=embed, view=RatingPanelView())
+    view = DirectRatingPanelView(ctx.guild)
+    await ctx.send(embed=embed, view=view)
 
 # ----------------------------------------------------
 # ⭐ نظام استعراض تقييمات الإدارة التفصيلي (بحث فوري)
@@ -2110,7 +2081,6 @@ async def check_expired_bans():
 
 @bot.event
 async def on_ready():
-    # استرجاع جميع البيانات السحابية عند الإقلاع لضمان عدم ضياع أي شيء
     await fetch_data_from_discord()
 
     bot.add_view(TeamsResetView())
@@ -2118,7 +2088,10 @@ async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
     
-    bot.add_view(RatingPanelView())
+    for guild in bot.guilds:
+        bot.add_view(DirectRatingPanelView(guild))
+        break
+
     bot.add_view(AdminLookupView())
 
     if not check_expired_bans.is_running():
@@ -2424,7 +2397,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="⭐ نظام التقييم الإداري",
-        value="▫️ `.بانل_تقييم` (لنشر بانل التقييم التفاعلي الدائم)\n▫️ `.تقييمات` (لاختيار الإداري وعرض تفاصيل تقييماته وملاحظاته في الشات عبر البحث)",
+        value="▫️ `.بانل_تقييم` (لنشر بانل أزرار التقييم الفردية لكل إداري تلقائياً)\n▫️ `.تقييمات` (لعرض سجل تقييمات أي إداري وملاحظاته مع بحث فوري)",
         inline=False
     )
     embed.add_field(
