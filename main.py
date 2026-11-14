@@ -561,7 +561,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# ⭐ نظام التقييم التفاعلي بأزرار الإداريين الفردية المباشرة (مثل الصورة)
+# ⭐ نظام التقييم التفاعلي بأزرار أفقية مرتبة (بحيث يوزع 5 أزرار بكل صف أفقي تلقائياً)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
     def __init__(self, staff_member: discord.Member, stars: int):
@@ -658,13 +658,14 @@ class RatingStarsView(discord.ui.View):
         self.add_item(RatingStarsSelect(staff_member))
 
 class DirectStaffRatingButton(discord.ui.Button):
-    def __init__(self, staff_member: discord.Member):
-        label_text = f"تقييم | {staff_member.display_name[:20]}"
+    def __init__(self, staff_member: discord.Member, row_idx: int):
+        label_text = f"تقييم | {staff_member.display_name[:18]}"
         super().__init__(
             label=label_text,
             style=discord.ButtonStyle.secondary,
             emoji="⭐",
-            custom_id=f"direct_rate_btn_{staff_member.id}"
+            custom_id=f"direct_rate_btn_{staff_member.id}",
+            row=row_idx
         )
         self.staff_member_id = staff_member.id
 
@@ -693,7 +694,7 @@ class DirectStaffRatingButton(discord.ui.Button):
         )
 
 class DirectRatingPanelView(discord.ui.View):
-    """فيو يولد أزرار التقييم مباشرة لكل الإداريين الموجودين في رتبة الإدارة أو القائمة"""
+    """فيو يولد أزرار التقييم أفقياً (كل 5 أزرار في صف أفقي واحد متناسق)"""
     def __init__(self, guild: discord.Guild):
         super().__init__(timeout=None)
         staff_role_id = ADMIN_ROLE_PENG_ID # 1545520633939624006
@@ -702,8 +703,9 @@ class DirectRatingPanelView(discord.ui.View):
         count = 0
         if staff_role:
             for member in guild.members:
-                if staff_role in member.roles and not member.bot and count < 25: # حد ديسكورد الأقصى للأزرار 25 زر بالرسالة
-                    self.add_item(DirectStaffRatingButton(member))
+                if staff_role in member.roles and not member.bot and count < 25:
+                    row_idx = count // 5  # يوزع الأزرار تلقائياً على صفوف أفقية (أقصى شيء 5 أزرار بالصف)
+                    self.add_item(DirectStaffRatingButton(member, row_idx))
                     count += 1
 
 @bot.command(name="بانل_تقييم", aliases=["rating_panel"])
@@ -717,9 +719,9 @@ async def rating_panel_cmd(ctx):
     embed = discord.Embed(
         title="⭐ | تقييم الإدارة والدعم الفني",
         description=(
-            "**اختر زر تقييم بجانب اسم الإداري، ثم اختر من ⭐ إلى ⭐⭐⭐.**\n"
+            "**اختر زر تقييم بجانب اسم الإداري، ثم اختر من ⭐ إلى ⭐⭐⭐⭐⭐.**\n"
             "بعد اختيار النجوم، يمكنك كتابة سبب التقييم (اختياري).\n\n"
-            "👇 **أزرار تقييم أعضاء طاقم الإدارة المتاحة حالياً:**"
+            "👇 **أزرار تقييم أعضاء طاقم الإدارة (مرتبة أفقياً ومنظمة):**"
         ),
         color=discord.Color.gold(),
         timestamp=discord.utils.utcnow()
@@ -886,6 +888,7 @@ class TeamPointsModal(discord.ui.Modal):
         await interaction.response.send_message(msg, ephemeral=True)
 
 class TeamsControlView(discord.ui.View):
+    """أزرار تحكم التيمات مرتبة في صفوف أفقية متناسقة"""
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -895,21 +898,22 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v22")
+    # الصف الأول: التيم الأول
+    @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v30", row=0)
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v22")
+    @discord.ui.button(label="➖ خصم (تيم 1)", style=discord.ButtonStyle.blurple, custom_id="t1_remove_btn_v30", row=0)
     async def t1_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_modal(TeamPointsModal(team_id=1, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v22")
+    @discord.ui.button(label="🔄 تصفير (تيم 1)", style=discord.ButtonStyle.danger, custom_id="t1_reset_btn_v30", row=0)
     async def t1_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -923,21 +927,22 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v22")
+    # الصف الثاني: التيم الثاني
+    @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v30", row=1)
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="add", team_name=name))
 
-    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v22")
+    @discord.ui.button(label="➖ خصم (تيم 2)", style=discord.ButtonStyle.blurple, custom_id="t2_remove_btn_v30", row=1)
     async def t2_remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_modal(TeamPointsModal(team_id=2, action_type="remove", team_name=name))
 
-    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v22")
+    @discord.ui.button(label="🔄 تصفير (تيم 2)", style=discord.ButtonStyle.danger, custom_id="t2_reset_btn_v30", row=1)
     async def t2_reset(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         guild_id_str = str(guild.id)
@@ -955,7 +960,7 @@ class TeamsResetView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v29")
+    @discord.ui.button(label="تصفير تنافس الفرق الأسبوعي", style=discord.ButtonStyle.danger, emoji="🔄", custom_id="reset_teams_weekly_virtual_v30")
     async def reset_teams_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not is_admin_or_owner(interaction):
             await interaction.response.send_message("❌ هذه اللوحة مخصصة للأدمنستريتر فقط!", ephemeral=True)
@@ -2397,7 +2402,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="⭐ نظام التقييم الإداري",
-        value="▫️ `.بانل_تقييم` (لنشر بانل أزرار التقييم الفردية لكل إداري تلقائياً)\n▫️ `.تقييمات` (لعرض سجل تقييمات أي إداري وملاحظاته مع بحث فوري)",
+        value="▫️ `.بانل_تقييم` (لنشر بانل أزرار التقييم الفردية لكل إداري أفقياً ومنظماً)\n▫️ `.تقييمات` (لعرض سجل تقييمات أي إداري وملاحظاته مع بحث فوري)",
         inline=False
     )
     embed.add_field(
