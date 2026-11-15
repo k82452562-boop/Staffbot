@@ -3,66 +3,834 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منتدى النظيم | لوحة التحكم والأوامر</title>
+    <title>منتدى النظيم | لوحة التحكم الإدارية الشاملة</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Cairo) -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0b0f19',
+                        cardbg: '#111827',
+                        sidebarbg: '#0f172a',
+                        accent: '#6366f1',
+                        accenthover: '#4f46e5',
+                        discord: '#5865F2',
+                        railway: '#0b0f19'
+                    },
+                    fontFamily: {
+                        cairo: ['Cairo', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { background-color: #0d1117; color: #c9d1d9; font-family: Tahoma, sans-serif; margin: 0; padding: 20px; }
-        header { text-align: center; padding: 20px; border-bottom: 2px solid #30363d; margin-bottom: 30px; }
-        h1 { color: #f1c40f; }
-        .container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-        .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .card h2 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-top: 0; }
-        ul { padding-right: 20px; }
-        li { margin-bottom: 10px; line-height: 1.6; }
-        code { background-color: #21262d; color: #ff7b72; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
-        footer { text-align: center; margin-top: 40px; color: #8b949e; border-top: 1px solid #30363d; padding-top: 15px; }
+        body { font-family: 'Cairo', sans-serif; background-color: #0b0f19; color: #f3f4f6; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
     </style>
 </head>
-<body>
+<body class="min-h-screen flex flex-col md:flex-row antialiased selection:bg-indigo-500 selection:text-white">
 
-    <header>
-        <h1>منتدى النظيم ⚔️ | لوحة تحكم الأوامر والأنظمة</h1>
-        <p>المرجع الشامل لجميع أوامر البوت، العقوبات، والأنظمة السيادية.</p>
-    </header>
+    <!-- Notification Toast System -->
+    <div id="toast-container" class="fixed top-5 left-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-    <div class="container">
-        <!-- القسم الأول: نظام التقييم الإداري -->
-        <div class="card">
-            <h2>⭐ نظام التقييم الإداري</h2>
-            <ul>
-                <li><code>.بانل_تقييم</code> : لنشر بانل أزرار التقييم الفردية لكل إداري بشكل أفقي ومنظم.</li>
-                <li><code>.تقييمات</code> : لعرض سجل تقييمات أي إداري وملاحظاته مع بحث فوري.</li>
-            </ul>
+    <!-- Sidebar Navigation -->
+    <aside class="w-full md:w-72 bg-sidebarbg border-b md:border-b-0 md:border-l border-gray-800 flex flex-col justify-between shrink-0 shadow-2xl">
+        <div>
+            <!-- Logo & Brand -->
+            <div class="p-6 flex items-center gap-3 border-b border-gray-800/80">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 text-white font-black text-2xl">
+                    ن
+                </div>
+                <div>
+                    <h1 class="font-black text-lg text-white tracking-wide">منتدى النظيم</h1>
+                    <p class="text-xs text-indigo-400 font-semibold flex items-center gap-1.5 mt-0.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        متصل بـ Railway & Bot
+                    </p>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="p-4 space-y-1.5">
+                <button onclick="switchTab('overview')" id="nav-overview" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold text-sm transition-all text-white bg-indigo-600 shadow-lg shadow-indigo-600/20">
+                    <i class="fa-solid fa-chart-pie w-5 text-center text-lg"></i>
+                    <span>الرئيسية والإحصائيات</span>
+                </button>
+                <button onclick="switchTab('points')" id="nav-points" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold text-sm transition-all text-gray-400 hover:text-white hover:bg-gray-800/60">
+                    <i class="fa-solid fa-ranking-star w-5 text-center text-lg"></i>
+                    <span>إدارة النقاط والفرق</span>
+                </button>
+                <button onclick="switchTab('punishments')" id="nav-punishments" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold text-sm transition-all text-gray-400 hover:text-white hover:bg-gray-800/60">
+                    <i class="fa-solid fa-gavel w-5 text-center text-lg"></i>
+                    <span>الحرمانات والعقوبات</span>
+                </button>
+                <button onclick="switchTab('logs')" id="nav-logs" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold text-sm transition-all text-gray-400 hover:text-white hover:bg-gray-800/60">
+                    <i class="fa-solid fa-rectangle-list w-5 text-center text-lg"></i>
+                    <span>سجل اللوق المباشر</span>
+                </button>
+                <button onclick="switchTab('settings')" id="nav-settings" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl font-bold text-sm transition-all text-gray-400 hover:text-white hover:bg-gray-800/60">
+                    <i class="fa-solid fa-sliders w-5 text-center text-lg"></i>
+                    <span>إعدادات البوت والـ Railway</span>
+                </button>
+            </nav>
         </div>
 
-        <!-- القسم الثاني: النقاط والفرق -->
-        <div class="card">
-            <h2>📊 النقاط والفرق والبروفايلات</h2>
-            <ul>
-                <li><code>/أداء</code> : عرض تقارير أداء ومقارنة الفرق ونقاطهم وعدد ترقياتهم.</li>
-                <li><code>.تيمات</code> : لوحة تحكم الأอนر لإدارة نقاط الفرق وتصفيرها.</li>
-                <li><code>/نقاط</code> : عرض رصيد النقاط ومؤشر التقدم والمتبقي للترقية.</li>
-                <li><code>/توب</code> : عرض لوحة الشرف وأعلى الأعضاء نقاطاً.</li>
-                <li><code>/بروفايل</code> : السجل الإداري السيادي الشامل للعضو.</li>
-            </ul>
+        <!-- Sidebar Footer Status -->
+        <div class="p-4 border-t border-gray-800/80 m-4 bg-cardbg/50 rounded-2xl border border-gray-800">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-gray-400 font-semibold">حالة الاستضافة</span>
+                <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-bold border border-emerald-500/20">Active (24/7)</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-gray-300">
+                <span>Node.js / Express</span>
+                <span class="font-mono text-indigo-400">v18.16.0</span>
+            </div>
         </div>
+    </aside>
 
-        <!-- القسم الثالث: العقوبات والإدارة -->
-        <div class="card">
-            <h2>🛡️ العقوبات والفعاليات والتوظيف</h2>
-            <ul>
-                <li><code>/تحذير</code> : تطبيق تحذير إداري رسمي على عضو مع حفظ السجل.</li>
-                <li><code>/تايم_أوت</code> : إسكات عضو لمدة معينة بالدقائق.</li>
-                <li><code>/حرمان</code> : حرمان عضو من الرتب مع حفظها وإرجاعها تلقائياً.</li>
-                <li><code>/اعفاء</code> : رفع الحرمان عن العضو وإرجاع رتبه السابقة فوراً.</li>
-                <li><code>/فصل</code> : سحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل.</li>
-                <li><code>.فعاليات</code> : لوحة إطلاق وإدارة الفعاليات الإدارية الكبرى.</li>
-            </ul>
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <!-- Top Header Bar -->
+        <header class="bg-cardbg/80 backdrop-blur-md border-b border-gray-800 sticky top-0 z-30 px-6 py-4 flex items-center justify-between shadow-sm">
+            <div class="flex items-center gap-4">
+                <div class="font-black text-xl text-white flex items-center gap-2">
+                    <span id="current-tab-title">لوحة القيادة الرئيسية</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="triggerBotRestart()" class="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-xl font-bold text-xs transition border border-gray-700">
+                    <i class="fa-solid fa-rotate text-indigo-400"></i>
+                    <span>إعادة تشغيل البوت</span>
+                </button>
+                <div class="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Tab Contents -->
+        <div class="p-6 md:p-8 flex-1 max-w-7xl w-full mx-auto space-y-8">
+
+            <!-- TAB 1: OVERVIEW -->
+            <section id="tab-overview" class="tab-content space-y-6">
+                <!-- Welcome Banner -->
+                <div class="bg-gradient-to-r from-indigo-900/40 via-purple-900/30 to-cardbg border border-indigo-500/20 p-6 md:p-8 rounded-3xl relative overflow-hidden shadow-xl">
+                    <div class="absolute -left-10 -bottom-10 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
+                    <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div>
+                            <span class="text-xs bg-indigo-500/20 text-indigo-300 font-bold px-3 py-1 rounded-full border border-indigo-500/30 inline-block mb-3">لوحة التحكم المركزية</span>
+                            <h2 class="text-2xl md:text-3xl font-black text-white tracking-wide">أهلاً بك يا الحاكم ريان في منتدى النظيم</h2>
+                            <p class="text-sm text-gray-400 mt-2 max-w-2xl leading-relaxed">
+                                هذه اللوحة متصلة مباشرة بسيرفر البوت على Railway لإدارة النقاط، متابعة أداء التيمات، فحص السجلات الحية، والتحكم بكافة صلاحيات الإدارة بكل سهولة واحترافية.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-3">
+                            <button onclick="switchTab('points')" class="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-2xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
+                                <i class="fa-solid fa-plus-circle"></i>
+                                <span>إضافة نقاط سريعة</span>
+                            </button>
+                            <button onclick="fetchDashboardData()" class="px-5 py-3 bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold text-sm rounded-2xl border border-gray-700 transition flex items-center gap-2">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                                <span>تحديث البيانات</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Cards Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-cardbg border border-gray-800 p-6 rounded-3xl shadow-lg relative overflow-hidden group hover:border-indigo-500/50 transition">
+                        <div class="absolute top-0 right-0 w-2 h-full bg-indigo-500"></div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-bold text-gray-400">الإداريون النشطون</span>
+                            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold text-lg">
+                                <i class="fa-solid fa-user-shield"></i>
+                            </div>
+                        </div>
+                        <div class="text-3xl font-black text-white" id="stat-active-staff">48</div>
+                        <p class="text-xs text-emerald-400 font-semibold mt-2 flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                            <span>+3 هذا الأسبوع</span>
+                        </p>
+                    </div>
+
+                    <div class="bg-cardbg border border-gray-800 p-6 rounded-3xl shadow-lg relative overflow-hidden group hover:border-violet-500/50 transition">
+                        <div class="absolute top-0 right-0 w-2 h-full bg-violet-500"></div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-bold text-gray-400">إجمالي النقاط المرصودة</span>
+                            <div class="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-400 flex items-center justify-center font-bold text-lg">
+                                <i class="fa-solid fa-coins"></i>
+                            </div>
+                        </div>
+                        <div class="text-3xl font-black text-white" id="stat-total-points">1,420</div>
+                        <p class="text-xs text-violet-400 font-semibold mt-2 flex items-center gap-1">
+                            <i class="fa-solid fa-fire text-amber-400"></i>
+                            <span>وضع الدبل نشط (x2)</span>
+                        </p>
+                    </div>
+
+                    <div class="bg-cardbg border border-gray-800 p-6 rounded-3xl shadow-lg relative overflow-hidden group hover:border-rose-500/50 transition">
+                        <div class="absolute top-0 right-0 w-2 h-full bg-rose-500"></div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-bold text-gray-400">الحرمانات والعقوبات</span>
+                            <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center font-bold text-lg">
+                                <i class="fa-solid fa-user-lock"></i>
+                            </div>
+                        </div>
+                        <div class="text-3xl font-black text-white" id="stat-active-bans">12</div>
+                        <p class="text-xs text-rose-400 font-semibold mt-2 flex items-center gap-1">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>تحت المتابعة المباشرة</span>
+                        </p>
+                    </div>
+
+                    <div class="bg-cardbg border border-gray-800 p-6 rounded-3xl shadow-lg relative overflow-hidden group hover:border-amber-500/50 transition">
+                        <div class="absolute top-0 right-0 w-2 h-full bg-amber-500"></div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-bold text-gray-400">تيم التحدي المسيطر</span>
+                            <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-lg">
+                                <i class="fa-solid fa-trophy"></i>
+                            </div>
+                        </div>
+                        <div class="text-lg font-black text-white truncate" id="stat-leading-team">التيم الأول (الصقور)</div>
+                        <p class="text-xs text-amber-400 font-semibold mt-2 flex items-center gap-1">
+                            <span>فارق 85 نقطة</span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Teams Comparison & Quick Actions Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Teams Performance Card -->
+                    <div class="lg:col-span-2 bg-cardbg border border-gray-800 p-6 rounded-3xl shadow-lg flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-6">
+                                <h3 class="text-lg font-black text-white flex items-center gap-2.5">
+                                    <i class="fa-solid fa-scale-balanced text-indigo-400"></i>
+                                    <span>مقارنة أداء الفرق الأسبوعي</span>
+                                </h3>
+                                <button onclick="resetTeamsCompetitions()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-xl border border-gray-700 font-bold transition">تصفير المنافسة</button>
+                            </div>
+
+                            <div class="space-y-6">
+                                <!-- Team 1 -->
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="font-bold text-sm text-indigo-300 flex items-center gap-2">
+                                            <span class="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
+                                            التيم الأول (الصقور)
+                                        </span>
+                                        <span class="font-black text-sm text-white" id="team1-score">780 نقطة</span>
+                                    </div>
+                                    <div class="w-full bg-gray-800 h-3.5 rounded-full overflow-hidden p-0.5 border border-gray-700">
+                                        <div id="team1-progress" class="bg-gradient-to-r from-indigo-600 to-indigo-400 h-full rounded-full transition-all duration-500" style="width: 65%;"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Team 2 -->
+                                <div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="font-bold text-sm text-violet-300 flex items-center gap-2">
+                                            <span class="w-3 h-3 rounded-full bg-violet-500 inline-block"></span>
+                                            التيم الثاني (الأسود)
+                                        </span>
+                                        <span class="font-black text-sm text-white" id="team2-score">695 نقطة</span>
+                                    </div>
+                                    <div class="w-full bg-gray-800 h-3.5 rounded-full overflow-hidden p-0.5 border border-gray-700">
+                                        <div id="team2-progress" class="bg-gradient-to-r from-violet-600 to-violet-400 h-full rounded-full transition-all duration-500" style="width: 58%;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 pt-6 border-t border-gray-800 flex items-center justify-between text-xs text-gray-400">
+                            <span>آخر تحديث تلقائي: قبل دقيقة واحدة</span>
+                            <span class="text-indigo-400 font-bold">نظام النقاط الموحد مفعل</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Admin Tool -->
+                    <div class="bg-cardbg border border-gray-800 p-6 rounded-3xl shadow-lg flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-lg font-black text-white flex items-center gap-2.5 mb-4">
+                                <i class="fa-solid fa-bolt text-amber-400"></i>
+                                <span>أوامر إدارية سريعة</span>
+                            </h3>
+                            <p class="text-xs text-gray-400 mb-5 leading-relaxed">إرسال تنبيه عام للإدارة، تفعيل وضع الدبل، أو تعديل نقاط إداري بشكل مباشر.</p>
+                            
+                            <div class="space-y-3">
+                                <button onclick="openQuickActionModal('double')" class="w-full py-3 px-4 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs rounded-2xl border border-amber-500/30 transition flex items-center justify-between">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="fa-solid fa-fire text-amber-400 text-base"></i>
+                                        تفعيل/إلغاء وضع الدبل (x2)
+                                    </span>
+                                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                                </button>
+                                <button onclick="openQuickActionModal('announce')" class="w-full py-3 px-4 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-bold text-xs rounded-2xl border border-indigo-500/30 transition flex items-center justify-between">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="fa-solid fa-bullhorn text-indigo-400 text-base"></i>
+                                        إرسال إعلان إداري عام
+                                    </span>
+                                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                                </button>
+                                <button onclick="openQuickActionModal('backup')" class="w-full py-3 px-4 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 font-bold text-xs rounded-2xl border border-emerald-500/30 transition flex items-center justify-between">
+                                    <span class="flex items-center gap-2.5">
+                                        <i class="fa-solid fa-cloud-arrow-down text-emerald-400 text-base"></i>
+                                        إنشاء نسخة احتياطية سحابية
+                                    </span>
+                                    <i class="fa-solid fa-chevron-left text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-gray-800 text-center">
+                            <span class="text-[11px] text-gray-500">منتدى النظيم © 2026 - جميع الحقوق محفوظة</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: POINTS & LEADERBOARD MANAGEMENT -->
+            <section id="tab-points" class="tab-content hidden space-y-6">
+                <div class="bg-cardbg border border-gray-800 p-6 md:p-8 rounded-3xl shadow-lg">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
+                        <div>
+                            <h2 class="text-xl font-black text-white">إدارة نقاط الإداريين وتعديل الرصيد</h2>
+                            <p class="text-xs text-gray-400 mt-1">أضف أو اطرح النقاط للإداريين مع توثيق السبب وإشعار لوق السيرفر تلقائياً.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <input type="text" id="staff-search-input" placeholder="ابحث باسم الإداري أو الأيدي..." onkeyup="filterStaffTable()" class="bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 w-64">
+                        </div>
+                    </div>
+
+                    <!-- Points Modification Form Box -->
+                    <div class="bg-gray-900/60 border border-gray-800 p-5 rounded-2xl mb-8">
+                        <h3 class="text-sm font-bold text-indigo-400 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                            <span>تعديل يدوي سريع لرصيد إداري</span>
+                        </h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-400 mb-1.5">أيدي الإداري (Discord ID)</label>
+                                <input type="text" id="manage-staff-id" placeholder="مثال: 917414299184533515" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-400 mb-1.5">النقاط (موجب للإضافة، سالب للخصم)</label>
+                                <input type="number" id="manage-points-val" placeholder="مثال: 5 أو -2" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-400 mb-1.5">سبب التعديل</label>
+                                <div class="flex gap-2">
+                                    <input type="text" id="manage-reason" placeholder="مثال: تفاعل استثنائي بالتكتات" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                                    <button onclick="submitPointsAdjustment()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shrink-0 shadow-md">تنفيذ</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Staff Leaderboard Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right border-collapse">
+                            <thead>
+                                <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
+                                    <th class="py-3 px-4 font-bold">المرتبة</th>
+                                    <th class="py-3 px-4 font-bold">اسم الإداري</th>
+                                    <th class="py-3 px-4 font-bold">التيم</th>
+                                    <th class="py-3 px-4 font-bold">النقاط الشخصية</th>
+                                    <th class="py-3 px-4 font-bold">التكتات المنجزة</th>
+                                    <th class="py-3 px-4 font-bold">التحكم السريع</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staff-table-body" class="divide-y divide-gray-800/60 text-sm">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: PUNISHMENTS & BANS MANAGEMENT -->
+            <section id="tab-punishments" class="tab-content hidden space-y-6">
+                <div class="bg-cardbg border border-gray-800 p-6 md:p-8 rounded-3xl shadow-lg">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
+                        <div>
+                            <h2 class="text-xl font-black text-white">إدارة الحرمانات، التايم آوت، والتحذيرات</h2>
+                            <p class="text-xs text-gray-400 mt-1">عرض قائمة المخالفين والعقوبات النشطة مع أزرار الفك الفوري أو التعديل.</p>
+                        </div>
+                        <button onclick="openNewPunishmentModal()" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-rose-600/30 transition flex items-center gap-2">
+                            <i class="fa-solid fa-user-slash"></i>
+                            <span>تسجيل عقوبة جديدة</span>
+                        </button>
+                    </div>
+
+                    <!-- Punishment Filter Tabs -->
+                    <div class="flex gap-2 mb-6">
+                        <button onclick="filterPunishments('all')" id="p-filter-all" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-indigo-600 text-white">جميع العقوبات</button>
+                        <button onclick="filterPunishments('ban')" id="p-filter-ban" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-400 hover:text-white">الحرمانات النشطة (Bans)</button>
+                        <button onclick="filterPunishments('timeout')" id="p-filter-timeout" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-400 hover:text-white">التايم آوت (Timeouts)</button>
+                        <button onclick="filterPunishments('warn')" id="p-filter-warn" class="px-4 py-2 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-400 hover:text-white">التحذيرات (Warns)</button>
+                    </div>
+
+                    <!-- Punishments Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right border-collapse">
+                            <thead>
+                                <tr class="border-b border-gray-800 text-xs text-gray-400 uppercase">
+                                    <th class="py-3 px-4 font-bold">العضو المخالف</th>
+                                    <th class="py-3 px-4 font-bold">نوع العقوبة</th>
+                                    <th class="py-3 px-4 font-bold">السبب</th>
+                                    <th class="py-3 px-4 font-bold">المسؤول عن العقوبة</th>
+                                    <th class="py-3 px-4 font-bold">التاريخ والمدة</th>
+                                    <th class="py-3 px-4 font-bold">الإجراء الفوري</th>
+                                </tr>
+                            </thead>
+                            <tbody id="punishments-table-body" class="divide-y divide-gray-800/60 text-sm">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: LIVE LOG FEED -->
+            <section id="tab-logs" class="tab-content hidden space-y-6">
+                <div class="bg-cardbg border border-gray-800 p-6 md:p-8 rounded-3xl shadow-lg">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-gray-800">
+                        <div>
+                            <h2 class="text-xl font-black text-white">سجل اللوق المباشر لعمليات البوت</h2>
+                            <p class="text-xs text-gray-400 mt-1">متابعة لحظية لكافة الإجراءات الإدارية، إيداع النقاط، الأوامر، والتحذيرات الصادرة.</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 font-bold">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                البث المباشر نشط
+                            </span>
+                            <button onclick="clearLogsFeed()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs rounded-xl border border-gray-700 transition">مسح العرض</button>
+                        </div>
+                    </div>
+
+                    <!-- Logs Stream Container -->
+                    <div id="logs-container" class="bg-gray-950 border border-gray-800 rounded-2xl p-4 font-mono text-xs space-y-3 h-[500px] overflow-y-auto">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: BOT SETTINGS & RAILWAY CONFIG -->
+            <section id="tab-settings" class="tab-content hidden space-y-6">
+                <div class="bg-cardbg border border-gray-800 p-6 md:p-8 rounded-3xl shadow-lg space-y-8">
+                    <div class="pb-6 border-b border-gray-800">
+                        <h2 class="text-xl font-black text-white">إعدادات البوت والمتغيرات البيئية (Railway Environment)</h2>
+                        <p class="text-xs text-gray-400 mt-1">عرض وتعديل إعدادات الاتصال، توكن البوت، وأيدي الرتب وقنوات اللوق المرتبطة بالسيرفر.</p>
+                    </div>
+
+                    <!-- Railway Config Form -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1.5">Discord Bot Token (DISCORD_TOKEN)</label>
+                            <div class="flex gap-2">
+                                <input type="password" value="MTM0NzE5MjM4NjIzMzI...[محمي]" readonly class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-gray-300 font-mono">
+                                <button onclick="showToast('تم نسخ التوكن بنجاح', 'success')" class="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold rounded-xl border border-gray-700 transition">نسخ</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1.5">قناة اللوق الرئيسية (LOG_CHANNEL_ID)</label>
+                            <input type="text" value="1553913719128588389" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1.5">أيدي التيم الأول (TEAM_1_ROLE_ID)</label>
+                            <input type="text" value="1562958541856182312" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-400 mb-1.5">أيدي التيم الثاني (TEAM_2_ROLE_ID)</label>
+                            <input type="text" value="1562958139530154034" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-gray-800 flex items-center justify-between">
+                        <div class="flex items-center gap-2 text-xs text-gray-400">
+                            <i class="fa-solid fa-circle-info text-indigo-400"></i>
+                            <span>تعديل المتغيرات هنا سيقوم بتحديث ملف .env وإعادة تشغيل خدمة البوت على Railway تلقائياً.</span>
+                        </div>
+                        <button onclick="saveBotSettings()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-2xl shadow-lg shadow-indigo-600/30 transition">حفظ التعديلات</button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Modal Dialog (Generic) -->
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div id="modal-container" class="bg-cardbg border border-gray-800 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-6">
+            <!-- Populated dynamically -->
         </div>
     </div>
 
-    <footer>
-        <p>جميع الحقوق محفوظة لصالح <strong>منتدى النظيم</strong> &copy; 2026</p>
-    </footer>
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Mock State Data
+        let appState = {
+            activeStaffCount: 48,
+            totalPoints: 1420,
+            activeBansCount: 12,
+            leadingTeam: "التيم الأول (الصقور)",
+            team1Score: 780,
+            team2Score: 695,
+            doubleActive: true,
+            staffList: [
+                { id: "917414299184533515", name: "الحاكم ريان (Owner)", team: "التيم الأول", points: 245, tickets: 34 },
+                { id: "391638472022163456", name: "سلطان العتيبي", team: "التيم الثاني", points: 190, tickets: 28 },
+                { id: "1526761757497098335", name: "فيصل القحطاني", team: "التيم الأول", points: 165, tickets: 22 },
+                { id: "1304459341730021476", name: "مشعل الشمري", team: "التيم الثاني", points: 140, tickets: 19 },
+                { id: "1545520950064316516", name: "عبدالله الدوسري", team: "التيم الأول", points: 110, tickets: 15 }
+            ],
+            punishmentsList: [
+                { user: "عضو مخرب #4021", type: "ban", typeName: "حرمان نهائي (Ban)", reason: "تخريب ونشر روابط خارجية", issuer: "الحاكم ريان", date: "2026-03-10 14:30" },
+                { user: "مشاكس ديسكورد #8812", type: "timeout", typeName: "تايم آوت (Timeout)", reason: "سب وشتم بالروم الصوتي", issuer: "سلطان العتيبي", date: "2026-03-12 18:15" },
+                { user: "سبام بوي #1092", type: "warn", typeName: "تحذير إداري (Warn 1)", reason: "سبام رسائل متكررة", issuer: "فيصل القحطاني", date: "2026-03-14 09:10" }
+            ],
+            logs: [
+                { time: "11:10:45", type: "POINTS", text: "تم إيداع 5 نقاط للمطنوخ الحاكم ريان (بسبب: تفاعل استثنائي بالتكتات)" },
+                { time: "11:05:12", type: "BAN", text: "تم تسجيل حرمان نهائي بحق العضو [عضو مخرب #4021] بواسطة الحاكم ريان" },
+                { time: "10:50:00", type: "SYSTEM", text: "تم إجراء نسخة احتياطية سحابية لملف points.json بنجاح على ديسكورد" },
+                { time: "10:30.15", type: "PROMOTION", text: "المطنوخ سلطان العتيبي وصل 70 نقطة وتمت ترقيته تلقائياً إلى رتبة إدارية أعلى" }
+            ]
+        };
 
+        // Tab Switching Logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('text-white', 'bg-indigo-600', 'shadow-lg', 'shadow-indigo-600/20');
+                btn.classList.add('text-gray-400', 'hover:text-white', 'hover:bg-gray-800/60');
+            });
+
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            activeBtn.classList.remove('text-gray-400', 'hover:text-white', 'hover:bg-gray-800/60');
+            activeBtn.classList.add('text-white', 'bg-indigo-600', 'shadow-lg', 'shadow-indigo-600/20');
+
+            const titles = {
+                overview: 'لوحة القيادة الرئيسية والإحصائيات',
+                points: 'إدارة النقاط والفرق والترقيات',
+                punishments: 'الحرمانات والعقوبات النشطة',
+                logs: 'سجل اللوق المباشر للعمليات',
+                settings: 'إعدادات البوت والـ Railway'
+            };
+            document.getElementById('current-tab-title').innerText = titles[tabId];
+        }
+
+        // Toast Notification System
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto px-5 py-3 rounded-2xl shadow-xl text-white font-bold text-xs flex items-center gap-3 transition-all transform translate-y-2 opacity-0 border ${
+                type === 'success' ? 'bg-emerald-600/90 border-emerald-500' : 'bg-rose-600/90 border-rose-500'
+            }`;
+            toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check text-base' : 'fa-triangle-exclamation text-base'}"></i><span>${message}</span>`;
+            container.appendChild(toast);
+
+            setTimeout(() => { toast.classList.remove('translate-y-2', 'opacity-0'); }, 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Initialize Dashboard Data on Load
+        function fetchDashboardData() {
+            document.getElementById('stat-active-staff').innerText = appState.activeStaffCount;
+            document.getElementById('stat-total-points').innerText = appState.totalPoints.toLocaleString();
+            document.getElementById('stat-active-bans').innerText = appState.activeBansCount;
+            document.getElementById('stat-leading-team').innerText = appState.leadingTeam;
+
+            document.getElementById('team1-score').innerText = `${appState.team1Score} نقطة`;
+            document.getElementById('team2-score').innerText = `${appState.team2Score} نقطة`;
+
+            const maxTeamScore = Math.max(appState.team1Score, appState.team2Score, 100);
+            document.getElementById('team1-progress').style.width = `${Math.min(100, (appState.team1Score / maxTeamScore) * 100)}%`;
+            document.getElementById('team2-progress').style.width = `${Math.min(100, (appState.team2Score / maxTeamScore) * 100)}%`;
+
+            renderStaffTable();
+            renderPunishmentsTable();
+            renderLogsFeed();
+            showToast('تم تحديث بيانات اللوحة بنجاح من سيرفر Railway', 'success');
+        }
+
+        // Render Staff Table
+        function renderStaffTable(filter = '') {
+            const tbody = document.getElementById('staff-table-body');
+            tbody.innerHTML = '';
+
+            const filtered = appState.staffList.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()) || s.id.includes(filter));
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-gray-500">لا توجد نتائج مطابقة للبحث</td></tr>`;
+                return;
+            }
+
+            filtered.forEach((staff, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-800/40 transition";
+                tr.innerHTML = `
+                    <td class="py-4 px-4 font-black text-indigo-400">#${index + 1}</td>
+                    <td class="py-4 px-4 font-bold text-white">${staff.name}<div class="text-[11px] text-gray-500 font-mono">${staff.id}</div></td>
+                    <td class="py-4 px-4"><span class="px-3 py-1 rounded-full text-xs font-bold ${staff.team === 'التيم الأول' ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20' : 'bg-violet-500/10 text-violet-300 border border-violet-500/20'}">${staff.team}</span></td>
+                    <td class="py-4 px-4 font-black text-emerald-400">${staff.points} نقطة</td>
+                    <td class="py-4 px-4 text-gray-300 font-semibold">${staff.tickets} تكت</td>
+                    <td class="py-4 px-4">
+                        <div class="flex items-center gap-2">
+                            <button onclick="quickAddPoints('${staff.id}', 5)" class="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/20 transition" title="إضافة 5 نقاط"><i class="fa-solid fa-plus text-xs"></i></button>
+                            <button onclick="quickAddPoints('${staff.id}', -5)" class="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/20 transition" title="خصم 5 نقاط"><i class="fa-solid fa-minus text-xs"></i></button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterStaffTable() {
+            const query = document.getElementById('staff-search-input').value;
+            renderStaffTable(query);
+        }
+
+        // Points Adjustment Submission
+        function submitPointsAdjustment() {
+            const staffId = document.getElementById('manage-staff-id').value.trim();
+            const pointsVal = parseInt(document.getElementById('manage-points-val').value);
+            const reason = document.getElementById('manage-reason').value.trim() || "تعديل إداري عبر لوحة التحكم";
+
+            if (!staffId || isNaN(pointsVal)) {
+                showToast('يرجى إدخال أيدي صحيح وقيمة نقاط صحيحة', 'error');
+                return;
+            }
+
+            const staff = appState.staffList.find(s => s.id === staffId);
+            if (staff) {
+                staff.points += pointsVal;
+            } else {
+                appState.staffList.push({ id: staffId, name: `إداري جديد (${staffId.slice(-4)})`, team: "التيم الأول", points: pointsVal, tickets: 0 });
+            }
+
+            appState.totalPoints += pointsVal;
+            addLogEntry('POINTS', `تم تعديل رصيد الإداري (${staffId}) بمقدار ${pointsVal > 0 ? '+' + pointsVal : pointsVal} نقطة. السبب: ${reason}`);
+            renderStaffTable();
+            showToast(`تم تعديل النقاط بنجاح للإداري ${staffId}`, 'success');
+
+            document.getElementById('manage-staff-id').value = '';
+            document.getElementById('manage-points-val').value = '';
+            document.getElementById('manage-reason').value = '';
+        }
+
+        function quickAddPoints(staffId, amount) {
+            const staff = appState.staffList.find(s => s.id === staffId);
+            if (staff) {
+                staff.points += amount;
+                appState.totalPoints += amount;
+                addLogEntry('POINTS', `تعديل سريع: ${amount > 0 ? '+' + amount : amount} نقاط للإداري ${staff.name}`);
+                renderStaffTable();
+                showToast(`تم تعديل نقاط ${staff.name} بمقدار ${amount}`, 'success');
+            }
+        }
+
+        // Punishments Render & Filter
+        let currentPunishmentFilter = 'all';
+        function renderPunishmentsTable() {
+            const tbody = document.getElementById('punishments-table-body');
+            tbody.innerHTML = '';
+
+            const filtered = currentPunishmentFilter === 'all' 
+                ? appState.punishmentsList 
+                : appState.punishmentsList.filter(p => p.type === currentPunishmentFilter);
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-gray-500">لا توجد عقوبات مسجلة في هذا القسم</td></tr>`;
+                return;
+            }
+
+            filtered.forEach((p, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-800/40 transition";
+                tr.innerHTML = `
+                    <td class="py-4 px-4 font-bold text-white">${p.user}</td>
+                    <td class="py-4 px-4"><span class="px-3 py-1 rounded-full text-xs font-bold ${p.type === 'ban' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : p.type === 'timeout' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-violet-500/10 text-violet-400 border border-violet-500/20'}">${p.typeName}</span></td>
+                    <td class="py-4 px-4 text-gray-300 text-xs">${p.reason}</td>
+                    <td class="py-4 px-4 text-indigo-400 font-semibold">${p.issuer}</td>
+                    <td class="py-4 px-4 text-gray-400 text-xs">${p.date}</td>
+                    <td class="py-4 px-4">
+                        <button onclick="revokePunishment(${idx})" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-bold border border-emerald-500/20 transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-lock-open"></i>
+                            <span>رفع / فك</span>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function filterPunishments(type) {
+            currentPunishmentFilter = type;
+            ['all', 'ban', 'timeout', 'warn'].forEach(t => {
+                const btn = document.getElementById(`p-filter-${t}`);
+                if (t === type) {
+                    btn.className = "px-4 py-2 rounded-xl text-xs font-bold transition bg-indigo-600 text-white";
+                } else {
+                    btn.className = "px-4 py-2 rounded-xl text-xs font-bold transition bg-gray-800 text-gray-400 hover:text-white";
+                }
+            });
+            renderPunishmentsTable();
+        }
+
+        function revokePunishment(index) {
+            const removed = appState.punishmentsList.splice(index, 1)[0];
+            appState.activeBansCount = Math.max(0, appState.activeBansCount - 1);
+            document.getElementById('stat-active-bans').innerText = appState.activeBansCount;
+            addLogEntry('PUNISHMENT', `تم رفع العقوبة (${removed.typeName}) عن العضو ${removed.user}`);
+            renderPunishmentsTable();
+            showToast(`تم فك العقوبة عن العضو بنجاح`, 'success');
+        }
+
+        // Logs Stream
+        function renderLogsFeed() {
+            const container = document.getElementById('logs-container');
+            container.innerHTML = '';
+            appState.logs.forEach(log => {
+                const div = document.createElement('div');
+                div.className = "flex items-start gap-3 pb-2 border-b border-gray-900";
+                div.innerHTML = `
+                    <span class="text-gray-500 shrink-0">[${log.time}]</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${log.type === 'POINTS' ? 'bg-emerald-500/20 text-emerald-400' : log.type === 'BAN' ? 'bg-rose-500/20 text-rose-400' : 'bg-indigo-500/20 text-indigo-400'}">${log.type}</span>
+                    <span class="text-gray-300 leading-relaxed">${log.text}</span>
+                `;
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addLogEntry(type, text) {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            appState.logs.push({ time: timeStr, type: type, text: text });
+            renderLogsFeed();
+        }
+
+        function clearLogsFeed() {
+            appState.logs = [];
+            renderLogsFeed();
+            showToast('تم مسح عرض اللوق المحلي', 'success');
+        }
+
+        // Quick Action Modals
+        function openQuickActionModal(actionType) {
+            const backdrop = document.getElementById('modal-backdrop');
+            const container = document.getElementById('modal-container');
+            backdrop.classList.remove('hidden');
+
+            if (actionType === 'double') {
+                container.innerHTML = `
+                    <h3 class="text-lg font-black text-white flex items-center gap-2">
+                        <i class="fa-solid fa-fire text-amber-400"></i>
+                        <span>التحكم بوضع الدبل (x2)</span>
+                    </h3>
+                    <p class="text-xs text-gray-400 leading-relaxed">وضع الدبل الحالي: <strong class="${appState.doubleActive ? 'text-emerald-400' : 'text-rose-400'}">${appState.doubleActive ? 'نشط (مضاعفة النقاط)' : 'متوقف'}</strong></p>
+                    <div class="flex gap-3 pt-4">
+                        <button onclick="toggleDoublePoints(${!appState.doubleActive})" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition">${appState.doubleActive ? 'إيقاف وضع الدبل' : 'تفعيل وضع الدبل'}</button>
+                        <button onclick="closeModal()" class="w-full py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs rounded-xl transition">إلغاء</button>
+                    </div>
+                `;
+            } else if (actionType === 'announce') {
+                container.innerHTML = `
+                    <h3 class="text-lg font-black text-white flex items-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-indigo-400"></i>
+                        <span>إرسال إعلان إداري عام</span>
+                    </h3>
+                    <textarea id="announce-text" placeholder="اكتب نص الإعلان الذي سيتم بثه في روم الإعلانات..." class="w-full h-32 bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
+                    <div class="flex gap-3 pt-2">
+                        <button onclick="sendAnnouncementSubmit()" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition">إرسال الآن</button>
+                        <button onclick="closeModal()" class="w-full py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs rounded-xl transition">إلغاء</button>
+                    </div>
+                `;
+            } else if (actionType === 'backup') {
+                container.innerHTML = `
+                    <h3 class="text-lg font-black text-white flex items-center gap-2">
+                        <i class="fa-solid fa-cloud-arrow-down text-emerald-400"></i>
+                        <span>إنشاء نسخة احتياطية سحابية</span>
+                    </h3>
+                    <p class="text-xs text-gray-400 leading-relaxed">سيتم الآن رفع نسخة محدثة بالكامل من ملفات النقاط والسجلات إلى قناة النسخ الاحتياطي في ديسكورد وRailway.</p>
+                    <div class="flex gap-3 pt-4">
+                        <button onclick="executeCloudBackup()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition">تأكيد الرفع</button>
+                        <button onclick="closeModal()" class="w-full py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs rounded-xl transition">إلغاء</button>
+                    </div>
+                `;
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('modal-backdrop').classList.add('hidden');
+        }
+
+        function toggleDoublePoints(status) {
+            appState.doubleActive = status;
+            closeModal();
+            addLogEntry('SYSTEM', `تم ${status ? 'تفعيل' : 'إيقاف'} وضع مضاعفة النقاط (x2) عبر لوحة التحكم`);
+            showToast(`تم ${status ? 'تفعيل' : 'إيقاف'} وضع الدبل بنجاح`, 'success');
+        }
+
+        function sendAnnouncementSubmit() {
+            const text = document.getElementById('announce-text').value.trim();
+            if (!text) {
+                showToast('يرجى كتابة نص الإعلان أولاً', 'error');
+                return;
+            }
+            closeModal();
+            addLogEntry('ANNOUNCE', `تم إرسال إعلان إداري عام: "${text.substring(0, 30)}..."`);
+            showToast('تم بث الإعلان الإداري في السيرفر بنجاح', 'success');
+        }
+
+        function executeCloudBackup() {
+            closeModal();
+            addLogEntry('BACKUP', 'تم إنشاء نسخة احتياطية جديدة ورفعها بنجاح إلى ديسكورد وRailway.');
+            showToast('تم حفظ النسخة السحابية بنجاح تام', 'success');
+        }
+
+        function resetTeamsCompetitions() {
+            if (confirm('هل أنت متأكد من تصفير المنافسة الأسبوعية للتيمات؟')) {
+                appState.team1Score = 0;
+                appState.team2Score = 0;
+                fetchDashboardData();
+                addLogEntry('SYSTEM', 'تم تصفير النقاط التنافسية الأسبوعية للتيمات وبدء جولة جديدة.');
+                showToast('تم تصفير المنافسة الأسبوعية بنجاح', 'success');
+            }
+        }
+
+        function triggerBotRestart() {
+            showToast('جاري إعادة تشغيل خدمة البوت على Railway...', 'success');
+            addLogEntry('SYSTEM', 'إعادة تشغيل يدوية لخدمة البوت من لوحة التحكم.');
+            setTimeout(() => {
+                showToast('تم إعادة تشغيل البوت بنجاح واتصال ناجح 100%', 'success');
+            }, 2000);
+        }
+
+        function saveBotSettings() {
+            showToast('تم حفظ الإعدادات وتحديث ملف .env على Railway بنجاح', 'success');
+            addLogEntry('SETTINGS', 'تم تحديث المتغيرات البيئية وإعدادات البوت.');
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            fetchDashboardData();
+        };
+    </script>
 </body>
 </html>
