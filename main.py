@@ -7,6 +7,9 @@ import time
 import asyncio
 import re
 from datetime import datetime, timedelta
+from flask import Flask, render_template  # أضف هذا السطر
+from threading import Thread              # وأضف هذا السطر
+
 
 # ----------------------------------------------------
 # 1. إعدادات بوت ديسكورد الأساسية والصلاحيات المطلقة
@@ -2675,8 +2678,24 @@ async def reset_teams_cmd(ctx):
     await ctx.send("🔄 **تم تصفير المجموع التنافسي وإحصائيات التكتات والترقيات الأسبوعية للفرق بالكامل!** 🚀")
     await send_unified_log(guild, "🔄 | تصفير تنافس وإحصائيات الفرق", f"قام {ctx.author.mention} بتصفير التنافس وإحصائيات التكتات والترقيات للفرق أسبوعياً.", discord.Color.from_rgb(231, 76, 60))
 
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def start_website():
+    t = Thread(target=run_web)
+    t.daemon = True
+    t.start()
+
 if __name__ == "__main__":
     if TOKEN:
-        bot.run(TOKEN)
+        start_website()  # يشغل الموقع الفخم في الخلفية
+        bot.run(TOKEN)   # يشغل بوت ديسكورد
     else:
         print("❌ خطأ: يرجى وضع متغير DISCORD_TOKEN.")
