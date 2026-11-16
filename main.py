@@ -668,7 +668,7 @@ class DirectStaffRatingButton(discord.ui.Button):
             style=discord.ButtonStyle.secondary,
             emoji="⭐",
             custom_id=f"direct_rate_btn_{staff_member.id}",
-            row=row_idx  # زرّين في كل صف بشكل منظم
+            row=row_idx
         )
         self.staff_member_id = staff_member.id
 
@@ -697,13 +697,12 @@ class DirectStaffRatingButton(discord.ui.Button):
         )
 
 class PaginatedStaffRatingView(discord.ui.View):
-    """فيو مخصص لبانل التقييمات يوزع الإداريين زرّين في كل صف ويدعم التنقل بين الصفحات"""
     def __init__(self, guild: discord.Guild, staff_members: list, page: int = 0):
         super().__init__(timeout=None)
         self.guild = guild
         self.staff_members = staff_members
         self.page = page
-        self.per_page = 6  # 6 إداريين في الصفحة الواحدة (3 صفوف × زرّين)
+        self.per_page = 6
         
         self.setup_page()
 
@@ -714,12 +713,10 @@ class PaginatedStaffRatingView(discord.ui.View):
         end_idx = start_idx + self.per_page
         current_batch = self.staff_members[start_idx:end_idx]
         
-        # إضافة أزرار الإداريين (زرّين في كل صف: row 0, 1, 2)
         for idx, member in enumerate(current_batch):
             row_idx = idx // 2  
             self.add_item(DirectStaffRatingButton(member, row_idx))
             
-        # أزرار التنقل بين الصفحات في الصف الأخير (row=3)
         total_pages = (len(self.staff_members) + self.per_page - 1) // self.per_page
         
         if total_pages > 1:
@@ -919,6 +916,64 @@ async def show_ratings_cmd(ctx, member: discord.Member = None):
     embed.set_footer(text="منتدى النظيم | لوحة الرقابة الإدارية")
     await ctx.send(embed=embed, view=AdminLookupView())
 
+# ----------------------------------------------------
+# 🎲 نظام اختيار العضو عشوائياً (قائمة منسدلة سرية)
+# ----------------------------------------------------
+class SecretRandomSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="اختر العضو الفائز من القائمة...",
+            min_values=1,
+            max_values=1
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        chosen_member = self.values[0]
+        guild = interaction.guild
+        target_role = guild.get_role(1543071855920029778)
+        role_mention = target_role.mention if target_role else "<@&1543071855920029778>"
+
+        # 1. إرسال رسالة مخفية لك وحدك بالاسم الذي اخترته سراً
+        await interaction.followup.send(
+            f"🔒 **تم اختيار العضو سراً بنجاح:** {chosen_member.mention}", 
+            ephemeral=True
+        )
+
+        # 2. إرسال الإعلان العام مع منشن الرتبة المطلوبة
+        announcement_msg = (
+            f"🎉 {role_mention}\n\n"
+            f"مبروك الفايز معنا هو: {chosen_member.mention}! 🏆\n"
+            f"*(تم اختيار الفائز بكل شفافية)*"
+        )
+        
+        await interaction.channel.send(announcement_msg)
+
+class SecretRandomView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=60)
+        self.add_item(SecretRandomSelect())
+
+@bot.command(name="عشوائي", aliases=["random_member"])
+async def random_member_cmd(ctx):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+        return
+
+    try:
+        await ctx.message.delete()
+    except:
+        pass
+
+    embed = discord.Embed(
+        title="🎲 | اختيار الفائز العشوائي",
+        description="اختر الشخص من القائمة المنسدلة أدناه (اختيارك بيكون مخفي ولا يشوفه غيرك قبل الإعلان):",
+        color=discord.Color.from_rgb(241, 196, 15)
+    )
+    
+    await ctx.send(embed=embed, view=SecretRandomView(), delete_after=60)
+
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
         super().__init__(title=f"إدارة نقاط: {team_name}")
@@ -974,7 +1029,6 @@ class TeamsControlView(discord.ui.View):
             return False
         return True
 
-    # الصف الأول: التيم الأول
     @discord.ui.button(label="➕ إضافة (تيم 1)", style=discord.ButtonStyle.green, custom_id="t1_add_btn_v30", row=0)
     async def t1_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
@@ -1003,7 +1057,6 @@ class TeamsControlView(discord.ui.View):
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
 
-    # الصف الثاني: التيم الثاني
     @discord.ui.button(label="➕ إضافة (تيم 2)", style=discord.ButtonStyle.green, custom_id="t2_add_btn_v30", row=1)
     async def t2_add(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
@@ -2169,6 +2222,7 @@ async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
     bot.add_view(AdminLookupView())
+    bot.add_view(SecretRandomView())
 
     if not check_expired_bans.is_running():
         check_expired_bans.start()
@@ -2478,7 +2532,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="📊 ┋ أوامر النقاط والفرق والبروفايلات",
-        value="▫️ `.أداء`\n▫️ `.تيمات`\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`",
+        value="▫️ `.أداء`\n▫️ `.تيمات`\n▫️ `.نقاط`\n▫️ `.بروفايل`\n▫️ `.توب`\n▫️ `.إضافة_نقاط`\n▫️ `.خصم_نقاط`\n▫️ `.تصفير_نقاط`\n▫️ `.تصفير_الفرق`\n▫️ `.دبل_نقاط`\n▫️ `.عشوائي` (لاختيار فائز من قائمة الأعضاء)",
         inline=False
     )
     embed.add_field(
