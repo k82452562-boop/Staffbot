@@ -917,7 +917,7 @@ async def show_ratings_cmd(ctx, member: discord.Member = None):
     await ctx.send(embed=embed, view=AdminLookupView())
 
 # ----------------------------------------------------
-# 🎲 نظام اختيار العضو عشوائياً (قائمة منسدلة سرية)
+# 🎲 نظام اختيار العضو عشوائياً (قائمة مخفية تماماً عن الجميع)
 # ----------------------------------------------------
 class SecretRandomSelect(discord.ui.UserSelect):
     def __init__(self):
@@ -928,6 +928,7 @@ class SecretRandomSelect(discord.ui.UserSelect):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        # الاستجابة بشكل مخفي تماماً (Ephemeral) لكي لا يرى أحد اختيارك نهائياً
         await interaction.response.defer(ephemeral=True)
         
         chosen_member = self.values[0]
@@ -935,17 +936,21 @@ class SecretRandomSelect(discord.ui.UserSelect):
         target_role = guild.get_role(1543071855920029778)
         role_mention = target_role.mention if target_role else "<@&1543071855920029778>"
 
-        # 1. إرسال رسالة مخفية لك وحدك بالاسم الذي اخترته سراً
+        # 1. إرسال تأكيد سري وخاص بك وحدك
         await interaction.followup.send(
-            f"🔒 **تم اختيار العضو سراً بنجاح:** {chosen_member.mention}", 
+            f"🔒 **تم اختيار الفائز سراً بنجاح:** {chosen_member.mention}\n*(تم إرسال رسالة الإعلان العامة في الشات تلقائياً)*", 
             ephemeral=True
         )
 
-        # 2. إرسال الإعلان العام مع منشن الرتبة المطلوبة
+        # 2. إرسال الرسالة الرسمية المطلوبة في الشات العام مع منشن الرتبة والفائز
         announcement_msg = (
-            f"🎉 {role_mention}\n\n"
-            f"مبروك الفايز معنا هو: {chosen_member.mention}! 🏆\n"
-            f"*(تم اختيار الفائز بكل شفافية)*"
+            f"🎉 إعلان تحديد الفائز العشوائي 🎉\n\n"
+            f"يعطيكم العافية جميعًا على مشاركتكم ❤️\n\n"
+            f"تم اختيار الفائز بشكل عشوائي من بين جميع المشاركين والمتفاعلين مع الرياكشن، والفائز هو:\n\n"
+            f"🏆 الفائز: {chosen_member.mention}\n\n"
+            f"ألف مبروك للفائز، وحظ أوفر للبقية في المرات القادمة! ❤️\n\n"
+            f"شكرًا لكل من شارك، والقادم أجمل بإذن الله.\n\n"
+            f"{role_mention}"
         )
         
         await interaction.channel.send(announcement_msg)
@@ -968,9 +973,12 @@ async def random_member_cmd(ctx):
 
     embed = discord.Embed(
         title="🎲 | اختيار الفائز العشوائي",
-        description="اختر الشخص من القائمة المنسدلة أدناه (اختيارك بيكون مخفي ولا يشوفه غيرك قبل الإعلان):",
+        description="اختر الفائز من القائمة أدناه **(اختيارك بيكون سري ومخفي تماماً وما يشوفه غيرك)**:",
         color=discord.Color.from_rgb(241, 196, 15)
     )
+    
+    await ctx.send(embed=embed, view=SecretRandomView(), delete_after=60)
+
     
     await ctx.send(embed=embed, view=SecretRandomView(), delete_after=60)
 
