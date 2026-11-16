@@ -917,32 +917,50 @@ async def show_ratings_cmd(ctx, member: discord.Member = None):
     await ctx.send(embed=embed, view=AdminLookupView())
 
 # ----------------------------------------------------
-# 🎲 نظام اختيار العضو عشوائياً (أمر عادي يرسل القائمة بالخاص سراً)
+# 🎲 نظام اختيار العضو عشوائياً (عبر الروم السري مع ميزة البحث الشامل)
 # ----------------------------------------------------
+SECRET_SELECTION_CHANNEL_ID = 1544401629221101738
+
 class SecretRandomSelect(discord.ui.UserSelect):
-    def __init__(self, target_channel: discord.TextChannel, guild: discord.Guild):
+    def __init__(self, target_channel: discord.TextChannel, author_id: int):
         self.target_channel = target_channel
-        self.guild = guild
+        self.author_id = author_id
         super().__init__(
-            placeholder="اختر العضو الفائز من القائمة...",
+            placeholder="ابحث واختر الفائز من قائمة أعضاء السيرفر...",
             min_values=1,
             max_values=1
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        
+        # حماية إضافية: محد يقدر يضغط القائمة غيرك
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ هذه القائمة مخصصة للشخص اللي طلب الأمر فقط!", ephemeral=True)
+            return
+
         chosen_member = self.values[0]
-        target_role = self.guild.get_role(1543071855920029778)
+        
+        # منع اختيار البوتات بالغلط
+        if chosen_member.bot:
+            await interaction.response.send_message("❌ ما تقدر تختار بوت يا الذيب! اختر عضو حقيقي.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        guild = interaction.guild
+        target_role = guild.get_role(1543071855920029778)
         role_mention = target_role.mention if target_role else "<@&1543071855920029778>"
 
-        # 1. تأكيد لك في الخاص
+        # 1. تأكيد لك وحذف رسالة القائمة من الروم السري لتنظيف الشات
         await interaction.followup.send(
-            f"🔒 **تم اختيار الفائز سراً بنجاح:** {chosen_member.mention}\n*(تم نشر إعلان الفوز العام في روم {self.target_channel.mention} تلقائياً)*", 
+            f"✅ **تم اختيار الفائز:** {chosen_member.mention}\n*(تم إرسال الإعلان في روم {self.target_channel.mention})*", 
             ephemeral=True
         )
+        try:
+            await interaction.message.delete()
+        except:
+            pass
 
-        # 2. إرسال الإعلان العام في الروم الأساسي
+        # 2. إرسال الإعلان العام في الروم الأساسي اللي كتبت فيه الأمر
         announcement_msg = (
             f"🎉 إعلان تحديد الفائز العشوائي 🎉\n\n"
             f"يعطيكم العافية جميعًا على مشاركتكم ❤️\n\n"
@@ -956,9 +974,9 @@ class SecretRandomSelect(discord.ui.UserSelect):
         await self.target_channel.send(announcement_msg)
 
 class SecretRandomView(discord.ui.View):
-    def __init__(self, target_channel: discord.TextChannel, guild: discord.Guild):
-        super().__init__(timeout=60)
-        self.add_item(SecretRandomSelect(target_channel, guild))
+    def __init__(self, target_channel: discord.TextChannel, author_id: int):
+        super().__init__(timeout=120)
+        self.add_item(SecretRandomSelect(target_channel, author_id))
 
 @bot.command(name="عشوائي", aliases=["random_member"])
 async def random_member_cmd(ctx):
@@ -966,23 +984,29 @@ async def random_member_cmd(ctx):
         await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
         return
 
-    # حذف أمرك من الشات العام فوراً عشان ما أحد ينتبه
+    # حذف أمرك من الشات العام فوراً
     try:
         await ctx.message.delete()
     except:
         pass
 
+    secret_channel = ctx.guild.get_channel(SECRET_SELECTION_CHANNEL_ID)
+    if not secret_channel:
+        await ctx.send("❌ خطأ: لم يتم العثور على الروم السري المخصص للاختيار!", delete_after=5)
+        return
+
     embed = discord.Embed(
-        title="🎲 | اختيار الفائز العشوائي",
-        description=f"اختر الفائز من القائمة أدناه **(سيتم نشر الإعلان في روم {ctx.channel.mention})**:",
+        title="🎲 | لوحة اختيار الفائز العشوائي",
+        description=(
+            f"يا هلا {ctx.author.mention}، ابحث عن اسم العضو واختره من القائمة أدناه.\n"
+            f"📍 **سيتم نشر الإعلان تلقائياً في روم:** {ctx.channel.mention}"
+        ),
         color=discord.Color.from_rgb(241, 196, 15)
     )
     
-    # إرسال القائمة إلى الخاص (DM) عشان ما يشوفها أحد غيرك نهائياً
-    try:
-        await ctx.author.send(embed=embed, view=SecretRandomView(ctx.channel, ctx.guild))
-    except discord.Forbidden:
-        await ctx.send("❌ **افتح الخاص حقك (DM)** عشان أقدر أرسل لك قائمة الاختيار السرية!", delete_after=5)
+    # إرسال القائمة في الروم السري المحدد
+    await secret_channel.send(content=ctx.author.mention, embed=embed, view=SecretRandomView(ctx.channel, ctx.author.id), delete_after=120)
+
 
 
     
