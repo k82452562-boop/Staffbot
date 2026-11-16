@@ -917,7 +917,7 @@ async def show_ratings_cmd(ctx, member: discord.Member = None):
     await ctx.send(embed=embed, view=AdminLookupView())
 
 # ----------------------------------------------------
-# 🎲 نظام اختيار العضو عشوائياً (قائمة مخفية تماماً عن الجميع)
+# 🎲 نظام اختيار العضو عشوائياً (سلاش كوماند مخفي تماماً 100%)
 # ----------------------------------------------------
 class SecretRandomSelect(discord.ui.UserSelect):
     def __init__(self):
@@ -936,13 +936,13 @@ class SecretRandomSelect(discord.ui.UserSelect):
         target_role = guild.get_role(1543071855920029778)
         role_mention = target_role.mention if target_role else "<@&1543071855920029778>"
 
-        # 1. إرسال تأكيد سري وخاص بك وحدك
+        # 1. تأكيد سري يظهر لك أنت وحدك بالخاص/بالمحادثة المخفية
         await interaction.followup.send(
-            f"🔒 **تم اختيار الفائز سراً بنجاح:** {chosen_member.mention}\n*(تم إرسال رسالة الإعلان العامة في الشات تلقائياً)*", 
+            f"🔒 **تم اختيار الفائز سراً بنجاح:** {chosen_member.mention}\n*(تم نشر إعلان الفوز العام في الشات تلقائياً)*", 
             ephemeral=True
         )
 
-        # 2. إرسال الرسالة الرسمية المطلوبة في الشات العام مع منشن الرتبة والفائز
+        # 2. إرسال الرسالة الرسمية المطلوبة في الشات العام لجميع الأعضاء
         announcement_msg = (
             f"🎉 إعلان تحديد الفائز العشوائي 🎉\n\n"
             f"يعطيكم العافية جميعًا على مشاركتكم ❤️\n\n"
@@ -960,22 +960,22 @@ class SecretRandomView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(SecretRandomSelect())
 
-@bot.command(name="عشوائي", aliases=["random_member"])
-async def random_member_cmd(ctx):
-    if not is_admin_or_owner(ctx):
-        await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+@bot.tree.command(name="عشوائي", description="[لريان والأونرات فقط] اختيار فائز عشوائي بقائمة مخفية تماماً")
+async def random_slash(interaction: discord.Interaction):
+    # التحقق من الصلاحية (الأونر أو الأدمن)
+    if not is_admin_or_owner(interaction):
+        await interaction.response.send_message("❌ عذراً يا الحبيب، هذا الأمر مخصص للأونرات والأدمنستريتر فقط!", ephemeral=True)
         return
-
-    try:
-        await ctx.message.delete()
-    except:
-        pass
 
     embed = discord.Embed(
         title="🎲 | اختيار الفائز العشوائي",
-        description="اختر الفائز من القائمة أدناه **(اختيارك بيكون سري ومخفي تماماً وما يشوفه غيرك)**:",
+        description="اختر الفائز من القائمة أدناه **(اللوحة مخفية تماماً وما تظهر ولا يقدر يضغطها غيرك)**:",
         color=discord.Color.from_rgb(241, 196, 15)
     )
+    
+    # إرسال الرسالة واللوحة بشكل مخفي (Ephemeral) بحيث لا يراها أحد غيرك بالشات
+    await interaction.response.send_message(embed=embed, view=SecretRandomView(), ephemeral=True)
+
     
     await ctx.send(embed=embed, view=SecretRandomView(), delete_after=60)
 
