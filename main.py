@@ -2595,23 +2595,32 @@ async def double_points(ctx):
 
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
-    if not is_admin_or_owner(ctx) and ctx.author.top_role <= role:
-        return await ctx.send("❌ ما يمديك تعطي رتبة أعلى من رتبتك!", delete_after=6)
+    is_owner = ctx.author.id in OWNER_IDS
+    
+    # التحقق إذا كان يحاول إعطاء رتبة لنفسه أو لأي شخص برتبة أعلى
+    if member.id == ctx.author.id or (not is_owner and ctx.author.top_role <= role):
+        await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك رتبه اعلى منك ياحمار")
+        return
+
     try:
         await member.add_roles(role)
         await ctx.send(f"✅ تم إعطاء رتبة {role.mention} لـ {member.mention}.")
     except:
-        await ctx.send("❌ البوت ما عنده صلاحية.")
+        await ctx.send("❌ البوت ما عنده صلاحية كافية لتنفيذ هذا الأمر.")
 
 @bot.command(name="سحب_رتبة", aliases=["removerole"])
 async def remove_role(ctx, member: discord.Member, role: discord.Role):
-    if not is_admin_or_owner(ctx) and ctx.author.top_role <= role:
-        return await ctx.send("❌ ما يمديك تسحب رتبة أعلى من رتبتك!", delete_after=6)
+    is_owner = ctx.author.id in OWNER_IDS
+    
+    if member.id == ctx.author.id or (not is_owner and ctx.author.top_role <= role):
+        await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك رتبه اعلى منك ياحمار")
+        return
+        
     try:
         await member.remove_roles(role)
         await ctx.send(f"🔄 تم سحب رتبة {role.mention} من {member.mention}.")
     except:
-        await ctx.send("❌ البوت ما عنده صلاحية.")
+        await ctx.send("❌ البوت ما عنده صلاحية كافية.")
 
 @bot.command(name="إغلاق", aliases=["اغلاق", "close"])
 async def close(ctx):
