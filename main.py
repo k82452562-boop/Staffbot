@@ -65,10 +65,11 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
-# إعدادات لوحة الرول والتصويت وكود السيرفر
+# إعدادات لوحة الرول والتصويت وكود السيرفر والتقييم
 ROLEPLAY_PANEL_ROLE_ID = 1545689115654225961
 ROLEPLAY_VOTE_CHANNEL_ID = 1554875979787149403
 ROLEPLAY_ANNOUNCE_CHANNEL_ID = 1543080859685625868
+ROLEPLAY_RATING_CHANNEL_ID = 1574525280544890950
 MILITARY_ROLE_ID = 1555415730789425173
 ROLEPLAY_MENTION_1_ID = 1543071855920029778
 ROLEPLAY_MENTION_2_ID = 1555415730789425173
@@ -136,6 +137,8 @@ processed_tickets = set()
 
 roleplay_votes_store = {}
 server_codes_store = {}
+roleplay_ratings_store = {}
+last_vote_message_store = {}
 
 active_event = {
     "running": False,
@@ -580,7 +583,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🎮 نظام لوحة الرول والتصويت وبدء الرول وكود السيرفر
+# 🎮 نظام لوحة الرول والتصويت وبدء الرول وكود السيرفر والتقييم
 # ----------------------------------------------------
 def build_vote_message_text(host: discord.abc.User, citizen_req: str, military_req: str, citizen_count: int, military_count: int) -> str:
     mention_1 = f"<@&{ROLEPLAY_MENTION_1_ID}>"
@@ -604,6 +607,66 @@ def build_vote_message_text(host: discord.abc.User, citizen_req: str, military_r
         f"{mention_1}\n"
         f"{mention_2}"
     )
+
+def build_roleplay_rating_text(yes_count: int, no_count: int) -> str:
+    mention_1 = f"<@&{ROLEPLAY_MENTION_1_ID}>"
+    mention_2 = f"<@&{ROLEPLAY_MENTION_2_ID}>"
+    return (
+        "📋・تقييم الرول\n\n"
+        "نرجو منكم تقييم الرول الحالي بكل مصداقية وشفافية، وذلك لمساعدتنا في تطوير الرتب وتحسين تجربة الأعضاء.\n\n"
+        "يرجى اختيار التقييم المناسب لكم، مع ذكر أي ملاحظات أو اقتراحات ترونها مهمة.\n\n"
+        "رأيكم يهمنا، وتقييمكم يساعدنا على الأفضل. ✨\n\n"
+        f"• عدد المقيمين (صح ✅): `{yes_count}`\n"
+        f"• عدد المقيمين (خطأ ❌): `{no_count}`\n\n"
+        f"{mention_1}\n"
+        f"{mention_2}"
+    )
+
+class RoleplayRatingButtonsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="صح", style=discord.ButtonStyle.success, emoji="✅", custom_id="rp_rating_yes_btn_v1")
+    async def rating_yes(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg_id = interaction.message.id
+        if msg_id not in roleplay_ratings_store:
+            roleplay_ratings_store[msg_id] = {"yes": set(), "no": set()}
+
+        data = roleplay_ratings_store[msg_id]
+        uid = interaction.user.id
+
+        data["no"].discard(uid)
+        if uid in data["yes"]:
+            data["yes"].remove(uid)
+            msg = "🔄 تم إلغاء تقييمك بـ **صح ✅**."
+        else:
+            data["yes"].add(uid)
+            msg = "✅ تم تسجيل تقييمك بـ **صح** بنجاح."
+
+        updated_text = build_roleplay_rating_text(len(data["yes"]), len(data["no"]))
+        await interaction.message.edit(content=updated_text, view=self)
+        await interaction.response.send_message(msg, ephemeral=True)
+
+    @discord.ui.button(label="خطأ", style=discord.ButtonStyle.danger, emoji="❌", custom_id="rp_rating_no_btn_v1")
+    async def rating_no(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg_id = interaction.message.id
+        if msg_id not in roleplay_ratings_store:
+            roleplay_ratings_store[msg_id] = {"yes": set(), "no": set()}
+
+        data = roleplay_ratings_store[msg_id]
+        uid = interaction.user.id
+
+        data["yes"].discard(uid)
+        if uid in data["no"]:
+            data["no"].remove(uid)
+            msg = "🔄 تم إلغاء تقييمك بـ **خطأ ❌**."
+        else:
+            data["no"].add(uid)
+            msg = "❌ تم تسجيل تقييمك بـ **خطأ** بنجاح."
+
+        updated_text = build_roleplay_rating_text(len(data["yes"]), len(data["no"]))
+        await interaction.message.edit(content=updated_text, view=self)
+        await interaction.response.send_message(msg, ephemeral=True)
 
 class RoleplayVoteButtonsView(discord.ui.View):
     def __init__(self):
@@ -722,6 +785,7 @@ class RoleplayVoteModal(discord.ui.Modal, title="إعداد تصويت الرو�
         )
 
         sent_msg = await vote_channel.send(content=content, view=RoleplayVoteButtonsView())
+        last_vote_message_store[vote_channel.id] = sent_msg.id
         roleplay_votes_store[sent_msg.id] = {
             "citizen": set(),
             "military": set(),
@@ -892,13 +956,75 @@ class RoleplayControlPanelView(discord.ui.View):
     async def panel_vote_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RoleplayVoteModal())
 
-    @discord.ui.button(label="بدء الرول", style=discord.ButtonStyle.green, emoji="🎮", custom_id="rp_panel_start_btn_v1", row=0)
+    @discord.ui.button(label="الغاء تصويت", style=discord.ButtonStyle.danger, emoji="🛑", custom_id="rp_panel_cancel_vote_btn_v1", row=0)
+    async def panel_cancel_vote_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vote_channel = interaction.guild.get_channel(ROLEPLAY_VOTE_CHANNEL_ID)
+        if not vote_channel:
+            await interaction.response.send_message(
+                f"❌ لم يتم العثور على روم التصويت (`{ROLEPLAY_VOTE_CHANNEL_ID}`).",
+                ephemeral=True
+            )
+            return
+
+        last_vote_msg_id = last_vote_message_store.get(vote_channel.id)
+        if last_vote_msg_id:
+            try:
+                vote_msg = await vote_channel.fetch_message(last_vote_msg_id)
+                disabled_view = RoleplayVoteButtonsView()
+                for child in disabled_view.children:
+                    child.disabled = True
+                await vote_msg.edit(view=disabled_view)
+            except Exception:
+                pass
+
+        await vote_channel.send("🛑 **تم إغلاق التصويت لأن الرول انتهى.**")
+        await interaction.response.send_message(
+            f"✅ تم إرسال إشعار انتهاء التصويت في {vote_channel.mention}.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="بدء الرول", style=discord.ButtonStyle.green, emoji="🎮", custom_id="rp_panel_start_btn_v1", row=1)
     async def panel_start_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(StartRoleplayModal())
 
-    @discord.ui.button(label="كود السيرفر 🔒", style=discord.ButtonStyle.secondary, custom_id="rp_panel_code_btn_v1", row=1)
+    @discord.ui.button(label="الغاء رول", style=discord.ButtonStyle.danger, emoji="✖️", custom_id="rp_panel_cancel_rp_btn_v1", row=1)
+    async def panel_cancel_rp_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        rp_channel = interaction.guild.get_channel(ROLEPLAY_ANNOUNCE_CHANNEL_ID)
+        if not rp_channel:
+            await interaction.response.send_message(
+                f"❌ لم يتم العثور على روم الرول بلاي (`{ROLEPLAY_ANNOUNCE_CHANNEL_ID}`).",
+                ephemeral=True
+            )
+            return
+
+        await rp_channel.send("❌ **تم إلغاء الرول.**")
+        await interaction.response.send_message(
+            f"✅ تم إرسال إشعار إلغاء الرول في {rp_channel.mention}.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="كود السيرفر 🔒", style=discord.ButtonStyle.secondary, custom_id="rp_panel_code_btn_v1", row=2)
     async def panel_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(ServerCodeModal())
+
+    @discord.ui.button(label="تقييم الرول", style=discord.ButtonStyle.primary, emoji="📋", custom_id="rp_panel_rating_btn_v1", row=2)
+    async def panel_rating_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        rating_channel = interaction.guild.get_channel(ROLEPLAY_RATING_CHANNEL_ID)
+        if not rating_channel:
+            await interaction.response.send_message(
+                f"❌ لم يتم العثور على روم تقييم الرول (`{ROLEPLAY_RATING_CHANNEL_ID}`).",
+                ephemeral=True
+            )
+            return
+
+        rating_text = build_roleplay_rating_text(yes_count=0, no_count=0)
+        sent_rating_msg = await rating_channel.send(content=rating_text, view=RoleplayRatingButtonsView())
+        roleplay_ratings_store[sent_rating_msg.id] = {"yes": set(), "no": set()}
+
+        await interaction.response.send_message(
+            f"✅ تم إرسال رسالة تقييم الرول في {rating_channel.mention}.",
+            ephemeral=True
+        )
 
 @bot.command(name="لوحة", aliases=["roleplay_panel"])
 async def roleplay_panel_cmd(ctx):
@@ -916,8 +1042,11 @@ async def roleplay_panel_cmd(ctx):
         description=(
             f"أهلاً بك {ctx.author.mention}، اختر الإجراء المطلوب من الأزرار بالأسفل:\n\n"
             "• **تصويت رول:** تحديد عدد المواطنين والعسكر وإرسال رسالة التصويت.\n"
+            "• **الغاء تصويت:** إرسال إشعار انتهاء التصويت في روم التصويت.\n"
             "• **بدء الرول:** إدخال يوزر روبلوكس، مساعد الهوست، وفويس الرول.\n"
-            "• **كود السيرفر 🔒:** إدخال الكود وكلمة السر وإتاحتهم للمصوتين فقط."
+            "• **الغاء رول:** إرسال إشعار إلغاء الرول في روم الرول بلاي.\n"
+            "• **كود السيرفر 🔒:** إدخال الكود وكلمة السر وإتاحتهم للمصوتين فقط.\n"
+            "• **تقييم الرول:** إرسال بانل تقييم الرول مع أزرار (صح / خطأ) وعداد المصوتين."
         ),
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
@@ -2615,6 +2744,7 @@ async def on_ready():
     bot.add_view(RoleplayControlPanelView())
     bot.add_view(RoleplayVoteButtonsView())
     bot.add_view(RevealServerCodeView())
+    bot.add_view(RoleplayRatingButtonsView())
 
     if not check_expired_bans.is_running():
         check_expired_bans.start()
@@ -2929,7 +3059,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف والفصل",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود والتقييم)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
