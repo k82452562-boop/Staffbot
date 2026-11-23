@@ -65,6 +65,14 @@ WARN_3_ID = 1543279133164048576
 
 BACKUP_CHANNEL_ID = 1553913719128588389
 
+# إعدادات لوحة الرول والتصويت وكود السيرفر
+ROLEPLAY_PANEL_ROLE_ID = 1545689115654225961
+ROLEPLAY_VOTE_CHANNEL_ID = 1554875979787149403
+ROLEPLAY_ANNOUNCE_CHANNEL_ID = 1543080859685625868
+MILITARY_ROLE_ID = 1555415730789425173
+ROLEPLAY_MENTION_1_ID = 1543071855920029778
+ROLEPLAY_MENTION_2_ID = 1555415730789425173
+
 POINTS_CONFIG = {
     "ticket": 1,
     "warn": 1,
@@ -126,6 +134,9 @@ RATINGS_FILE = "ratings.json"
 double_points_end_time = 0
 processed_tickets = set()
 
+roleplay_votes_store = {}
+server_codes_store = {}
+
 active_event = {
     "running": False,
     "activity_type": "",
@@ -150,6 +161,11 @@ def can_manage_points(ctx_or_interaction):
     if author.id in OWNER_IDS or author.guild_permissions.administrator:
         return True
     return any(role.id == POINTS_CONTROL_ROLE_ID for role in getattr(author, 'roles', []))
+
+def can_use_roleplay_panel(member: discord.Member) -> bool:
+    if member.id in OWNER_IDS or member.guild_permissions.administrator:
+        return True
+    return any(r.id == ROLEPLAY_PANEL_ROLE_ID for r in getattr(member, 'roles', []))
 
 def load_json(filename):
     if os.path.exists(filename):
@@ -564,6 +580,353 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
+# 🎮 نظام لوحة الرول والتصويت وبدء الرول وكود السيرفر
+# ----------------------------------------------------
+def build_vote_message_text(host: discord.abc.User, citizen_req: str, military_req: str, citizen_count: int, military_count: int) -> str:
+    mention_1 = f"<@&{ROLEPLAY_MENTION_1_ID}>"
+    mention_2 = f"<@&{ROLEPLAY_MENTION_2_ID}>"
+    return (
+        "╭━━━━━━━━━━━━━━━━━━━━━━╮\n"
+        "🎮 تـصـويـت رتـب مـنـتـدى الـنـظـيـم\n"
+        "╰━━━━━━━━━━━━━━━━━━━━━━╯\n\n"
+        f"الهوست : {host.mention}\n\n"
+        "✅ مواطن\n"
+        "تفاعل بالزر  ✅ للتصويت.\n\n"
+        f"عددٍ المواطنين المطلوب : {citizen_req} *(المصوتون: {citizen_count})*\n\n"
+        " 🚓عسكري\n"
+        "تفاعل بالزر🚓 للتصويت.\n\n"
+        f"عدد العسكر المطلوب : {military_req} *(المصوتون: {military_count})*\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🤍 صوتك يهمنا، ونبي نشوف العدد فقط!\n\n"
+        "⚠️ مـلاحـظـة مـهـمـة\n\n"
+        "التصويت يُعتبر تأكيدًا على حضورك واستلامك للرول، وفي حال التصويت وعدم الحضور سيتم تسجيل تحذير إداري بحقك.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{mention_1}\n"
+        f"{mention_2}"
+    )
+
+class RoleplayVoteButtonsView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="مواطن", style=discord.ButtonStyle.success, emoji="✅", custom_id="rp_vote_citizen_btn_v1")
+    async def vote_citizen(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg_id = interaction.message.id
+        if msg_id not in roleplay_votes_store:
+            roleplay_votes_store[msg_id] = {
+                "citizen": set(),
+                "military": set(),
+                "citizen_req": "غير محدد",
+                "military_req": "غير محدد",
+                "host_id": interaction.user.id
+            }
+
+        data = roleplay_votes_store[msg_id]
+        uid = interaction.user.id
+
+        data["military"].discard(uid)
+        if uid in data["citizen"]:
+            data["citizen"].remove(uid)
+            status_msg = "🔄 تم إلغاء تصويتك كـ **مواطن ✅**."
+        else:
+            data["citizen"].add(uid)
+            status_msg = "✅ تم تسجيل تصويتك كـ **مواطن** بنجاح."
+
+        host_user = interaction.guild.get_member(data["host_id"]) or interaction.user
+        updated_content = build_vote_message_text(
+            host=host_user,
+            citizen_req=data["citizen_req"],
+            military_req=data["military_req"],
+            citizen_count=len(data["citizen"]),
+            military_count=len(data["military"])
+        )
+
+        await interaction.message.edit(content=updated_content, view=self)
+        await interaction.response.send_message(status_msg, ephemeral=True)
+
+    @discord.ui.button(label="عسكري", style=discord.ButtonStyle.danger, emoji="🚓", custom_id="rp_vote_military_btn_v1")
+    async def vote_military(self, interaction: discord.Interaction, button: discord.ui.Button):
+        has_military_role = any(r.id == MILITARY_ROLE_ID for r in interaction.user.roles)
+        if not has_military_role and interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message(
+                f"❌ عذراً، للتصويت كـ **عسكري 🚓** يجب أن تملك رتبة <@&{MILITARY_ROLE_ID}>. المواطن لا يمكنه التصويت عسكري.",
+                ephemeral=True
+            )
+            return
+
+        msg_id = interaction.message.id
+        if msg_id not in roleplay_votes_store:
+            roleplay_votes_store[msg_id] = {
+                "citizen": set(),
+                "military": set(),
+                "citizen_req": "غير محدد",
+                "military_req": "غير محدد",
+                "host_id": interaction.user.id
+            }
+
+        data = roleplay_votes_store[msg_id]
+        uid = interaction.user.id
+
+        data["citizen"].discard(uid)
+        if uid in data["military"]:
+            data["military"].remove(uid)
+            status_msg = "🔄 تم إلغاء تصويتك كـ **عسكري 🚓**."
+        else:
+            data["military"].add(uid)
+            status_msg = "🚓 تم تسجيل تصويتك كـ **عسكري** بنجاح."
+
+        host_user = interaction.guild.get_member(data["host_id"]) or interaction.user
+        updated_content = build_vote_message_text(
+            host=host_user,
+            citizen_req=data["citizen_req"],
+            military_req=data["military_req"],
+            citizen_count=len(data["citizen"]),
+            military_count=len(data["military"])
+        )
+
+        await interaction.message.edit(content=updated_content, view=self)
+        await interaction.response.send_message(status_msg, ephemeral=True)
+
+class RoleplayVoteModal(discord.ui.Modal, title="إعداد تصويت الرول"):
+    citizen_count_input = discord.ui.TextInput(
+        label="عدد المواطنين المطلوب",
+        placeholder="مثال: 10",
+        required=True,
+        max_length=20
+    )
+    military_count_input = discord.ui.TextInput(
+        label="عدد العسكر المطلوب",
+        placeholder="مثال: 6",
+        required=True,
+        max_length=20
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vote_channel = interaction.guild.get_channel(ROLEPLAY_VOTE_CHANNEL_ID)
+        if not vote_channel:
+            await interaction.response.send_message(
+                f"❌ لم يتم العثور على روم التصويت (`{ROLEPLAY_VOTE_CHANNEL_ID}`).",
+                ephemeral=True
+            )
+            return
+
+        citizen_req = self.citizen_count_input.value.strip()
+        military_req = self.military_count_input.value.strip()
+
+        content = build_vote_message_text(
+            host=interaction.user,
+            citizen_req=citizen_req,
+            military_req=military_req,
+            citizen_count=0,
+            military_count=0
+        )
+
+        sent_msg = await vote_channel.send(content=content, view=RoleplayVoteButtonsView())
+        roleplay_votes_store[sent_msg.id] = {
+            "citizen": set(),
+            "military": set(),
+            "citizen_req": citizen_req,
+            "military_req": military_req,
+            "host_id": interaction.user.id
+        }
+
+        await interaction.response.send_message(
+            f"✅ تم إرسال تصويت الرول بنجاح في {vote_channel.mention}.",
+            ephemeral=True
+        )
+
+class StartRoleplayModal(discord.ui.Modal, title="بدء الرول"):
+    roblox_user_input = discord.ui.TextInput(
+        label="يوزرك روبلوكس",
+        placeholder="اكتب يوزرك في روبلوكس",
+        required=True,
+        max_length=50
+    )
+    co_host_input = discord.ui.TextInput(
+        label="مساعد الهوست",
+        placeholder="اكتب اسم أو منشن مساعد الهوست",
+        required=True,
+        max_length=80
+    )
+    roleplay_voice_input = discord.ui.TextInput(
+        label="فويس الرول",
+        placeholder="اكتب اسم أو رابط فويس الرول",
+        required=True,
+        max_length=80
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        announce_channel = interaction.guild.get_channel(ROLEPLAY_ANNOUNCE_CHANNEL_ID)
+        if not announce_channel:
+            await interaction.response.send_message(
+                f"❌ لم يتم العثور على روم بدء الرول (`{ROLEPLAY_ANNOUNCE_CHANNEL_ID}`).",
+                ephemeral=True
+            )
+            return
+
+        roblox_user = self.roblox_user_input.value.strip()
+        co_host = self.co_host_input.value.strip()
+        roleplay_voice = self.roleplay_voice_input.value.strip()
+
+        roleplay_message = (
+            "**__\n"
+            "```نـمـوذج رول مـنـتـدى الـنـظـيـم 🎮```\n\n"
+            f"— الهوست: {interaction.user.mention}\n\n"
+            f"— يوزر الهوست : {roblox_user} المساعد : {co_host}\n"
+            "— نوع الرول : فره\n\n\n\n"
+            f"— فويس الرول : {roleplay_voice}\n"
+            "__**\n"
+            "```        الـقـوانـيـن    📜             ```\n"
+            "**__\n"
+            "الرجاء من الجميع قرأت <#1543074260606648451> والالتزام بها .\n\n"
+            "وكذالك <#1543074431155568702>\n"
+            "__**\n"
+            "```        تـنـبـيـه مـهـم    📢             ```\n"
+            "**__\n"
+            "في حال رغبتك بإضافة الهوست ، يرجى التوجه إلى روم <#1543081098051846184> وتعبئة النموذج ، وسيتم مراجعة الطلب من قبل \n"
+            "<@&1545689115654225961>\n"
+            "__**\n"
+            "<@&1543071855920029778>"
+        )
+
+        await announce_channel.send(content=roleplay_message)
+        await interaction.response.send_message(
+            f"✅ تم إرسال نموذج بدء الرول بنجاح في {announce_channel.mention}.",
+            ephemeral=True
+        )
+
+class RevealServerCodeView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="عرض الكود وكلمة السر", style=discord.ButtonStyle.primary, emoji="🔐", custom_id="rp_reveal_code_btn_v1")
+    async def reveal_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        uid = interaction.user.id
+        has_voted = any(
+            uid in v_data.get("citizen", set()) or uid in v_data.get("military", set())
+            for v_data in roleplay_votes_store.values()
+        )
+
+        if not has_voted and interaction.user.id not in OWNER_IDS:
+            await interaction.response.send_message(
+                "❌ لا يمكنك رؤية كود السيرفر وكلمة السر لأنك لم تختر أحد أزرار التصويت (**✅ مواطن** أو **🚓 عسكري**).",
+                ephemeral=True
+            )
+            return
+
+        code_info = server_codes_store.get(interaction.guild.id)
+        if not code_info:
+            await interaction.response.send_message("❌ لا يوجد كود سيرفر مسجل حالياً.", ephemeral=True)
+            return
+
+        await interaction.response.send_message(
+            f"🔓 **بيانات دخول السيرفر:**\n"
+            f"• **كود السيرفر:** `{code_info['code']}`\n"
+            f"• **كلمة السر:** `{code_info['password']}`",
+            ephemeral=True
+        )
+
+class ServerCodeModal(discord.ui.Modal, title="إعداد كود السيرفر"):
+    server_code_input = discord.ui.TextInput(
+        label="كود السيرفر",
+        placeholder="اكتب كود السيرفر هنا",
+        required=True,
+        max_length=50
+    )
+    server_password_input = discord.ui.TextInput(
+        label="كلمة السر",
+        placeholder="اكتب كلمة السر هنا",
+        required=True,
+        max_length=50
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        code_channel = interaction.guild.get_channel(ROLEPLAY_ANNOUNCE_CHANNEL_ID)
+        if not code_channel:
+            await interaction.response.send_message(
+                f"❌ لم يتم العثور على روم كود السيرفر (`{ROLEPLAY_ANNOUNCE_CHANNEL_ID}`).",
+                ephemeral=True
+            )
+            return
+
+        code_val = self.server_code_input.value.strip()
+        pass_val = self.server_password_input.value.strip()
+
+        server_codes_store[interaction.guild.id] = {
+            "code": code_val,
+            "password": pass_val,
+            "host_id": interaction.user.id
+        }
+
+        embed = discord.Embed(
+            title="🔒 | كود السيرفر جاهز للمصوتين",
+            description=(
+                f"تم تحديد كود السيرفر وكلمة السر بواسطة {interaction.user.mention}.\n"
+                "لرؤية الكود وكلمة السر، يجب أن تكون قد اخترت أحد أزرار التصويت (**✅ مواطن** أو **🚓 عسكري**) ثم اضغط الزر بالأسفل."
+            ),
+            color=discord.Color.from_rgb(241, 196, 15),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_footer(text="منتدى النظيم | نظام كود الرول")
+
+        await code_channel.send(embed=embed, view=RevealServerCodeView())
+        await interaction.response.send_message(
+            f"✅ تم حفظ كود السيرفر وكلمة السر وإرسال الزر في {code_channel.mention}.",
+            ephemeral=True
+        )
+
+class RoleplayControlPanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not can_use_roleplay_panel(interaction.user):
+            await interaction.response.send_message(
+                f"❌ هذه اللوحة مخصصة لرتبة <@&{ROLEPLAY_PANEL_ROLE_ID}> فقط.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="تصويت رول", style=discord.ButtonStyle.blurple, emoji="📊", custom_id="rp_panel_vote_btn_v1", row=0)
+    async def panel_vote_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(RoleplayVoteModal())
+
+    @discord.ui.button(label="بدء الرول", style=discord.ButtonStyle.green, emoji="🎮", custom_id="rp_panel_start_btn_v1", row=0)
+    async def panel_start_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(StartRoleplayModal())
+
+    @discord.ui.button(label="كود السيرفر 🔒", style=discord.ButtonStyle.secondary, custom_id="rp_panel_code_btn_v1", row=1)
+    async def panel_code_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ServerCodeModal())
+
+@bot.command(name="لوحة", aliases=["roleplay_panel"])
+async def roleplay_panel_cmd(ctx):
+    if not can_use_roleplay_panel(ctx.author):
+        await ctx.send(f"❌ هذا الأمر مخصص لرتبة <@&{ROLEPLAY_PANEL_ROLE_ID}> فقط!", delete_after=5)
+        return
+
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
+    embed = discord.Embed(
+        title="🎛️ | لوحة تحكم الرول",
+        description=(
+            f"أهلاً بك {ctx.author.mention}، اختر الإجراء المطلوب من الأزرار بالأسفل:\n\n"
+            "• **تصويت رول:** تحديد عدد المواطنين والعسكر وإرسال رسالة التصويت.\n"
+            "• **بدء الرول:** إدخال يوزر روبلوكس، مساعد الهوست، وفويس الرول.\n"
+            "• **كود السيرفر 🔒:** إدخال الكود وكلمة السر وإتاحتهم للمصوتين فقط."
+        ),
+        color=discord.Color.from_rgb(241, 196, 15),
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="منتدى النظيم | لوحة الرول")
+
+    await ctx.send(embed=embed, view=RoleplayControlPanelView())
+
+# ----------------------------------------------------
 # ⭐ نظام التقييم التفاعلي (أزرار أفقية موزعة زوجياً 2 في كل صف + نظام صفحات)
 # ----------------------------------------------------
 class RatingSelectModal(discord.ui.Modal):
@@ -932,14 +1295,12 @@ class SecretRandomSelect(discord.ui.UserSelect):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        # حماية إضافية: محد يقدر يضغط القائمة غيرك
         if interaction.user.id != self.author_id:
             await interaction.response.send_message("❌ هذه القائمة مخصصة للشخص اللي طلب الأمر فقط!", ephemeral=True)
             return
 
         chosen_member = self.values[0]
         
-        # منع اختيار البوتات بالغلط
         if chosen_member.bot:
             await interaction.response.send_message("❌ ما تقدر تختار بوت يا الذيب! اختر عضو حقيقي.", ephemeral=True)
             return
@@ -950,7 +1311,6 @@ class SecretRandomSelect(discord.ui.UserSelect):
         target_role = guild.get_role(1543071855920029778)
         role_mention = target_role.mention if target_role else "<@&1543071855920029778>"
 
-        # 1. تأكيد لك وحذف رسالة القائمة من الروم السري لتنظيف الشات
         await interaction.followup.send(
             f"✅ **تم اختيار الفائز:** {chosen_member.mention}\n*(تم إرسال الإعلان في روم {self.target_channel.mention})*", 
             ephemeral=True
@@ -960,7 +1320,6 @@ class SecretRandomSelect(discord.ui.UserSelect):
         except:
             pass
 
-        # 2. إرسال الإعلان العام في الروم الأساسي اللي كتبت فيه الأمر
         announcement_msg = (
             f"🎉 إعلان تحديد الفائز العشوائي 🎉\n\n"
             f"يعطيكم العافية جميعًا على مشاركتكم ❤️\n\n"
@@ -984,7 +1343,6 @@ async def random_member_cmd(ctx):
         await ctx.send("❌ عذراً يا الحبيب، هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
         return
 
-    # حذف أمرك من الشات العام فوراً
     try:
         await ctx.message.delete()
     except:
@@ -1004,16 +1362,7 @@ async def random_member_cmd(ctx):
         color=discord.Color.from_rgb(241, 196, 15)
     )
     
-    # إرسال القائمة في الروم السري المحدد
     await secret_channel.send(content=ctx.author.mention, embed=embed, view=SecretRandomView(ctx.channel, ctx.author.id), delete_after=120)
-
-
-
-    
-    await ctx.send(embed=embed, view=SecretRandomView(), delete_after=60)
-
-    
-    await ctx.send(embed=embed, view=SecretRandomView(), delete_after=60)
 
 class TeamPointsModal(discord.ui.Modal):
     def __init__(self, team_id: int, action_type: str, team_name: str):
@@ -2263,7 +2612,9 @@ async def on_ready():
     bot.add_view(ApplyButtonView())
     bot.add_view(StartEventPanelView())
     bot.add_view(AdminLookupView())
-    bot.add_view(SecretRandomView())
+    bot.add_view(RoleplayControlPanelView())
+    bot.add_view(RoleplayVoteButtonsView())
+    bot.add_view(RevealServerCodeView())
 
     if not check_expired_bans.is_running():
         check_expired_bans.start()
@@ -2578,7 +2929,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف والفصل",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
