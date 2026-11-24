@@ -583,7 +583,7 @@ async def calculate_teams_performance(guild: discord.Guild):
     return embed
 
 # ----------------------------------------------------
-# 🎮 نظام لوحة الرول والتصويت وبدء الرول وكود السيرفر والتقييم
+# 🎮 نظام لوحة الرول والتصويت وبدء الرول وكود السيرفر والتقييم والمصوتين
 # ----------------------------------------------------
 def build_vote_message_text(host: discord.abc.User, citizen_req: str, military_req: str, citizen_count: int, military_count: int) -> str:
     mention_1 = f"<@&{ROLEPLAY_MENTION_1_ID}>"
@@ -620,6 +620,29 @@ def build_roleplay_rating_text(yes_count: int, no_count: int) -> str:
         f"• عدد المقيمين (خطأ ❌): `{no_count}`\n\n"
         f"{mention_1}\n"
         f"{mention_2}"
+    )
+
+def build_voters_list_text(guild: discord.Guild, vote_data: dict) -> str:
+    citizens = vote_data.get("citizen", set())
+    military = vote_data.get("military", set())
+
+    citizen_lines = []
+    for uid in citizens:
+        member = guild.get_member(uid)
+        citizen_lines.append(f"• {member.mention} (`{uid}`)" if member else f"• <@{uid}> (`{uid}`)")
+
+    military_lines = []
+    for uid in military:
+        member = guild.get_member(uid)
+        military_lines.append(f"• {member.mention} (`{uid}`)" if member else f"• <@{uid}> (`{uid}`)")
+
+    citizens_str = "\n".join(citizen_lines) if citizen_lines else "لا يوجد مصوتون مواطنون."
+    military_str = "\n".join(military_lines) if military_lines else "لا يوجد مصوتون عسكر."
+
+    return (
+        "📋 **قائمة المصوتين في آخر رول:**\n\n"
+        f"✅ **المواطنون ({len(citizens)}):**\n{citizens_str}\n\n"
+        f"🚓 **العسكر ({len(military)}):**\n{military_str}"
     )
 
 class RoleplayRatingButtonsView(discord.ui.View):
@@ -1026,6 +1049,20 @@ class RoleplayControlPanelView(discord.ui.View):
             ephemeral=True
         )
 
+    @discord.ui.button(label="المصوتون", style=discord.ButtonStyle.secondary, emoji="👥", custom_id="rp_panel_voters_btn_v1", row=2)
+    async def panel_voters_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        last_vote_msg_id = last_vote_message_store.get(ROLEPLAY_VOTE_CHANNEL_ID)
+        if not last_vote_msg_id or last_vote_msg_id not in roleplay_votes_store:
+            await interaction.response.send_message(
+                "❌ لا يوجد تصويت نشط أو مسجل حالياً لعرض المصوتين.",
+                ephemeral=True
+            )
+            return
+
+        vote_data = roleplay_votes_store[last_vote_msg_id]
+        voters_text = build_voters_list_text(interaction.guild, vote_data)
+        await interaction.response.send_message(voters_text, ephemeral=True)
+
 @bot.command(name="لوحة", aliases=["roleplay_panel"])
 async def roleplay_panel_cmd(ctx):
     if not can_use_roleplay_panel(ctx.author):
@@ -1046,7 +1083,8 @@ async def roleplay_panel_cmd(ctx):
             "• **بدء الرول:** إدخال يوزر روبلوكس، مساعد الهوست، وفويس الرول.\n"
             "• **الغاء رول:** إرسال إشعار إلغاء الرول في روم الرول بلاي.\n"
             "• **كود السيرفر 🔒:** إدخال الكود وكلمة السر وإتاحتهم للمصوتين فقط.\n"
-            "• **تقييم الرول:** إرسال بانل تقييم الرول مع أزرار (صح / خطأ) وعداد المصوتين."
+            "• **تقييم الرول:** إرسال بانل تقييم الرول مع أزرار (صح / خطأ) وعداد المصوتين.\n"
+            "• **المصوتون:** عرض قائمة المصوتين (مواطن / عسكري) في آخر تصويت."
         ),
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
@@ -3059,7 +3097,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف والفصل",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود والتقييم)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود والتقييم والمصوتين)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
@@ -3078,7 +3116,6 @@ async def double_points(ctx):
 async def give_role(ctx, member: discord.Member, role: discord.Role):
     is_owner = ctx.author.id in OWNER_IDS
     
-    # التحقق إذا كان يحاول إعطاء رتبة لنفسه أو لأي شخص برتبة أعلى
     if member.id == ctx.author.id or (not is_owner and ctx.author.top_role <= role):
         await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك رتبه اعلى منك ياحمار")
         return
