@@ -7,8 +7,8 @@ import time
 import asyncio
 import re
 from datetime import datetime, timedelta
-from flask import Flask, render_template  # أضف هذا السطر
-from threading import Thread              # وأضف هذا السطر
+from flask import Flask, render_template
+from threading import Thread
 
 
 # ----------------------------------------------------
@@ -21,7 +21,7 @@ PREFIX = ("!", ".")
 OWNER_IDS = [
     917414299184533515,  # حسابك الأساسي (الحاكم ريان)
     391638472022163456,  # الأيدي الأول
-    1526761757497098335  # الأيدي الثاني
+    1526761757497098335   # الأيدي الثاني
 ]
 
 PROMOTION_ALERT_USER_IDS = [
@@ -32,29 +32,33 @@ PROMOTION_ALERT_USER_IDS = [
 POINTS_CONTROL_ROLE_ID = 1545520950064316516
 
 ALLOWED_ROLE_IDS = [
-    1545520633939624006,  
-    1545520950064316516,  
-    1540838084151877714   
+    1545520633939624006,
+    1545520950064316516,
+    1540838084151877714
 ]
 
 TEAM_1_ROLE_ID = 1562958541856182312
 TEAM_2_ROLE_ID = 1562958139530154034
 
 LOG_CHANNEL_ID = 1553913719128588389
-NOTIFICATION_CHANNEL_ID = 1541179719297278072   
-TICKET_LOG_CHANNEL_ID = 1559469613509640233  
+NOTIFICATION_CHANNEL_ID = 1541179719297278072
+TICKET_LOG_CHANNEL_ID = 1553913719128588389
+TICKET_GLITCH_ALERT_ROLE_MENTION = "<@&1545520950064316516>"
+ANON_LOG_CHANNEL_ID = 1553848524205072474
+
+TICKET_CHANNEL_ID = 1559469613509640233
 BAN_MODEL_CHANNEL_ID = 1543648161807999077
 TIMEOUT_MODEL_CHANNEL_ID = 1543648006258294784
-APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930   
-APPLY_REVIEW_CHANNEL_ID = 1543073109496692737   
-WARN_CHANNEL_ID = 1543647851953791179           
-ADMIN_ROLE_PENG_ID = 1545520633939624006        
+APPLY_SUBMIT_CHANNEL_ID = 1543072562538618930
+APPLY_REVIEW_CHANNEL_ID = 1543073109496692737
+WARN_CHANNEL_ID = 1543647851953791179
+ADMIN_ROLE_PENG_ID = 1545520633939624006
 EVENT_ANNOUNCE_CHANNEL_ID = 1543082133231243365
 DISMISS_LOG_CHANNEL_ID = 1543082450178281504
 
-UNVERIFIED_ROLE_ID = 1545695261446250516      
-VERIFIED_ROLE_ID = 1545516954754875523        
-BAN_ROLE_ID = 1543325398761345175             
+UNVERIFIED_ROLE_ID = 1545695261446250516
+VERIFIED_ROLE_ID = 1545516954754875523
+BAN_ROLE_ID = 1543325398761345175
 
 NICKNAME_CHANNEL_ID = 1552311822747443351
 NICKNAME_ROLE_ID = 1543071855920029778
@@ -78,15 +82,15 @@ POINTS_CONFIG = {
     "ticket": 1,
     "warn": 1,
     "timeout": 1,
-    "ban": 2,          
-    "apply_accept": 1 
+    "ban": 2,
+    "apply_accept": 1
 }
 
 SPECIAL_PROMOTION_ROLE_ID = 1545520950064316516
 NEW_HIRE_EXTRA_ROLE_ID = 1540839564506300476
 
 JUNIOR_ROLES_LIST = [
-    1548407040014155806, 
+    1548407040014155806,
     1548407479396991047,
     1548407580131336283,
     1548407675048689715,
@@ -134,6 +138,13 @@ RATINGS_FILE = "ratings.json"
 
 double_points_end_time = 0
 processed_tickets = set()
+
+# تتبع استلام التكتات لكشف القلتش: {ticket_key: {staff_id: count}}
+ticket_claims_tracker: dict[str, dict[int, int]] = {}
+alerted_ticket_glitches: set[tuple[str, int]] = set()
+
+# تخزين مؤقت للشخص المختار في الرسائل المجهولة: {sender_id: target_member_id}
+selected_anon_targets: dict[int, int] = {}
 
 roleplay_votes_store = {}
 server_codes_store = {}
@@ -253,7 +264,7 @@ def parse_duration_to_seconds(duration_str: str) -> int:
     numbers = re.findall(r'\d+', duration_str)
     if not numbers:
         return 86400
-    
+
     val = int(numbers[0])
     if "دقيقة" in duration_str or "دقائق" in duration_str or "m" in duration_str:
         return val * 60
@@ -314,14 +325,14 @@ async def send_unified_log(guild, title, description, color=discord.Color.from_r
 
 async def get_promotion_progress(member: discord.Member, current_pts: int):
     is_senior_higher = any(r.id == POINTS_CONTROL_ROLE_ID for r in member.roles)
-    
+
     if is_senior_higher:
         current_senior_idx = -1
         for idx, s_info in enumerate(SENIOR_HIGHER_ROLES):
             if any(r.id == s_info["role_id"] for r in member.roles):
                 current_senior_idx = idx
                 break
-        
+
         if current_senior_idx < len(SENIOR_HIGHER_ROLES) - 1:
             target_info = SENIOR_HIGHER_ROLES[current_senior_idx + 1]
             required_points = target_info["points"]
@@ -330,20 +341,20 @@ async def get_promotion_progress(member: discord.Member, current_pts: int):
     else:
         is_middle = any(r.id in MIDDLE_ROLES_LIST for r in member.roles)
         required_points = 70 if is_middle else 40
-    
+
     remaining = max(0, required_points - current_pts)
     progress_percent = min(100, int((current_pts / required_points) * 100)) if required_points > 0 else 100
-    
+
     filled_blocks = int(progress_percent / 10)
     empty_blocks = 10 - filled_blocks
     bar = "🟩" * filled_blocks + "⬛" * empty_blocks
-    
+
     return required_points, remaining, progress_percent, bar
 
 async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: int):
     guild = ctx_or_guild.guild if hasattr(ctx_or_guild, 'guild') else ctx_or_guild
     notif_role = guild.get_role(NOTIFICATION_CHANNEL_ID)
-    
+
     target_role = None
     role_category_name = ""
     required_points = 40
@@ -356,7 +367,7 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
             if any(r.id == s_info["role_id"] for r in member.roles):
                 current_senior_idx = idx
                 break
-        
+
         next_idx = current_senior_idx + 1
         if next_idx < len(SENIOR_HIGHER_ROLES):
             target_info = SENIOR_HIGHER_ROLES[next_idx]
@@ -367,29 +378,29 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
     else:
         is_middle = any(r.id in MIDDLE_ROLES_LIST for r in member.roles)
         required_points = 70 if is_middle else 40
-        
+
         if current_pts >= required_points:
             current_idx = -1
             master_list = JUNIOR_ROLES_LIST
-            
+
             for idx, rid in enumerate(JUNIOR_ROLES_LIST):
                 if any(r.id == rid for r in member.roles):
                     current_idx = idx
                     master_list = JUNIOR_ROLES_LIST
                     break
-            
+
             if current_idx == -1:
                 for idx, rid in enumerate(MIDDLE_ROLES_LIST):
                     if any(r.id == rid for r in member.roles):
                         current_idx = idx
                         master_list = MIDDLE_ROLES_LIST
                         break
-            
+
             if current_idx != -1 and current_idx < len(master_list) - 1:
                 next_role_id = master_list[current_idx + 1]
                 target_role = guild.get_role(next_role_id)
                 role_category_name = "الإدارة الصغرى / الوسطى"
-            
+
             if not target_role and not is_middle and JUNIOR_ROLES_LIST:
                 target_role = guild.get_role(JUNIOR_ROLES_LIST[0])
                 role_category_name = "الإدارة الصغرى"
@@ -398,14 +409,14 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
         try:
             all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
             roles_to_remove = [
-                r for r in member.roles 
+                r for r in member.roles
                 if r.id in all_managed_ids and r.id != target_role.id
             ]
             if roles_to_remove:
                 await member.remove_roles(*roles_to_remove, reason="ترقية ذكية: سحب الرتبة الإدارية القديمة")
-            
+
             await member.add_roles(target_role, reason="ترقية إدارية ذكية جديدة")
-            
+
             data = load_data()
             user_id = str(member.id)
             if user_id in data and isinstance(data[user_id], dict):
@@ -427,10 +438,10 @@ async def check_and_promote(ctx_or_guild, member: discord.Member, current_pts: i
 
 async def add_points_direct(guild, staff: discord.Member, base_points: int, action_name: str, target_type: str = None):
     global double_points_end_time, active_event
-    
+
     is_double_active = time.time() < double_points_end_time
     actual_points = (base_points * 2) if is_double_active else base_points
-    
+
     data = load_data()
     user_id = str(staff.id)
 
@@ -466,17 +477,17 @@ async def add_points_direct(guild, staff: discord.Member, base_points: int, acti
         persistent[guild_id_str]["t1_total"] = persistent[guild_id_str].get("t1_total", 0) + actual_points
     elif team_2_role and team_2_role in staff.roles:
         persistent[guild_id_str]["t2_total"] = persistent[guild_id_str].get("t2_total", 0) + actual_points
-    
+
     save_team_persistent(persistent, guild)
-    
+
     double_text = " 🔥 **(الدبل شغال x2 يا وحش!)**" if is_double_active else ""
     await send_unified_log(
-        guild, 
-        "📊 | رصد وتوثيق نقاط إدارية", 
+        guild,
+        "📊 | رصد وتوثيق نقاط إدارية",
         f"تم إيداع `{actual_points}` نقطة في محفظة المطنوخ {staff.mention}{double_text}\n📌 **السبب:** {action_name}\n📈 **رصيده الإجمالي الآن:** `{current_pts}` نقطة",
         discord.Color.from_rgb(46, 204, 113) if not is_double_active else discord.Color.from_rgb(241, 196, 15)
     )
-    
+
     await check_and_promote(guild, staff, current_pts)
 
 async def calculate_teams_performance(guild: discord.Guild):
@@ -484,11 +495,11 @@ async def calculate_teams_performance(guild: discord.Guild):
     bonuses = load_team_bonuses()
     persistent = load_team_persistent()
     stats_resets = load_team_stats_reset()
-    
+
     guild_id_str = str(guild.id)
     team_1_role = guild.get_role(TEAM_1_ROLE_ID)
     team_2_role = guild.get_role(TEAM_2_ROLE_ID)
-    
+
     t1_members = [m for m in guild.members if team_1_role in m.roles] if team_1_role else []
     t2_members = [m for m in guild.members if team_2_role in m.roles] if team_2_role else []
 
@@ -554,7 +565,7 @@ async def calculate_teams_performance(guild: discord.Guild):
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
-    
+
     embed.add_field(
         name=f"🛡️ التيم الأول: {team_1_role.name if team_1_role else 'غير موجودة'}",
         value=(
@@ -566,7 +577,7 @@ async def calculate_teams_performance(guild: discord.Guild):
         ),
         inline=False
     )
-    
+
     embed.add_field(
         name=f"🛡️ التيم الثاني: {team_2_role.name if team_2_role else 'غير موجودة'}",
         value=(
@@ -578,9 +589,273 @@ async def calculate_teams_performance(guild: discord.Guild):
         ),
         inline=False
     )
-    
+
     embed.set_footer(text="منتدى النظيم | نظام تقييم الأداء الموحد")
     return embed
+
+
+# ----------------------------------------------------
+# 🕵️ دوال كشف قلتش تكرار استلام التكت
+# ----------------------------------------------------
+def extract_ticket_identifier(message: discord.Message, full_text: str) -> str:
+    patterns = [
+        r"(?:تذكرة|تكت|ticket|رقم\s*التكت|رقم\s*التذكرة)\s*[:#\-]?\s*([A-Za-z0-9\-_]{2,25})",
+        r"#(\d{1,10})"
+    ]
+    for pat in patterns:
+        match = re.search(pat, full_text, flags=re.IGNORECASE)
+        if match:
+            return f"ticket_{match.group(1).lower()}"
+    return f"msg_{message.id}"
+
+
+def extract_claimer_member(message: discord.Message, full_text: str) -> discord.Member | None:
+    if not message.guild:
+        return None
+
+    for embed in message.embeds:
+        for field in embed.fields:
+            field_name = field.name or ""
+            field_val = field.value or ""
+            if any(k in field_name for k in ["المستلم", "استلم", "Claimed", "Staff", "الإداري"]):
+                user_ids = re.findall(r"(\d{17,19})", field_val)
+                for uid in user_ids:
+                    member = message.guild.get_member(int(uid))
+                    if member and not member.bot:
+                        return member
+
+    for keyword in ["المستلم", "استلم التذكرة", "استلم التكت", "Claimed by"]:
+        if keyword in full_text:
+            part = full_text.split(keyword, 1)[1][:180]
+            user_ids = re.findall(r"(\d{17,19})", part)
+            for uid in user_ids:
+                member = message.guild.get_member(int(uid))
+                if member and not member.bot:
+                    return member
+
+    if message.mentions:
+        for m in message.mentions:
+            if not m.bot:
+                return m
+
+    return None
+
+
+# ----------------------------------------------------
+# 📩 نظام الرسائل المجهولة (منتدى النظيم)
+# ----------------------------------------------------
+def build_anon_panel_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="الرسائل المجهولة ! ✉️",
+        description=(
+            "قد يارسل رسالة مجهولة لشخص دون ان يعرف من الراسل .\n\n"
+            "يمديك ترسل رسالة مجهولة والبوت ينقل رسالتك للشخص بدون مايكشفك !\n\n"
+            "⚠️ يوجد لوق لجميع الرسائل المجهولة : نسب تتبند"
+        ),
+        color=discord.Color.from_rgb(43, 45, 49)
+    )
+    embed.set_footer(text="منتدى النظيم | نظام الرسائل المجهولة")
+    return embed
+
+
+def build_anon_info_text() -> str:
+    return (
+        "الرسائل المجهوله ! 👀.\n\n"
+        "يمديك ترسل الى اي شخص تبغاه رساله مجهوله بدون مايعرفك !\n\n"
+        "معلومه مهمه !\n"
+        "تسب او ترسل لشخص اي شي فيه قذف وسب بتتبند ، يوجد لوق لجميع الرسائل المجهولة ."
+    )
+
+
+class AnonymousMessageModal(discord.ui.Modal, title="إرسال رسالة مجهولة"):
+    message_input = discord.ui.TextInput(
+        label="اكتب رسالتك المجهولة",
+        placeholder="اكتب الرسالة التي تريد إرسالها هنا...",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1500
+    )
+
+    def __init__(self, target_user: discord.Member):
+        super().__init__()
+        self.target_user = target_user
+
+    async def on_submit(self, interaction: discord.Interaction):
+        content_text = self.message_input.value.strip()
+        if not content_text:
+            await interaction.response.send_message("❌ لا يمكن إرسال رسالة فارغة.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        target = guild.get_member(self.target_user.id) if guild else self.target_user
+        if not target:
+            await interaction.response.send_message("❌ لم يتم العثور على الشخص المختار في السيرفر.", ephemeral=True)
+            return
+
+        if target.bot:
+            await interaction.response.send_message("❌ لا يمكنك إرسال رسالة مجهولة لبوت.", ephemeral=True)
+            return
+
+        dm_text = (
+            "جتلك رساله مجهوله !! من احد اعضاء منتدى النظيم\n"
+            f"الرساله هي : {content_text}"
+        )
+
+        try:
+            await target.send(dm_text)
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                f"❌ تعذر إرسال الرسالة إلى {target.mention} لأن الخاص لديه مغلق.",
+                ephemeral=True
+            )
+            return
+        except Exception as e:
+            await interaction.response.send_message(f"❌ حدث خطأ أثناء إرسال الرسالة: `{e}`", ephemeral=True)
+            return
+
+        log_channel = guild.get_channel(ANON_LOG_CHANNEL_ID) if guild else None
+        if log_channel:
+            log_embed = discord.Embed(
+                title="🕵️ | لوق رسالة مجهولة جديدة - منتدى النظيم",
+                color=discord.Color.from_rgb(241, 196, 15),
+                timestamp=discord.utils.utcnow()
+            )
+            log_embed.add_field(
+                name="👤 المرسل",
+                value=f"{interaction.user.mention}\n`{interaction.user}` (`{interaction.user.id}`)",
+                inline=False
+            )
+            log_embed.add_field(
+                name="🎯 المستقبل",
+                value=f"{target.mention}\n`{target}` (`{target.id}`)",
+                inline=False
+            )
+            log_embed.add_field(
+                name="💬 نص الرسالة",
+                value=f"```{content_text[:1000]}```",
+                inline=False
+            )
+            log_embed.set_footer(text=f"منتدى النظيم | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            try:
+                await log_channel.send(embed=log_embed)
+            except Exception as e:
+                print(f"⚠️ خطأ أثناء إرسال لوق الرسالة المجهولة: {e}")
+
+        selected_anon_targets.pop(interaction.user.id, None)
+
+        await interaction.response.send_message(
+            f"✅ تم إرسال رسالتك المجهولة إلى {target.mention} بنجاح.",
+            ephemeral=True
+        )
+
+
+class AnonymousActionSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label="ارسل رسالة مجهولة",
+                value="send_anon",
+                description="اضغط لفتح نافذة كتابة الرسالة المجهولة",
+                emoji="✉️"
+            ),
+            discord.SelectOption(
+                label="ريست القائمة",
+                value="reset_anon",
+                description="إعادة ضبط الاختيار للبدء من جديد",
+                emoji="🔄"
+            )
+        ]
+        super().__init__(
+            placeholder="ارسل رسالة مجهولة",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="anon_action_select_v1"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        choice = self.values[0]
+
+        if choice == "reset_anon":
+            selected_anon_targets.pop(interaction.user.id, None)
+            await interaction.response.send_message(
+                "🔄 تم ريست القائمة والاختيار بنجاح. يمكنك الآن اختيار الشخص وإرسال رسالة من جديد.",
+                ephemeral=True
+            )
+            return
+
+        target_id = selected_anon_targets.get(interaction.user.id)
+        if not target_id:
+            await interaction.response.send_message(
+                "⚠️ اختر الشخص أولاً من قائمة (الشخص) بالأسفل، ثم ارجع واختر (ارسل رسالة مجهولة).",
+                ephemeral=True
+            )
+            return
+
+        target_member = interaction.guild.get_member(target_id) if interaction.guild else None
+        if not target_member:
+            try:
+                target_member = await interaction.guild.fetch_member(target_id) if interaction.guild else None
+            except Exception:
+                target_member = None
+
+        if not target_member:
+            selected_anon_targets.pop(interaction.user.id, None)
+            await interaction.response.send_message(
+                "❌ الشخص الذي اخترته غير متاح حالياً، يرجى اختيار شخص آخر من القائمة.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.send_modal(AnonymousMessageModal(target_member))
+
+
+class AnonymousTargetUserSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="الشخص",
+            min_values=1,
+            max_values=1,
+            custom_id="anon_target_user_select_v1"
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        chosen = self.values[0]
+        if chosen.bot:
+            await interaction.response.send_message(
+                "❌ لا يمكنك اختيار بوت لإرسال رسالة مجهولة له.",
+                ephemeral=True
+            )
+            return
+
+        selected_anon_targets[interaction.user.id] = chosen.id
+        await interaction.response.send_message(
+            f"📌 تم تحديد الشخص: {chosen.mention} — الآن اختر (ارسل رسالة مجهولة) من القائمة الأولى لكتابة الرسالة.",
+            ephemeral=True
+        )
+
+
+class AnonymousMessagesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(AnonymousActionSelect())
+        self.add_item(AnonymousTargetUserSelect())
+
+
+@bot.command(name="بانل_مجهولة", aliases=["مجهولة", "anon_panel"])
+async def anon_panel_cmd(ctx):
+    if not is_admin_or_owner(ctx):
+        await ctx.send("❌ هذا الأمر مخصص للأدمنستريتر والأونرات فقط!", delete_after=5)
+        return
+
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+
+    await ctx.send(embed=build_anon_panel_embed(), view=AnonymousMessagesView())
+    await ctx.send(build_anon_info_text())
+
 
 # ----------------------------------------------------
 # 🎮 نظام لوحة الرول والتصويت وبدء الرول وكود السيرفر والتقييم والمصوتين
@@ -1093,6 +1368,7 @@ async def roleplay_panel_cmd(ctx):
 
     await ctx.send(embed=embed, view=RoleplayControlPanelView())
 
+
 # ----------------------------------------------------
 # ⭐ نظام التقييم التفاعلي (أزرار أفقية موزعة زوجياً 2 في كل صف + نظام صفحات)
 # ----------------------------------------------------
@@ -1131,11 +1407,11 @@ class RatingSelectModal(discord.ui.Modal):
             "comment": comment,
             "time": datetime.now().strftime('%Y-%m-%d %H:%M')
         })
-        
+
         save_ratings(ratings, guild)
 
         await interaction.response.send_message(
-            f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)!**", 
+            f"✅ **تم تسجيل تقييمك لـ {self.staff_member.mention} بنجاح (`{self.stars} نجوم`)!**",
             ephemeral=True
         )
 
@@ -1233,47 +1509,47 @@ class PaginatedStaffRatingView(discord.ui.View):
         self.staff_members = staff_members
         self.page = page
         self.per_page = 6
-        
+
         self.setup_page()
 
     def setup_page(self):
         self.clear_items()
-        
+
         start_idx = self.page * self.per_page
         end_idx = start_idx + self.per_page
         current_batch = self.staff_members[start_idx:end_idx]
-        
+
         for idx, member in enumerate(current_batch):
-            row_idx = idx // 2  
+            row_idx = idx // 2
             self.add_item(DirectStaffRatingButton(member, row_idx))
-            
+
         total_pages = (len(self.staff_members) + self.per_page - 1) // self.per_page
-        
+
         if total_pages > 1:
             prev_button = discord.ui.Button(
-                label="السابق", 
-                style=discord.ButtonStyle.secondary, 
-                emoji="◀️", 
+                label="السابق",
+                style=discord.ButtonStyle.secondary,
+                emoji="◀️",
                 disabled=(self.page == 0),
                 row=3,
                 custom_id="rating_prev_page_btn"
             )
             prev_button.callback = self.prev_page_callback
             self.add_item(prev_button)
-            
+
             page_indicator = discord.ui.Button(
-                label=f"الصفحة {self.page + 1} من {total_pages}", 
-                style=discord.ButtonStyle.blurple, 
+                label=f"الصفحة {self.page + 1} من {total_pages}",
+                style=discord.ButtonStyle.blurple,
                 disabled=True,
                 row=3,
                 custom_id="rating_page_indicator_btn"
             )
             self.add_item(page_indicator)
-            
+
             next_button = discord.ui.Button(
-                label="التالي", 
-                style=discord.ButtonStyle.secondary, 
-                emoji="▶️", 
+                label="التالي",
+                style=discord.ButtonStyle.secondary,
+                emoji="▶️",
                 disabled=(self.page >= total_pages - 1),
                 row=3,
                 custom_id="rating_next_page_btn"
@@ -1309,7 +1585,7 @@ async def rating_panel_cmd(ctx):
     guild = ctx.guild
     staff_role_id = ADMIN_ROLE_PENG_ID
     staff_role = guild.get_role(staff_role_id)
-    
+
     staff_members = []
     if staff_role:
         for member in guild.members:
@@ -1335,6 +1611,7 @@ async def rating_panel_cmd(ctx):
     view = PaginatedStaffRatingView(guild, staff_members, page=0)
     await ctx.send(embed=embed, view=view)
 
+
 # ----------------------------------------------------
 # ⭐ نظام استعراض تقييمات الإدارة التفصيلي (بحث فوري)
 # ----------------------------------------------------
@@ -1354,7 +1631,7 @@ class AdminLookupUserSelect(discord.ui.UserSelect):
 
         if staff_id_str not in ratings or ratings[staff_id_str].get("count", 0) == 0:
             await interaction.followup.send(
-                f"📊 لا توجد أي تقييمات مسجلة للإداري {selected_user.mention} حتى الآن.", 
+                f"📊 لا توجد أي تقييمات مسجلة للإداري {selected_user.mention} حتى الآن.",
                 ephemeral=True
             )
             return
@@ -1384,7 +1661,7 @@ class AdminLookupUserSelect(discord.ui.UserSelect):
                 rev_stars = rev.get("stars", 0)
                 rev_comment = rev.get("comment", "بدون ملاحظة")
                 rev_time = rev.get("time", "وقت غير محدد")
-                
+
                 embed.add_field(
                     name=f"#{idx} | {voter_name} ({'⭐' * rev_stars})",
                     value=f"💬 **الملاحظة:** *{rev_comment}*\n⏱️ **الوقت:** `{rev_time}`",
@@ -1418,7 +1695,7 @@ async def show_ratings_cmd(ctx, member: discord.Member = None):
         if staff_id_str not in ratings or ratings[staff_id_str].get("count", 0) == 0:
             await ctx.send(f"📊 لا توجد تقييمات مسجلة للإداري {member.mention}.", delete_after=10)
             return
-        
+
         staff_data = ratings[staff_id_str]
         count = staff_data["count"]
         total = staff_data["total_stars"]
@@ -1446,6 +1723,7 @@ async def show_ratings_cmd(ctx, member: discord.Member = None):
     embed.set_footer(text="منتدى النظيم | لوحة الرقابة الإدارية")
     await ctx.send(embed=embed, view=AdminLookupView())
 
+
 # ----------------------------------------------------
 # 🎲 نظام اختيار العضو عشوائياً (عبر الروم السري مع ميزة البحث الشامل)
 # ----------------------------------------------------
@@ -1467,7 +1745,7 @@ class SecretRandomSelect(discord.ui.UserSelect):
             return
 
         chosen_member = self.values[0]
-        
+
         if chosen_member.bot:
             await interaction.response.send_message("❌ ما تقدر تختار بوت يا الذيب! اختر عضو حقيقي.", ephemeral=True)
             return
@@ -1479,7 +1757,7 @@ class SecretRandomSelect(discord.ui.UserSelect):
         role_mention = target_role.mention if target_role else "<@&1543071855920029778>"
 
         await interaction.followup.send(
-            f"✅ **تم اختيار الفائز:** {chosen_member.mention}\n*(تم إرسال الإعلان في روم {self.target_channel.mention})*", 
+            f"✅ **تم اختيار الفائز:** {chosen_member.mention}\n*(تم إرسال الإعلان في روم {self.target_channel.mention})*",
             ephemeral=True
         )
         try:
@@ -1496,7 +1774,7 @@ class SecretRandomSelect(discord.ui.UserSelect):
             f"شكرًا لكل من شارك، والقادم أجمل بإذن الله.\n\n"
             f"{role_mention}"
         )
-        
+
         await self.target_channel.send(announcement_msg)
 
 class SecretRandomView(discord.ui.View):
@@ -1528,7 +1806,7 @@ async def random_member_cmd(ctx):
         ),
         color=discord.Color.from_rgb(241, 196, 15)
     )
-    
+
     await secret_channel.send(content=ctx.author.mention, embed=embed, view=SecretRandomView(ctx.channel, ctx.author.id), delete_after=120)
 
 class TeamPointsModal(discord.ui.Modal):
@@ -1609,7 +1887,7 @@ class TeamsControlView(discord.ui.View):
             bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
         bonuses[guild_id_str]["t1_extra"] = 0
         save_team_bonuses(bonuses)
-        
+
         t1_role = guild.get_role(TEAM_1_ROLE_ID)
         name = t1_role.name if t1_role else "التيم الأول"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
@@ -1637,7 +1915,7 @@ class TeamsControlView(discord.ui.View):
             bonuses[guild_id_str] = {"t1_extra": 0, "t2_extra": 0}
         bonuses[guild_id_str]["t2_extra"] = 0
         save_team_bonuses(bonuses)
-        
+
         t2_role = guild.get_role(TEAM_2_ROLE_ID)
         name = t2_role.name if t2_role else "التيم الثاني"
         await interaction.response.send_message(f"🔄 تم تصفير نقاط **{name}** الإضافية بنجاح!", ephemeral=True)
@@ -1656,7 +1934,7 @@ class TeamsResetView(discord.ui.View):
         guild_id_str = str(guild.id)
         bonuses = load_team_bonuses()
         persistent = load_team_persistent()
-        
+
         guild_persistent = persistent.get(guild_id_str, {"t1_total": 0, "t2_total": 0})
         t1_base = guild_persistent.get("t1_total", 0)
         t2_base = guild_persistent.get("t2_total", 0)
@@ -1805,13 +2083,13 @@ class EventSetupModal(discord.ui.Modal):
 
         if announce_channel:
             await announce_channel.send(content=f"🔔 {ping_str} **تنبيه ببدء الفعالية الرسمية!**", embed=embed)
-        
-        await interaction.response.send_message(f"✅ **تم إطلاق الفعالية بنجاح تام وإرسال الإعلان في روم الإعلانات!**", ephemeral=True)
+
+        await interaction.response.send_message("✅ **تم إطلاق الفعالية بنجاح تام وإرسال الإعلان في روم الإعلانات!**", ephemeral=True)
 
         async def finish_event_after_delay():
             global active_event
             await asyncio.sleep(duration_mins * 60)
-            
+
             if not active_event["running"]:
                 return
 
@@ -1820,13 +2098,13 @@ class EventSetupModal(discord.ui.Modal):
 
             if participants:
                 sorted_participants = sorted(participants.items(), key=lambda x: x[1], reverse=True)
-                
+
                 result_desc = "🏁 **انتهت الفعالية الإدارية! إليكم ترتيب التوب التلقائي حسب الأداء:**\n\n"
                 for idx, (uid, count) in enumerate(sorted_participants, 1):
                     member = guild.get_member(uid)
                     member_str = member.mention if member else f"<@{uid}>"
                     result_desc += f"`#{idx}` {member_str} — العمليات المنجزة: `{count}`\n"
-                
+
                 result_desc += f"\n👇 **يا الأونر، اضغط على الزر أدناه لتوزيع نقاط الفعالية ({pool_pts} نقطة إجمالية) على المراكز حسب احتياجك!**"
 
                 control_embed = discord.Embed(
@@ -1838,7 +2116,7 @@ class EventSetupModal(discord.ui.Modal):
                 control_embed.set_footer(text="منتدى النظيم | لوحة تحكم الفعاليات")
 
                 view = EventDistributeView(sorted_participants, guild, ping_str, announce_channel)
-                
+
                 if announce_channel:
                     await announce_channel.send(content=f"📢 {ping_str} **انتهت الفعالية! بانتظار توزيع الجوائز:**", embed=control_embed, view=view)
             else:
@@ -1935,7 +2213,7 @@ class EventRewardModal(discord.ui.Modal):
                 uid_str = str(uid)
                 if uid_str not in data or not isinstance(data[uid_str], dict):
                     data[uid_str] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
-                
+
                 data[uid_str]["points"] += awarded
 
                 if member:
@@ -1943,7 +2221,7 @@ class EventRewardModal(discord.ui.Modal):
                         persistent[guild_id_str]["t1_total"] = persistent[guild_id_str].get("t1_total", 0) + awarded
                     elif team_2_role and team_2_role in member.roles:
                         persistent[guild_id_str]["t2_total"] = persistent[guild_id_str].get("t2_total", 0) + awarded
-                
+
                 save_data(data, self.guild)
 
         save_team_persistent(persistent, self.guild)
@@ -1958,7 +2236,7 @@ class EventRewardModal(discord.ui.Modal):
 
         if self.announce_channel:
             await self.announce_channel.send(content=f"📢 {self.ping_str} **إعلان نتائج وتتويج الفعالية:**", embed=result_embed)
-        
+
         await interaction.response.send_message("✅ **تم توزيع النقاط على المشاركين وإضافتها لمحفظتهم وتيماتهم بنجاح تام!**", ephemeral=True)
 
 class EventDistributeView(discord.ui.View):
@@ -1992,6 +2270,9 @@ class StartEventPanelView(discord.ui.View):
 async def on_message(message):
     await bot.process_commands(message)
 
+    if not message.channel or message.author.bot and message.channel.id != TICKET_LOG_CHANNEL_ID:
+        return
+
     if message.channel.id == NICKNAME_CHANNEL_ID and not message.author.bot:
         try:
             await message.delete()
@@ -2020,49 +2301,42 @@ async def on_message(message):
                 print(f"خطأ في تعديل الاسم: {e}")
 
     if message.channel.id == TICKET_LOG_CHANNEL_ID:
-        if message.id in processed_tickets:
-            return
-
-        staff_member = None
-        full_text = ""
-
+        full_text = message.content or ""
         for embed in message.embeds:
-            title_text = embed.title or ""
-            desc_text = embed.description or ""
-            full_text += f"\n{title_text}\n{desc_text}"
-            
+            if embed.title:
+                full_text += f"\n{embed.title}"
+            if embed.description:
+                full_text += f"\n{embed.description}"
             for field in embed.fields:
-                field_name = field.name or ""
-                field_val = field.value or ""
-                full_text += f"\n{field_name}: {field_val}"
+                full_text += f"\n{field.name or ''}: {field.value or ''}"
 
-                if "المستلم" in field_name:
-                    user_ids = re.findall(r'(\d{17,19})', field_val)
-                    if user_ids:
-                        possible_staff = message.guild.get_member(int(user_ids[0]))
-                        if possible_staff and not possible_staff.bot:
-                            staff_member = possible_staff
+        # كشف قلتش تكرار استلام نفس التكت لنفس الإداري
+        is_claim_log = any(k in full_text for k in ["استلام", "المستلم", "Claim", "claimed", "تكت", "تذكرة"])
+        claimer = extract_claimer_member(message, full_text) if is_claim_log else None
+        if claimer:
+            ticket_key = extract_ticket_identifier(message, full_text)
+            staff_claims = ticket_claims_tracker.setdefault(ticket_key, {})
+            staff_claims[claimer.id] = staff_claims.get(claimer.id, 0) + 1
 
-        if not staff_member and "المستلم" in full_text:
-            parts = full_text.split("المستلم")
-            if len(parts) > 1:
-                target_section = parts[1][:150]
-                user_ids = re.findall(r'(\d{17,19})', target_section)
-                if user_ids:
-                    possible_staff = message.guild.get_member(int(user_ids[0]))
-                    if possible_staff and not possible_staff.bot:
-                        staff_member = possible_staff
+            if staff_claims[claimer.id] >= 2 and (ticket_key, claimer.id) not in alerted_ticket_glitches:
+                alerted_ticket_glitches.add((ticket_key, claimer.id))
+                ticket_label = ticket_key.replace("ticket_", "")
+                await message.channel.send(
+                    f"ترا الاهبل هاذا {claimer.mention} (`{claimer.id}`) مسوي قلتش التكتات (مستلم نفس التكت `{ticket_label}` `{staff_claims[claimer.id]}` مرات)\n"
+                    f"{TICKET_GLITCH_ALERT_ROLE_MENTION}"
+                )
 
-        if staff_member:
+        # رصد نقاط إغلاق التذكرة مرة واحدة لكل رسالة لوق
+        if message.id not in processed_tickets and claimer:
             processed_tickets.add(message.id)
             if len(processed_tickets) > 1000:
                 processed_tickets.pop()
 
             await add_points_direct(
-                message.guild, 
-                staff_member, 
-                1, 
-                "إغلاق تذكرة (تسجيل نقاط المستلم)", 
+                message.guild,
+                claimer,
+                1,
+                "إغلاق تذكرة (تسجيل نقاط المستلم)",
                 target_type="ticket"
             )
 
@@ -2072,7 +2346,7 @@ class ApplyReviewView(discord.ui.View):
         self.applicant = applicant
         self.guild = guild
         self.is_completed = False
-        
+
         for child in self.children:
             child.disabled = True
 
@@ -2145,7 +2419,7 @@ class ApplyReviewView(discord.ui.View):
         cooldowns = load_cooldowns()
         cooldowns[str(self.applicant.id)] = time.time()
         save_cooldowns(cooldowns)
-        
+
         embed = discord.Embed(
             title="❌ | رفض تقديم",
             description=f"للأسف تم رفض تقديم العضو {self.applicant.mention} بواسطة المطنوخ {staff.mention}.\n⏳ **طبقنا عليه فترة انتظار 10 دقائق قبل يقدر يرجع يقدم مرة ثانية.**",
@@ -2165,7 +2439,7 @@ class ApplyButtonView(discord.ui.View):
     async def start_apply(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_id = str(interaction.user.id)
         cooldowns = load_cooldowns()
-        
+
         if user_id in cooldowns:
             elapsed = time.time() - cooldowns[user_id]
             if elapsed < 600:
@@ -2179,7 +2453,7 @@ class ApplyButtonView(discord.ui.View):
         save_cooldowns(cooldowns)
 
         await interaction.response.defer(ephemeral=True)
-        
+
         try:
             await interaction.user.send("✨ **يا هلا بك في نظام التقديم الرسمي!** رد على الأسئلة بالترتيب وناخذك خطوة بخطوة يا الذيب.")
         except discord.Forbidden:
@@ -2226,9 +2500,9 @@ class ApplyButtonView(discord.ui.View):
 
             admin_role_mention = f"<@&{ADMIN_ROLE_PENG_ID}>"
             view = ApplyReviewView(applicant=interaction.user, guild=interaction.guild)
-            
+
             sent_message = await review_channel.send(content=f"🔔 {admin_role_mention} فيه تقديم هوية جديد جاهز للمراجعة!", embed=embed, view=view)
-            
+
             async def enable_buttons_after_delay(msg, v):
                 await asyncio.sleep(5)
                 if not v.is_completed:
@@ -2242,7 +2516,7 @@ class ApplyButtonView(discord.ui.View):
                         pass
 
             bot.loop.create_task(enable_buttons_after_delay(sent_message, view))
-        
+
         await interaction.user.send("✅ **وصلت إجاباتك للإدارة بنجاح!** أول ما يراجعونها بيجيك العلم.")
 
 @bot.command(name="بانل_تقديم", aliases=["panel_apply"])
@@ -2267,10 +2541,10 @@ async def check_roles_cmd(ctx):
         return
 
     msg = await ctx.send("🔍 **جاري فحص جميع أعضاء السيرفر وتوزيع الرتب على من ليس لديهم أي رتبة... انتظر شوي!**")
-    
+
     guild = ctx.guild
     target_role = guild.get_role(UNVERIFIED_ROLE_ID)
-    
+
     if not target_role:
         await msg.edit(content="❌ خطأ: الرتبة المستهدفة غير موجودة بالسيرفر!")
         return
@@ -2279,7 +2553,7 @@ async def check_roles_cmd(ctx):
     for member in guild.members:
         if member.bot:
             continue
-        
+
         if len(member.roles) <= 1:
             try:
                 await member.add_roles(target_role, reason="فحص تلقائي: منح الرتبة للأعضاء الذين بلا رتب")
@@ -2299,8 +2573,8 @@ async def verify_all_cmd(ctx):
     msg = await ctx.send("⚡ **جاري منح رتبة التفعيل لكل من يمتلك رتبة الاسم... انتظر لحظات!**")
 
     guild = ctx.guild
-    source_role_id = 1543071855920029778  
-    target_role_id = 1545516954754875523  
+    source_role_id = 1543071855920029778
+    target_role_id = 1545516954754875523
 
     source_role = guild.get_role(source_role_id)
     target_role = guild.get_role(target_role_id)
@@ -2313,7 +2587,7 @@ async def verify_all_cmd(ctx):
     for member in guild.members:
         if member.bot:
             continue
-        
+
         if source_role in member.roles and target_role not in member.roles:
             try:
                 await member.add_roles(target_role, reason="تفعيل جماعي: منح رتبة التفعيل")
@@ -2331,9 +2605,9 @@ async def hire_staff_cmd(ctx, member: discord.Member, *, identity_number: str):
         return
 
     guild = ctx.guild
-    staff_role = guild.get_role(ADMIN_ROLE_PENG_ID) 
-    first_junior_role = guild.get_role(JUNIOR_ROLES_LIST[0]) 
-    extra_role = guild.get_role(NEW_HIRE_EXTRA_ROLE_ID) 
+    staff_role = guild.get_role(ADMIN_ROLE_PENG_ID)
+    first_junior_role = guild.get_role(JUNIOR_ROLES_LIST[0])
+    extra_role = guild.get_role(NEW_HIRE_EXTRA_ROLE_ID)
 
     if not staff_role or not first_junior_role or not extra_role:
         await ctx.send("❌ خطأ: إحدى رتب التوظيف الأساسية أو الإضافية غير موجودة بالسيرفر وتأكد من الآديات!")
@@ -2396,7 +2670,7 @@ async def dismiss_slash(interaction: discord.Interaction, member: discord.Member
 
     all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST + [ADMIN_ROLE_PENG_ID, NEW_HIRE_EXTRA_ROLE_ID]
     target_staff_roles = [r for r in member.roles if r.id in all_managed_ids]
-    
+
     if target_staff_roles:
         highest_target_role = max(target_staff_roles, key=lambda r: r.position)
         role_mention_str = highest_target_role.mention
@@ -2469,7 +2743,7 @@ class ManualPromotionView(discord.ui.View):
         self.is_handled = True
         for child in self.children:
             child.disabled = True
-        
+
         try:
             await interaction.message.edit(view=self)
         except:
@@ -2480,19 +2754,19 @@ class ManualPromotionView(discord.ui.View):
         try:
             all_managed_ids = JUNIOR_ROLES_LIST + MIDDLE_ROLES_LIST
             roles_to_remove = [
-                r for r in self.target.roles 
+                r for r in self.target.roles
                 if r.id in all_managed_ids and r.id != self.target_role.id
             ]
             if roles_to_remove:
                 await self.target.remove_roles(*roles_to_remove, reason=f"ترقية يدوية بواسطة {self.admin.name}")
-            
+
             await self.target.add_roles(self.target_role, reason=f"ترقية يدوية معتمدة بواسطة {self.admin.name}")
-            
+
             data = load_data()
             user_id = str(self.target.id)
             if user_id not in data or not isinstance(data[user_id], dict):
                 data[user_id] = {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
-            
+
             data[user_id]["points"] = 0
             data[user_id]["total_promotions"] = data[user_id].get("total_promotions", 0) + 1
             save_data(data, guild)
@@ -2502,9 +2776,9 @@ class ManualPromotionView(discord.ui.View):
                 f"قام الأدمن/الأونر {self.admin.mention} بترقية المطنوخ {self.target.mention} إلى رتبة `{self.target_role.name}` ضمن **{self.role_category_name}**!\n"
                 f"🔄 **ملاحظة:** تم تصفير نقاطه الشخصية لانطلاق تحدٍ جديد، ونقاط فريقه (التيم) محفوظة بالكامل."
             )
-            
+
             await interaction.response.send_message(f"✅ **تمت ترقية العضو {self.target.mention} بنجاح وتم إرسال الإشعارات!**", ephemeral=True)
-            
+
             log_channel = guild.get_channel(LOG_CHANNEL_ID)
             if log_channel:
                 await log_channel.send(success_text)
@@ -2542,11 +2816,11 @@ class ManualPromotionView(discord.ui.View):
         if self.is_handled:
             await interaction.response.send_message("⚠️ تم حسم الطلب مسبقاً!", ephemeral=True)
             return
-        
+
         self.is_handled = True
         for child in self.children:
             child.disabled = True
-        
+
         try:
             await interaction.message.edit(view=self)
         except:
@@ -2572,7 +2846,7 @@ async def manual_promote_cmd(ctx, member: discord.Member):
             if any(r.id == s_info["role_id"] for r in member.roles):
                 current_senior_idx = idx
                 break
-        
+
         next_idx = current_senior_idx + 1
         if next_idx < len(SENIOR_HIGHER_ROLES):
             target_info = SENIOR_HIGHER_ROLES[next_idx]
@@ -2582,25 +2856,25 @@ async def manual_promote_cmd(ctx, member: discord.Member):
         is_middle = any(r.id in MIDDLE_ROLES_LIST for r in member.roles)
         current_idx = -1
         master_list = JUNIOR_ROLES_LIST
-        
+
         for idx, rid in enumerate(JUNIOR_ROLES_LIST):
             if any(r.id == rid for r in member.roles):
                 current_idx = idx
                 master_list = JUNIOR_ROLES_LIST
                 break
-        
+
         if current_idx == -1:
             for idx, rid in enumerate(MIDDLE_ROLES_LIST):
                 if any(r.id == rid for r in member.roles):
                     current_idx = idx
                     master_list = MIDDLE_ROLES_LIST
                     break
-        
+
         if current_idx != -1 and current_idx < len(master_list) - 1:
             next_role_id = master_list[current_idx + 1]
             target_role = guild.get_role(next_role_id)
             role_category_name = "الإدارة الصغرى / الوسطى"
-        
+
         if not target_role and not is_middle and JUNIOR_ROLES_LIST:
             target_role = guild.get_role(JUNIOR_ROLES_LIST[0])
             role_category_name = "الإدارة الصغرى"
@@ -2655,7 +2929,7 @@ async def delete_channel_cmd(ctx):
     try:
         await ctx.send("💥 جاري حذف الروم يا طويل العمر...")
         await asyncio.sleep(1)
-        await ctx.channel.delete(reason=f"حذف الروم بأمر الأونر")
+        await ctx.channel.delete(reason="حذف الروم بأمر الأونر")
     except Exception as e:
         await ctx.send(f"❌ عذراً، ما قدرت أحذف الروم: {e}")
 
@@ -2728,15 +3002,15 @@ async def check_expired_bans():
     bans_data = load_bans()
     if not bans_data:
         return
-    
+
     current_time = time.time()
     updated = False
-    
+
     for guild_id_str, members_dict in list(bans_data.items()):
         guild = bot.get_guild(int(guild_id_str))
         if not guild:
             continue
-            
+
         ban_role = guild.get_role(BAN_ROLE_ID)
         for member_id_str, ban_info in list(members_dict.items()):
             if current_time >= ban_info["expires_at"]:
@@ -2745,28 +3019,28 @@ async def check_expired_bans():
                     try:
                         if ban_role and ban_role in member.roles:
                             await member.remove_roles(ban_role, reason="انتهت مدة الحرمان - إرجاع الرتب")
-                        
+
                         roles_to_restore = []
                         for rid in ban_info["saved_roles"]:
                             r = guild.get_role(rid)
                             if r and r < guild.me.top_role and not r.is_default() and not r.managed:
                                 roles_to_restore.append(r)
-                                
+
                         if roles_to_restore:
                             await member.add_roles(*roles_to_restore, reason="انتهاء الحرمان وإرجاع الرتب السابقة تلقائياً")
-                            
+
                         log_ch = guild.get_channel(LOG_CHANNEL_ID)
                         if log_ch:
                             await log_ch.send(embed=discord.Embed(title="♻️ | انتهاء الحرمان وإرجاع الرتب", description=f"العضو {member.mention} انتهت فترة حرمانه وتم استرجاع رتبه السابقة تلقائياً.", color=discord.Color.green()))
                     except Exception as e:
                         print(f"خطأ في إرجاع رتب العضو بعد انتهاء الحرمان: {e}")
-                
+
                 del members_dict[member_id_str]
                 updated = True
-                
+
         if not members_dict:
             del bans_data[guild_id_str]
-            
+
     if updated:
         save_bans(bans_data)
 
@@ -2783,10 +3057,11 @@ async def on_ready():
     bot.add_view(RoleplayVoteButtonsView())
     bot.add_view(RevealServerCodeView())
     bot.add_view(RoleplayRatingButtonsView())
+    bot.add_view(AnonymousMessagesView())
 
     if not check_expired_bans.is_running():
         check_expired_bans.start()
-        
+
     try:
         synced = await bot.tree.sync()
         print(f"✅ تم مزامنة {len(synced)} أمر سلاش عربي بنجاح!")
@@ -2873,7 +3148,7 @@ async def warn_slash(interaction: discord.Interaction, member: discord.Member, d
 @app_commands.describe(member="اختر العضو", minutes="المدة بالدقائق (مثال: 10)", reason="سبب الكتم", proof="رابط الدليل (اختياري)")
 async def timeout_slash(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str, proof: str = "لا يوجد"):
     guild = interaction.guild
-    duration_delta = discord.utils.utcnow() + discord.utils.datetime.timedelta(minutes=minutes)
+    duration_delta = discord.utils.utcnow() + timedelta(minutes=minutes)
     try:
         await member.timeout(duration_delta, reason=reason)
         timeout_channel = guild.get_channel(TIMEOUT_MODEL_CHANNEL_ID)
@@ -2907,27 +3182,27 @@ async def ban_slash(interaction: discord.Interaction, member: discord.Member, du
 
     try:
         saved_roles = [
-            r.id for r in member.roles 
+            r.id for r in member.roles
             if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role and not r.managed
         ]
-        
+
         roles_to_remove = [
-            r for r in member.roles 
+            r for r in member.roles
             if not r.is_default() and r.id != BAN_ROLE_ID and r < guild.me.top_role and not r.managed
         ]
-        
-        if roles_to_remove: 
+
+        if roles_to_remove:
             await member.remove_roles(*roles_to_remove, reason=f"حرمان بواسطة {interaction.user.name}")
         await member.add_roles(ban_role, reason=f"حرمان بواسطة {interaction.user.name}")
 
         duration_seconds = parse_duration_to_seconds(duration)
         expires_at = time.time() + duration_seconds
-        
+
         bans_data = load_bans()
         guild_id_str = str(guild.id)
         if guild_id_str not in bans_data:
             bans_data[guild_id_str] = {}
-            
+
         bans_data[guild_id_str][str(member.id)] = {
             "saved_roles": saved_roles,
             "expires_at": expires_at
@@ -2964,9 +3239,9 @@ async def unban_slash(interaction: discord.Interaction, member: discord.Member):
     guild = interaction.guild
     guild_id_str = str(guild.id)
     bans_data = load_bans()
-    
+
     ban_role = guild.get_role(BAN_ROLE_ID)
-    
+
     try:
         if ban_role and ban_role in member.roles:
             await member.remove_roles(ban_role, reason=f"إعفاء بواسطة {interaction.user.name}")
@@ -2979,11 +3254,11 @@ async def unban_slash(interaction: discord.Interaction, member: discord.Member):
                 r = guild.get_role(rid)
                 if r and r < guild.me.top_role and not r.is_default() and not r.managed:
                     roles_to_restore.append(r)
-            
+
             if roles_to_restore:
                 await member.add_roles(*roles_to_restore, reason=f"إعفاء وإرجاع الرتب بواسطة {interaction.user.name}")
                 roles_restored = True
-            
+
             del bans_data[guild_id_str][str(member.id)]
             if not bans_data[guild_id_str]:
                 del bans_data[guild_id_str]
@@ -3009,7 +3284,7 @@ async def unban_slash(interaction: discord.Interaction, member: discord.Member):
 async def addpoints_slash(interaction: discord.Interaction, member: discord.Member, amount: int):
     if not can_manage_points(interaction):
         return await interaction.response.send_message("❌ هذا الأمر مخصص للرتب القيادية المصرح لها فقط!", ephemeral=True)
-        
+
     if member.id == interaction.user.id and any(role.id == POINTS_CONTROL_ROLE_ID for role in interaction.user.roles):
         await interaction.response.send_message(f"❌ {interaction.user.mention} ماتقدر تعطي نفسك نقاط يالوح", ephemeral=False)
         return
@@ -3054,11 +3329,11 @@ async def points_slash(interaction: discord.Interaction, member: discord.Member 
     data = load_data()
     user_info = data.get(str(target.id), {"points": 0})
     pts = user_info.get("points", 0) if isinstance(user_info, dict) else user_info
-    
+
     req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
 
     embed = discord.Embed(
-        title=f"✨ | محفظة نقاط المطنوخ",
+        title="✨ | محفظة نقاط المطنوخ",
         description=f"العضو: {target.mention}\n\n"
                     f"💳 **الرصيد الحالي:** `{pts}` نقطة\n"
                     f"🎯 **الهدف القادم:** `{req_pts}` نقطة\n"
@@ -3097,7 +3372,7 @@ async def help_command(ctx):
     )
     embed.add_field(
         name="🛡️ ┋ أوامر العقوبات والفعاليات والتوظيف والفصل",
-        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود والتقييم والمصوتين)",
+        value="▫️ `/تحذير`\n▫️ `/تايم_أوت`\n▫️ `/حرمان`\n▫️ `/اعفاء`\n▫️ `/فصل <منشن> <السبب>` (لسحب رتب الإدارة وإزالة الهوية ونشر نموذج الفصل)\n▫️ `.فعاليات` (لبدء فعالية جديدة)\n▫️ `.توظيف <منشن> <الرقم>` (لتوظيف إداري وتعديل اسمه ورتبه)\n▫️ `.ترقية <منشن>` (ترقية يدوية معتمدة)\n▫️ `.فحص_الرتب`\n▫️ `.تفعيل_الكل`\n▫️ `!اونر` (لاستدعاء الأونر)\n▫️ `.لوحة` (لوحة تحكم الرول والتصويت والكود والتقييم والمصوتين)\n▫️ `.بانل_مجهولة` (لوحة الرسائل المجهولة لمنتدى النظيم)",
         inline=False
     )
     embed.set_footer(text=f"طلب بواسطة: {ctx.author.name}")
@@ -3115,7 +3390,7 @@ async def double_points(ctx):
 @bot.command(name="رتبة", aliases=["giverole"])
 async def give_role(ctx, member: discord.Member, role: discord.Role):
     is_owner = ctx.author.id in OWNER_IDS
-    
+
     if member.id == ctx.author.id or (not is_owner and ctx.author.top_role <= role):
         await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك رتبه اعلى منك ياحمار")
         return
@@ -3129,11 +3404,11 @@ async def give_role(ctx, member: discord.Member, role: discord.Role):
 @bot.command(name="سحب_رتبة", aliases=["removerole"])
 async def remove_role(ctx, member: discord.Member, role: discord.Role):
     is_owner = ctx.author.id in OWNER_IDS
-    
+
     if member.id == ctx.author.id or (not is_owner and ctx.author.top_role <= role):
         await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك رتبه اعلى منك ياحمار")
         return
-        
+
     try:
         await member.remove_roles(role)
         await ctx.send(f"🔄 تم سحب رتبة {role.mention} من {member.mention}.")
@@ -3151,26 +3426,26 @@ async def profile(ctx, member: discord.Member = None):
     user_info = data.get(str(target.id), {"points": 0, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0})
     if isinstance(user_info, int):
         user_info = {"points": user_info, "tickets": 0, "warns": 0, "timeouts": 0, "bans": 0, "identities": 0, "total_promotions": 0}
-    
+
     pts = user_info.get('points', 0)
     req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
 
     embed = discord.Embed(
         title=f"🛡️ | السجل الإداري السيادي لـ {target.name}",
-        description=f"إليك تفاصيل أداء وحالة المطنوخ الإدارية داخل سيرفر منتدى النظيم.",
+        description="إليك تفاصيل أداء وحالة المطنوخ الإدارية داخل سيرفر منتدى النظيم.",
         color=discord.Color.from_rgb(241, 196, 15),
         timestamp=discord.utils.utcnow()
     )
     embed.set_thumbnail(url=target.display_avatar.url)
-    
+
     embed.add_field(name="📊 إجمالي النقاط", value=f"`{pts}` / `{req_pts}` نقطة للترقية", inline=True)
     embed.add_field(name="📈 نسبة التقدم", value=f"`{percent}%`\n{bar}", inline=False)
     embed.add_field(name="🎯 المتبقي للترقية", value=f"باقي لك **{rem_pts}** نقطة وتوصل رتبتك التالية يا وحش!", inline=False)
-    
+
     embed.add_field(name="👑 عدد الترقيات", value=f"`{user_info.get('total_promotions', 0)}` مرة", inline=True)
     embed.add_field(name="🎫 التكتات", value=f"`{user_info.get('tickets', 0)}`", inline=True)
     embed.add_field(name="🪪 الهويات", value=f"`{user_info.get('identities', 0)}`", inline=True)
-    
+
     embed.set_footer(text="منتدى النظيم | نظام الأداء الإداري الموحد", icon_url=ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None)
     await ctx.send(embed=embed)
 
@@ -3180,11 +3455,11 @@ async def points(ctx, member: discord.Member = None):
     data = load_data()
     user_info = data.get(str(target.id), {"points": 0})
     pts = user_info.get("points", 0) if isinstance(user_info, dict) else user_info
-    
+
     req_pts, rem_pts, percent, bar = await get_promotion_progress(target, pts)
 
     embed = discord.Embed(
-        title=f"✨ | محفظة نقاط المطنوخ",
+        title="✨ | محفظة نقاط المطنوخ",
         description=f"العضو: {target.mention}\n\n"
                     f"💳 **الرصيد الحالي:** `{pts}` نقطة\n"
                     f"🎯 **الهدف القادم:** `{req_pts}` نقطة\n"
@@ -3200,7 +3475,7 @@ async def points(ctx, member: discord.Member = None):
 @bot.command(name="إضافة_نقاط", aliases=["addpoints"])
 async def addpoints(ctx, member: discord.Member, amount: int):
     if not can_manage_points(ctx): return await ctx.send("❌ مخصص للرتب القيادية فقط!")
-    
+
     if member.id == ctx.author.id and any(role.id == POINTS_CONTROL_ROLE_ID for role in ctx.author.roles):
         await ctx.send(f"❌ {ctx.author.mention} ماتقدر تعطي نفسك نقاط يالوح")
         return
@@ -3246,12 +3521,12 @@ async def reset_teams_cmd(ctx):
     if not is_admin_or_owner(ctx):
         await ctx.send("❌ مخصص للأدمنستريتر والأونرات فقط!")
         return
-    
+
     guild = ctx.guild
     guild_id_str = str(guild.id)
     bonuses = load_team_bonuses()
     persistent = load_team_persistent()
-    
+
     guild_persistent = persistent.get(guild_id_str, {"t1_total": 0, "t2_total": 0})
     t1_base = guild_persistent.get("t1_total", 0)
     t2_base = guild_persistent.get("t2_total", 0)
@@ -3317,7 +3592,7 @@ def start_website():
 
 if __name__ == "__main__":
     if TOKEN:
-        start_website()  # يشغل الموقع الفخم في الخلفية
-        bot.run(TOKEN)   # يشغل بوت ديسكورد
+        start_website()
+        bot.run(TOKEN)
     else:
         print("❌ خطأ: يرجى وضع متغير DISCORD_TOKEN.")
