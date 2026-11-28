@@ -139,7 +139,7 @@ RATINGS_FILE = "ratings.json"
 double_points_end_time = 0
 processed_tickets = set()
 
-# تتبع استلام التكتات لكشف القلتش: {ticket_key: {staff_id: count}}
+# تتبع استلام التكتات لكشف القلتش من لوق نسخة التذكرة: {ticket_key: {staff_id: count}}
 ticket_claims_tracker: dict[str, dict[int, int]] = {}
 alerted_ticket_glitches: set[tuple[str, int]] = set()
 
@@ -595,18 +595,27 @@ async def calculate_teams_performance(guild: discord.Guild):
 
 
 # ----------------------------------------------------
-# 🕵️ دوال كشف قلتش تكرار استلام التكت
+# 🕵️ دوال كشف قلتش تكرار استلام التكت (مخصصة للوق نسخة التذكرة فقط)
 # ----------------------------------------------------
+def is_ticket_archive_log(full_text: str) -> bool:
+    has_header = ("نسخة التذكرة" in full_text) or ("من سجلات البوت" in full_text) or ("دفعة الأرشيف" in full_text)
+    has_claimer_field = "المستلم" in full_text
+    has_ticket_context = any(k in full_text for k in ["صاحب التذكرة", "الروم", "الحالة", "تذكرة#"])
+    return has_header and has_claimer_field and has_ticket_context[span_1](start_span)[span_1](end_span)
+
+
 def extract_ticket_identifier(message: discord.Message, full_text: str) -> str:
     patterns = [
-        r"(?:تذكرة|تكت|ticket|رقم\s*التكت|رقم\s*التذكرة)\s*[:#\-]?\s*([A-Za-z0-9\-_]{2,25})",
+        r"نسخة\s*التذكرة\s*#\s*(\d+)",
+        r"تذكرة\s*#\s*(\d+)",
+        r"تذكرة\s*[-_]\s*(\d+)",
         r"#(\d{1,10})"
     ]
     for pat in patterns:
-        match = re.search(pat, full_text, flags=re.IGNORECASE)
+        match = re.search(pat, full_text)
         if match:
-            return f"ticket_{match.group(1).lower()}"
-    return f"msg_{message.id}"
+            return f"ticket_{match.group(1)}"
+    return f"msg_{message.id}[span_2](start_span)"[span_2](end_span)
 
 
 def extract_claimer_member(message: discord.Message, full_text: str) -> discord.Member | None:
@@ -615,30 +624,28 @@ def extract_claimer_member(message: discord.Message, full_text: str) -> discord.
 
     for embed in message.embeds:
         for field in embed.fields:
-            field_name = field.name or ""
-            field_val = field.value or ""
-            if any(k in field_name for k in ["المستلم", "استلم", "Claimed", "Staff", "الإداري"]):
-                user_ids = re.findall(r"(\d{17,19})", field_val)
+            field_name = (field.name or "").strip()
+            field_val = (field.value or "").strip()
+            if field_name == "المستلم" or "المستلم" in field_name:
+                user_ids = re.findall(r"\b(\d{17,19})\b", field_val)
                 for uid in user_ids:
                     member = message.guild.get_member(int(uid))
                     if member and not member.bot:
                         return member
 
-    for keyword in ["المستلم", "استلم التذكرة", "استلم التكت", "Claimed by"]:
-        if keyword in full_text:
-            part = full_text.split(keyword, 1)[1][:180]
-            user_ids = re.findall(r"(\d{17,19})", part)
-            for uid in user_ids:
-                member = message.guild.get_member(int(uid))
-                if member and not member.bot:
-                    return member
+    if "المستلم" in full_text:
+        after_claim = full_text.split("المستلم", 1)[1]
+        for stop_word in ["الروم", "الرسائل", "صاحب التذكرة"]:
+            if stop_word in after_claim:
+                after_claim = after_claim.split(stop_word, 1)[0]
+                break
+        user_ids = re.findall(r"\b(\d{17,19})\b", after_claim[:180])
+        for uid in user_ids:
+            member = message.guild.get_member(int(uid))
+            if member and not member.bot:
+                return member
 
-    if message.mentions:
-        for m in message.mentions:
-            if not m.bot:
-                return m
-
-    return None
+    return None[span_3](start_span)[span_3](end_span)
 
 
 # ----------------------------------------------------
@@ -2270,7 +2277,7 @@ class StartEventPanelView(discord.ui.View):
 async def on_message(message):
     await bot.process_commands(message)
 
-    if not message.channel or message.author.bot and message.channel.id != TICKET_LOG_CHANNEL_ID:
+    if not message.channel:
         return
 
     if message.channel.id == NICKNAME_CHANNEL_ID and not message.author.bot:
@@ -2307,27 +2314,32 @@ async def on_message(message):
                 full_text += f"\n{embed.title}"
             if embed.description:
                 full_text += f"\n{embed.description}"
+            if embed.footer and embed.footer.text:
+                full_text += f"\n{embed.footer.text}"
             for field in embed.fields:
                 full_text += f"\n{field.name or ''}: {field.value or ''}"
 
-        # كشف قلتش تكرار استلام نفس التكت لنفس الإداري
-        is_claim_log = any(k in full_text for k in ["استلام", "المستلم", "Claim", "claimed", "تكت", "تذكرة"])
-        claimer = extract_claimer_member(message, full_text) if is_claim_log else None
-        if claimer:
-            ticket_key = extract_ticket_identifier(message, full_text)
-            staff_claims = ticket_claims_tracker.setdefault(ticket_key, {})
-            staff_claims[claimer.id] = staff_claims.get(claimer.id, 0) + 1
+        # يعتمد فقط على رسائل لوق نسخة/أرشيف التذكرة بعد إغلاقها
+        if not is_ticket_archive_log(full_text):
+            return[span_4](start_span)[span_4](end_span)
 
-            if staff_claims[claimer.id] >= 2 and (ticket_key, claimer.id) not in alerted_ticket_glitches:
-                alerted_ticket_glitches.add((ticket_key, claimer.id))
-                ticket_label = ticket_key.replace("ticket_", "")
-                await message.channel.send(
-                    f"ترا الاهبل هاذا {claimer.mention} (`{claimer.id}`) مسوي قلتش التكتات (مستلم نفس التكت `{ticket_label}` `{staff_claims[claimer.id]}` مرات)\n"
-                    f"{TICKET_GLITCH_ALERT_ROLE_MENTION}"
-                )
+        claimer = extract_claimer_member(message, full_text)
+        if not claimer:
+            return[span_5](start_span)[span_5](end_span)
 
-        # رصد نقاط إغلاق التذكرة مرة واحدة لكل رسالة لوق
-        if message.id not in processed_tickets and claimer:
+        ticket_key = extract_ticket_identifier(message, full_text)
+        staff_claims = ticket_claims_tracker.setdefault(ticket_key, {})
+        staff_claims[claimer.id] = staff_claims.get(claimer.id, 0) + 1
+
+        if staff_claims[claimer.id] >= 2 and (ticket_key, claimer.id) not in alerted_ticket_glitches:
+            alerted_ticket_glitches.add((ticket_key, claimer.id))
+            ticket_label = ticket_key.replace("ticket_", "")
+            await message.channel.send(
+                f"ترا الاهبل هاذا {claimer.mention} (`{claimer.id}`) مسوي قلتش التكتات (مستلم نفس التكت `{ticket_label}` `{staff_claims[claimer.id]}` مرات)\n"
+                f"{TICKET_GLITCH_ALERT_ROLE_MENTION}"
+            )
+
+        if message.id not in processed_tickets:
             processed_tickets.add(message.id)
             if len(processed_tickets) > 1000:
                 processed_tickets.pop()
@@ -2336,7 +2348,7 @@ async def on_message(message):
                 message.guild,
                 claimer,
                 1,
-                "إغلاق تذكرة (تسجيل نقاط المستلم)",
+                f"إغلاق تذكرة #{ticket_key.replace('ticket_', '')}",
                 target_type="ticket"
             )
 
